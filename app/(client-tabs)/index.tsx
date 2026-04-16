@@ -19,7 +19,6 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
-import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -70,8 +69,6 @@ const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
 /** Match admin home sheet overlap / pull-up (`app/(tabs)/index.tsx`). */
 const HERO_OVERLAP = 214;
 const HERO_SHEET_PULL_UP = 64;
-const OUTER_INNER_HANDOFF_ON_PX = 4;
-const OUTER_INNER_HANDOFF_OFF_PX = 36;
 const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
 const MARQUEE_PLANE_SCALE = 1.075;
 const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
@@ -363,65 +360,6 @@ export default function ClientHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   /** Bumps after pull-to-refresh so the week strip refetches without leaving the screen */
   const [weekStripReloadToken, setWeekStripReloadToken] = useState(0);
-  const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
-  const innerScrollRef = useRef<ScrollView>(null);
-  const outerScrollCapSV = useSharedValue(0);
-  const outerScrollLayoutHRef = useRef(0);
-  const outerScrollContentHRef = useRef(0);
-  const applyOuterScrollCap = useCallback(() => {
-    const lh = outerScrollLayoutHRef.current;
-    const ch = outerScrollContentHRef.current;
-    if (lh > 0 && ch > lh + 1) {
-      outerScrollCapSV.value = ch - lh;
-    } else {
-      outerScrollCapSV.value = Math.max(
-        0,
-        HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
-      );
-    }
-  }, [insets.top, outerScrollCapSV]);
-  useEffect(() => {
-    outerScrollCapSV.value = Math.max(
-      0,
-      HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
-    );
-  }, [insets.top, outerScrollCapSV]);
-  const innerActiveSV = useSharedValue(0);
-  const enableInnerScrollJS = useCallback((enabled: boolean) => {
-    setInnerScrollEnabled(enabled);
-    if (!enabled) {
-      const resetInner = () => innerScrollRef.current?.scrollTo({ y: 0, animated: false });
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(resetInner);
-        });
-      } else {
-        resetInner();
-      }
-    }
-  }, []);
-  const outerScrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      'worklet';
-      const y = event.contentOffset.y;
-      const cap = outerScrollCapSV.value;
-      const wasInner = innerActiveSV.value === 1;
-      let nextInner = wasInner;
-      if (cap > 0) {
-        if (wasInner) {
-          nextInner = y > cap - OUTER_INNER_HANDOFF_OFF_PX;
-        } else {
-          nextInner = y >= cap - OUTER_INNER_HANDOFF_ON_PX;
-        }
-      } else {
-        nextInner = false;
-      }
-      if (nextInner !== wasInner) {
-        innerActiveSV.value = nextInner ? 1 : 0;
-        runOnJS(enableInnerScrollJS)(nextInner);
-      }
-    },
-  });
   const [homeFixedMessageDismissed, setHomeFixedMessageDismissed] = useState(false);
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [osmFailed, setOsmFailed] = useState(false);
@@ -978,18 +916,18 @@ export default function ClientHomeScreen() {
         />
       </View>
 
-      <View style={styles.clientHeroMarqueeHost} pointerEvents="none" collapsable={false}>
-        <ManicureMarqueeHero images={heroImages} />
-      </View>
+      {Platform.OS !== 'android' && (
+        <View style={styles.clientHeroMarqueeHost} pointerEvents="none" collapsable={false}>
+          <ManicureMarqueeHero images={heroImages} />
+        </View>
+      )}
 
-      <Animated.ScrollView
+      <ScrollView
         style={{ flex: 1, zIndex: 3, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
         bounces={false}
         overScrollMode="never"
-        pointerEvents="box-none"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -997,23 +935,24 @@ export default function ClientHomeScreen() {
             tintColor={primaryOnSurface}
           />
         }
-        contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
-        scrollEventThrottle={1}
-        onLayout={(e) => {
-          outerScrollLayoutHRef.current = e.nativeEvent.layout.height;
-          applyOuterScrollCap();
+        contentContainerStyle={{
+          paddingTop: Platform.OS === 'android' ? 0 : (HERO_HEIGHT - HERO_OVERLAP),
+          paddingBottom: insets.bottom + 120,
         }}
-        onContentSizeChange={(_w, h) => {
-          outerScrollContentHRef.current = h;
-          applyOuterScrollCap();
-        }}
-        onScroll={outerScrollHandler}
       >
+        {Platform.OS === 'android' && (
+          <View
+            style={{ height: HERO_HEIGHT - HERO_OVERLAP, overflow: 'hidden' }}
+            pointerEvents="none"
+          >
+            <ManicureMarqueeHero images={heroImages} />
+          </View>
+        )}
         <View
           style={[
             styles.clientHomeSheetShell,
             {
-              height: SCREEN_HEIGHT - insets.top - 60,
+              minHeight: SCREEN_HEIGHT - insets.top - 60,
               marginTop: -HERO_SHEET_PULL_UP,
             },
           ]}
@@ -1026,15 +965,6 @@ export default function ClientHomeScreen() {
             style={styles.sheetTopShadow}
             pointerEvents="none"
           />
-          <ScrollView
-            ref={innerScrollRef}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-            scrollEnabled={innerScrollEnabled}
-            showsVerticalScrollIndicator={false}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
-          >
             <SafeAreaView edges={['left', 'right']} style={styles.clientHomeSafeArea}>
               <View style={[styles.contentWrapperSheet, { zIndex: 10 }]}>
                 <View style={styles.contentWrapperInner}>
@@ -1392,9 +1322,8 @@ export default function ClientHomeScreen() {
               </View>
 
             </SafeAreaView>
-          </ScrollView>
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
 
       <View
         pointerEvents="none"
@@ -1421,25 +1350,27 @@ export default function ClientHomeScreen() {
         pointerEvents="none"
         style={[styles.overlayHeaderLogoOnly, { top: insets.top + CLIENT_HOME_LOGO_TOP_OFFSET }]}
       >
-        {clientHomeHeaderShowLogo ? (
-          <View style={styles.headerLogoInner}>
-            <Image
-              source={getHomeLogoSourceFromUrl(homeLogoUrlForHeader)}
-              style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
-              resizeMode="contain"
-            />
-          </View>
-        ) : (
-          <View style={styles.clientHomeHeaderTitleNoLogoWrap}>
-            <Text
-              style={[styles.clientHomeHeaderTitleNoLogo, clientHomeHeaderTitleFontStyle]}
-              numberOfLines={2}
-            >
-              {getHomeHeaderTitleWhenLogoHidden(businessProfile) ||
-                t('settings.profile.displayNameFallbackShort', 'Business')}
-            </Text>
-          </View>
-        )}
+        {businessProfile ? (
+          clientHomeHeaderShowLogo ? (
+            <View style={styles.headerLogoInner}>
+              <Image
+                source={getHomeLogoSourceFromUrl(homeLogoUrlForHeader)}
+                style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <View style={styles.clientHomeHeaderTitleNoLogoWrap}>
+              <Text
+                style={[styles.clientHomeHeaderTitleNoLogo, clientHomeHeaderTitleFontStyle]}
+                numberOfLines={2}
+              >
+                {getHomeHeaderTitleWhenLogoHidden(businessProfile) ||
+                  t('settings.profile.displayNameFallbackShort', 'Business')}
+              </Text>
+            </View>
+          )
+        ) : null}
       </View>
 
       {/* Interested swap requests modal */}

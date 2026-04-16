@@ -237,6 +237,10 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
       // Fade in success content, then spring-in checkmark
       successEnter.value = withDelay(160, withTiming(1, { duration: 380 }));
       checkScale.value   = withDelay(340, withSpring(1, { damping: 11, stiffness: 155 }));
+    } else {
+      // Reset success animations so next visit doesn't show stale success state
+      successEnter.value = 0;
+      checkScale.value = 0;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [successData]);

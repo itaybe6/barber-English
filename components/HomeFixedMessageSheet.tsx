@@ -20,7 +20,7 @@ import Animated, {
   Easing,
   useReducedMotion,
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -190,6 +190,7 @@ export default function HomeFixedMessageSheet({
       statusBarTranslucent={Platform.OS === 'android'}
       onRequestClose={closeSheet}
     >
+      <GestureHandlerRootView style={styles.gestureRoot}>
       <View style={styles.modalRoot} pointerEvents="box-none">
         <Pressable
           style={[styles.backdrop, { backgroundColor: 'rgba(0,0,0,0.45)' }]}
@@ -282,11 +283,15 @@ export default function HomeFixedMessageSheet({
           </View>
         </Animated.View>
       </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   modalRoot: {
     flex: 1,
     justifyContent: 'flex-start',

@@ -773,6 +773,8 @@ export default function BookAppointment() {
       setShowReplaceModal(false);
       setExistingAppointment(null);
       setDayAvailability({});
+      setShowSuccessModal(false);
+      setBookingSuccessData(null);
       return () => {};
     }, [user, t, router])
   );

@@ -148,16 +148,7 @@ export function ClientWeekAvailabilityStrip({
 
       if (requestId !== loadRequestIdRef.current) return;
 
-      // ─── TEMP TEST: inject dummy barbers to preview multi-staff layout ───
-      const dummyBarbers: User[] = [
-        { id: 'dummy-1', name: 'יוסי כהן', image_url: null } as any,
-        { id: 'dummy-2', name: 'מושה לוי', image_url: null } as any,
-        { id: 'dummy-3', name: 'דוד מזרחי', image_url: null } as any,
-        { id: 'dummy-4', name: 'רוני אברהם', image_url: null } as any,
-        { id: 'dummy-5', name: 'אבי פרץ', image_url: null } as any,
-      ];
-      setBarbers([...admins, ...dummyBarbers]);
-      // ─────────────────────────────────────────────────────────────────────
+      setBarbers(admins);
       setHorizonDays(Math.max(0, horizon));
 
       const resolvedBarberId =

@@ -60,6 +60,7 @@ import { ScrollView as RNScrollView } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
 import BroadcastOwnerOnlyModal from '@/components/BroadcastOwnerOnlyModal';
+import ClientsListActionModal from '@/components/admin/ClientsListActionModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
@@ -86,7 +87,6 @@ import { useAdminWaitlistSheetStore } from '@/stores/adminWaitlistSheetStore';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 import { usersApi } from '@/lib/api/users';
-import type { User as DbUser } from '@/lib/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -371,6 +371,12 @@ export default function HomeScreen() {
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
+  /** Styled confirm dialog for clients sheet (phone / block / unblock) — RTL-aware, replaces Alert. */
+  const [clientsListActionDialog, setClientsListActionDialog] = useState<{
+    variant: 'call' | 'block' | 'unblock' | 'phoneMissing';
+    client: any | null;
+    phone?: string;
+  } | null>(null);
   const [insightsData, setInsightsData] = useState({
     appointmentsThisMonth: 0,
     cancelledAppointmentsThisMonth: 0,
@@ -380,7 +386,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
-  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth' | 'pendingApproval'>('all');
+  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
@@ -388,23 +394,6 @@ export default function HomeScreen() {
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
-  const [pendingClients, setPendingClients] = useState<DbUser[]>([]);
-  const [loadingPendingClients, setLoadingPendingClients] = useState(false);
-  const [pendingClientActionId, setPendingClientActionId] = useState<string | null>(null);
-  const pendingFilteredClients = useMemo(() => {
-    const raw = searchQuery.trim();
-    if (!raw) return pendingClients;
-    const q = raw.toLowerCase();
-    const qDigits = raw.replace(/\D/g, '');
-    return pendingClients.filter((u) => {
-      const name = String((u as any)?.name || '').toLowerCase();
-      const phone = String((u as any)?.phone || '');
-      const phoneDigits = phone.replace(/\D/g, '');
-      if (name.includes(q)) return true;
-      if (qDigits && phoneDigits.includes(qDigits)) return true;
-      return false;
-    });
-  }, [pendingClients, searchQuery]);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
   const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<WaitlistPreviewClientRow[]>([]);
 
@@ -655,7 +644,7 @@ export default function HomeScreen() {
       setInsightsData({
         appointmentsThisMonth: monthApptRes.error ? 0 : monthApptRes.count ?? 0,
         cancelledAppointmentsThisMonth: cancelledMonthRes.error ? 0 : cancelledMonthRes.count ?? 0,
-        newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
+        newClientsThisMonth: newClientsRes.error ? 0 : (newClientsRes.count ?? 0),
       });
 
       // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר
@@ -834,67 +823,13 @@ export default function HomeScreen() {
   const fetchPendingClients = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      setLoadingPendingClients(true);
       const list = await usersApi.getPendingClients();
-      setPendingClients(list);
       setPendingClientsCount(list.length);
     } catch (e) {
       console.error('Error in fetchPendingClients:', e);
-      setPendingClients([]);
-    } finally {
-      setLoadingPendingClients(false);
+      setPendingClientsCount(0);
     }
   }, [isAdmin]);
-
-  const approvePendingClient = useCallback(
-    async (id: string) => {
-      setPendingClientActionId(id);
-      try {
-        const updated = await usersApi.approveClient(id);
-        if (!updated) {
-          Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.approveError', 'Could not approve'));
-          return;
-        }
-        setPendingClients((prev) => prev.filter((u) => u.id !== id));
-        setPendingClientsCount((prev) => Math.max(0, prev - 1));
-        void fetchClients();
-      } finally {
-        setPendingClientActionId(null);
-      }
-    },
-    [fetchClients, t]
-  );
-
-  const rejectPendingClient = useCallback(
-    (item: DbUser) => {
-      Alert.alert(
-        t('admin.pendingClients.rejectTitle', 'Decline registration'),
-        t('admin.pendingClients.rejectMessage', 'Remove {{name}}? They will need to register again.', { name: item.name }),
-        [
-          { text: t('cancel', 'Cancel'), style: 'cancel' },
-          {
-            text: t('admin.pendingClients.rejectConfirm', 'Remove'),
-            style: 'destructive',
-            onPress: async () => {
-              setPendingClientActionId(item.id);
-              try {
-                const done = await usersApi.deleteUser(item.id);
-                if (!done) {
-                  Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.rejectError', 'Could not remove'));
-                  return;
-                }
-                setPendingClients((prev) => prev.filter((u) => u.id !== item.id));
-                setPendingClientsCount((prev) => Math.max(0, prev - 1));
-              } finally {
-                setPendingClientActionId(null);
-              }
-            },
-          },
-        ]
-      );
-    },
-    [t]
-  );
 
   const CLIENTS_SHEET_OPEN_MS = 420;
   const CLIENTS_SHEET_CLOSE_MS = 380;
@@ -916,7 +851,7 @@ export default function HomeScreen() {
   const finishClientsModalClose = useCallback(() => {
     setDisplayClientsModal(false);
     setClientsListMode('all');
-    setPendingClients([]);
+    setClientsListActionDialog(null);
   }, []);
 
   const requestCloseClientsModal = useCallback(() => {
@@ -1019,101 +954,86 @@ export default function HomeScreen() {
   // Handle phone call
   const handlePhoneCall = (phone: string) => {
     if (!phone) {
-      Alert.alert(t('error.generic', 'Error'), t('clients.phoneUnavailable', 'Phone number is unavailable'));
+      setClientsListActionDialog({ variant: 'phoneMissing', client: null });
+      return;
+    }
+    setClientsListActionDialog({ variant: 'call', client: null, phone });
+  };
+
+  const cancelClientsListActionDialog = () => setClientsListActionDialog(null);
+
+  const confirmClientsListActionDialog = async () => {
+    const d = clientsListActionDialog;
+    if (!d) return;
+    setClientsListActionDialog(null);
+
+    if (d.variant === 'phoneMissing') {
+      return;
+    }
+    if (d.variant === 'call' && d.phone) {
+      Linking.openURL(`tel:${d.phone}`);
       return;
     }
 
-    Alert.alert(
-      t('clients.call.title', 'Call'),
-      t('clients.call.message', { phone }),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('clients.call.title', 'Call'),
-          onPress: () => {
-            Linking.openURL(`tel:${phone}`);
-          },
-        },
-      ]
-    );
+    if (d.variant === 'block' && d.client) {
+      const client = d.client;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ block: true })
+          .eq('id', client.id)
+          .select('*')
+          .single();
+        if (error) {
+          console.error('Error blocking client:', error);
+          Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
+          return;
+        }
+        setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
+        setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
+        const name = data?.name || t('common.client', 'Client');
+        Alert.alert(t('clients.block.successTitle', 'Client blocked'), t('clients.block.successMessage', { name }));
+      } catch (e) {
+        console.error('Error blocking client:', e);
+        Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
+      }
+      return;
+    }
+
+    if (d.variant === 'unblock' && d.client) {
+      const client = d.client;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .update({ block: false })
+          .eq('id', client.id)
+          .select('*')
+          .single();
+        if (error) {
+          console.error('Error unblocking client:', error);
+          Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
+          return;
+        }
+        setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
+        setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
+        const name = data?.name || t('common.client', 'Client');
+        Alert.alert(
+          t('clients.unblock.successTitle', 'Client unblocked'),
+          t('clients.unblock.successMessage', { name })
+        );
+      } catch (e) {
+        console.error('Error unblocking client:', e);
+        Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
+      }
+    }
   };
 
   const handleBlockClient = (client: any) => {
-    Alert.alert(
-      t('clients.block.title', 'Block Client'),
-      t('clients.block.message', { name: client?.name || t('clients.thisClient', 'this client') }),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('confirm', 'Confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { data, error } = await supabase
-                .from('users')
-                .update({ block: true })
-                .eq('id', client.id)
-                .select('*')
-                .single();
-              if (error) {
-                console.error('Error blocking client:', error);
-                Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
-                return;
-              }
-              setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              const name = data?.name || t('common.client', 'Client');
-              Alert.alert(
-                t('clients.block.successTitle', 'Client blocked'),
-                t('clients.block.successMessage', { name })
-              );
-            } catch (e) {
-              console.error('Error blocking client:', e);
-              Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
-            }
-          },
-        },
-      ]
-    );
+    setClientsListActionDialog({ variant: 'block', client });
   };
 
   const handleUnblockClient = (client: any) => {
-    Alert.alert(
-      t('clients.unblock.title', 'Unblock Client'),
-      t('clients.unblock.message', { name: client?.name || t('clients.thisClient', 'this client') }),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('confirm', 'Confirm'),
-          style: 'default',
-          onPress: async () => {
-            try {
-              const { data, error } = await supabase
-                .from('users')
-                .update({ block: false })
-                .eq('id', client.id)
-                .select('*')
-                .single();
-              if (error) {
-                console.error('Error unblocking client:', error);
-                Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
-                return;
-              }
-              setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              const name = data?.name || t('common.client', 'Client');
-              Alert.alert(
-                t('clients.unblock.successTitle', 'Client unblocked'),
-                t('clients.unblock.successMessage', { name })
-              );
-            } catch (e) {
-              console.error('Error unblocking client:', e);
-              Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
-            }
-          },
-        },
-      ]
-    );
+    setClientsListActionDialog({ variant: 'unblock', client });
   };
 
   const openEditClient = (client: any) => {
@@ -1258,6 +1178,28 @@ export default function HomeScreen() {
       </View>
     );
   };
+
+  const cd = clientsListActionDialog;
+  const clientsListActionTitle =
+    cd?.variant === 'call'
+      ? t('clients.call.title', 'Call')
+      : cd?.variant === 'phoneMissing'
+        ? t('error.generic', 'Error')
+        : cd?.variant === 'block'
+          ? t('clients.block.title', 'Block Client')
+          : cd?.variant === 'unblock'
+            ? t('clients.unblock.title', 'Unblock Client')
+            : '';
+  const clientsListActionMessage =
+    cd?.variant === 'call' && cd.phone != null
+      ? t('clients.call.message', { phone: cd.phone })
+      : cd?.variant === 'phoneMissing'
+        ? t('clients.phoneUnavailable', 'Phone number is unavailable')
+        : cd?.variant === 'block'
+          ? t('clients.block.message', { name: cd.client?.name || t('clients.thisClient', 'this client') })
+          : cd?.variant === 'unblock'
+            ? t('clients.unblock.message', { name: cd.client?.name || t('clients.thisClient', 'this client') })
+            : '';
 
   return (
     <View style={styles.container}>
@@ -1936,7 +1878,7 @@ export default function HomeScreen() {
                  </Text>
                </View>
 
-             {clientsListMode === 'all' || clientsListMode === 'pendingApproval' ? (
+             {clientsListMode === 'all' || clientsListMode === 'newThisMonth' ? (
                <View style={[styles.searchContainer, { flexDirection: clientsSearchFlexDir }]}>
                  <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
                  <TextInput
@@ -1949,9 +1891,8 @@ export default function HomeScreen() {
                </View>
              ) : null}
 
-             {/* Blocked Filter + New Clients (single row) — host has fixed height so ScrollView cannot expand over the list and steal touches */}
-             {clientsListMode !== 'newThisMonth' ? (
-               <View style={styles.clientsFilterRowHost} collapsable={false}>
+             {/* Blocked / חדשים החודש / ממתינים — שורה גלילה; גם במצב newThisMonth כדי לאפשר מעבר חזרה */}
+             <View style={styles.clientsFilterRowHost} collapsable={false}>
                <ScrollView
                  horizontal
                  showsHorizontalScrollIndicator={false}
@@ -2041,139 +1982,38 @@ export default function HomeScreen() {
 
                  <TouchableOpacity
                    onPress={() => {
-                     setClientsListMode('pendingApproval');
+                     setClientsListMode('newThisMonth');
                      setSearchQuery('');
                      setBlockedFilter('all');
-                     void fetchPendingClients();
+                     void fetchNewClientsThisMonth();
                    }}
-                   style={[styles.filterButton, clientsListMode === 'pendingApproval' && styles.filterButtonActive]}
+                   style={[styles.filterButton, clientsListMode === 'newThisMonth' && styles.filterButtonActive]}
                    activeOpacity={0.85}
                    accessibilityRole="button"
-                   accessibilityLabel={t('admin.pendingClients.bannerA11y')}
+                   accessibilityLabel={t('admin.insights.newClientsLegendA11y', {
+                     legend: t('admin.insights.newClientsLegend'),
+                     count: insightsData.newClientsThisMonth,
+                   })}
                  >
                    <Text
                      style={[
                        styles.filterButtonText,
-                       clientsListMode === 'pendingApproval' && styles.filterButtonTextActive,
+                       clientsListMode === 'newThisMonth' && styles.filterButtonTextActive,
                      ]}
                    >
-                     {pendingClientsCount > 0
-                       ? `${t('admin.pendingClients.bannerTitle')} (${pendingClientsCount > 99 ? '99+' : pendingClientsCount})`
+                     {insightsData.newClientsThisMonth > 0
+                       ? `${t('admin.pendingClients.bannerTitle')} (${
+                           insightsData.newClientsThisMonth > 99 ? '99+' : insightsData.newClientsThisMonth
+                         })`
                        : t('admin.pendingClients.bannerTitle')}
                    </Text>
                  </TouchableOpacity>
                </ScrollView>
                </View>
-             ) : null}
 
              {/* Clients List */}
              <View style={styles.clientsListSheet}>
-             {clientsListMode === 'pendingApproval' ? (
-               loadingPendingClients ? (
-                 <View style={styles.loadingContainer}>
-                   <ActivityIndicator size="large" color={primaryOnSurface} />
-                   <Text style={styles.loadingText}>{t('admin.pendingClients.loading', 'Loading…')}</Text>
-                 </View>
-               ) : (
-                 <GHFlatList
-                   style={styles.clientsFlatList}
-                   data={pendingFilteredClients}
-                   keyExtractor={(item) => item.id}
-                   keyboardShouldPersistTaps="always"
-                   removeClippedSubviews={false}
-                   showsVerticalScrollIndicator={true}
-                   ListEmptyComponent={
-                     <ClientsListModalEmptyState
-                       primaryColor={colors.primary}
-                       primaryOnSurface={primaryOnSurface}
-                       textColor={colors.text}
-                       textSecondaryColor={colors.textSecondary}
-                       surfaceColor={colors.surface}
-                       title={
-                         pendingClients.length === 0
-                           ? t('admin.pendingClients.empty', 'No pending clients')
-                           : t('common.noResults', 'No results')
-                       }
-                       subtitle={
-                         pendingClients.length === 0
-                           ? t('admin.pendingClients.emptySubtitle')
-                           : t('clients.emptySearchHint')
-                       }
-                     />
-                   }
-                   renderItem={({ item }) => {
-                     const busy = pendingClientActionId === item.id;
-                     const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
-                     return (
-                       <View style={styles.clientCard}>
-                         <View style={styles.clientCardHeader}>
-                           <View style={styles.clientCardLead}>
-                             <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}22` }]}>
-                               <Text style={[styles.clientAvatarLetter, { color: primaryOnSurface }]}>
-                                 {initial}
-                               </Text>
-                             </View>
-                             <View style={styles.clientCardTextCol}>
-                               <View style={styles.clientNameRow}>
-                                 <Text style={[styles.modalClientName, { color: colors.text }]} numberOfLines={1}>
-                                   {item.name || t('common.client', 'Client')}
-                                 </Text>
-                               </View>
-                               {item.phone ? (
-                                 <Text style={[styles.clientCardPhoneLine, { color: colors.textSecondary }]} numberOfLines={1}>
-                                   {item.phone}
-                                 </Text>
-                               ) : null}
-                             </View>
-                           </View>
-                           <View style={styles.clientCardActions} collapsable={false}>
-                            <TouchableOpacity
-                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                               style={[styles.clientUnblockPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
-                               onPress={() => approvePendingClient(item.id)}
-                               disabled={busy}
-                               activeOpacity={0.85}
-                               accessibilityRole="button"
-                               accessibilityLabel={t('admin.pendingClients.approve', 'Approve')}
-                             >
-                               {busy ? (
-                                 <ActivityIndicator size="small" color={primaryOnSurface} />
-                               ) : (
-                                 <Text style={[styles.clientUnblockPillText, { color: primaryOnSurface }]}>
-                                   {t('admin.pendingClients.approve', 'Approve')}
-                                 </Text>
-                               )}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                               style={styles.clientBlockPill}
-                               onPress={() => rejectPendingClient(item)}
-                               disabled={busy}
-                               activeOpacity={0.85}
-                               accessibilityRole="button"
-                               accessibilityLabel={t('admin.pendingClients.decline', 'Decline')}
-                             >
-                               {busy ? (
-                                 <ActivityIndicator size="small" color="#fff" />
-                               ) : (
-                                 <Text style={styles.clientBlockPillText}>
-                                   {t('admin.pendingClients.decline', 'Decline')}
-                                 </Text>
-                               )}
-                            </TouchableOpacity>
-                           </View>
-                         </View>
-                       </View>
-                     );
-                   }}
-                   contentContainerStyle={[
-                     styles.clientsListContent,
-                     { paddingBottom: insets.bottom + 24 },
-                     pendingFilteredClients.length === 0 && styles.clientsListContentEmpty,
-                   ]}
-                 />
-               )
-             ) : loadingClients ? (
+             {loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={primaryOnSurface} />
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
@@ -2337,6 +2177,26 @@ export default function HomeScreen() {
              </View>
              </View>
            </Animated.View>
+           {cd != null ? (
+             <ClientsListActionModal
+               embedded
+               visible
+               title={clientsListActionTitle}
+               message={clientsListActionMessage}
+               showCancel={cd.variant !== 'phoneMissing'}
+               cancelText={t('cancel', 'Cancel')}
+               confirmText={
+                 cd.variant === 'phoneMissing'
+                   ? t('ok', 'OK')
+                   : cd.variant === 'call'
+                     ? t('clients.call.title', 'Call')
+                     : t('confirm', 'Confirm')
+               }
+               confirmDestructive={cd.variant === 'block'}
+               onCancel={cancelClientsListActionDialog}
+               onConfirm={confirmClientsListActionDialog}
+             />
+           ) : null}
          </View>
          </GestureHandlerRootView>
        </Modal>

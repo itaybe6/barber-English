@@ -41,6 +41,14 @@ const HERO_IMAGE_SELECTION_LIMIT = 0;
 /** Shown above the live hero preview on the edit screen */
 const HERO_EDIT_RECOMMENDED_UPLOAD_COUNT = 20;
 
+/**
+ * Hero marquee tiles are small squares (~0.35× viewport width on native, see
+ * `AdminHomeHeroMarquee`). Encoding near that display budget shrinks uploads
+ * and speeds home loads without visible softness on phones/tablets.
+ */
+const HERO_UPLOAD_MAX_EDGE = 900;
+const HERO_UPLOAD_JPEG_QUALITY = 0.82;
+
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -276,23 +284,6 @@ function createStyles(colors: ThemeColors) {
       paddingVertical: 6,
       paddingHorizontal: 8,
     },
-    firstBadge: {
-      position: 'absolute',
-      bottom: 8,
-      start: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      borderRadius: 12,
-      paddingVertical: 5,
-      paddingHorizontal: 8,
-    },
-    firstBadgeText: {
-      color: '#fff',
-      fontSize: 11,
-      fontWeight: '700',
-    },
     footerHint: {
       paddingHorizontal: 8,
       paddingTop: 16,
@@ -458,9 +449,9 @@ export default function EditHomeHeroScreen() {
         height: a.height,
       }));
       const compressed = await compressImages(sources, {
-        quality: 0.7,
-        maxWidth: 1200,
-        maxHeight: 1200,
+        quality: HERO_UPLOAD_JPEG_QUALITY,
+        maxWidth: HERO_UPLOAD_MAX_EDGE,
+        maxHeight: HERO_UPLOAD_MAX_EDGE,
         format: 'jpeg',
       });
 
@@ -670,12 +661,6 @@ export default function EditHomeHeroScreen() {
                   accessibilityLabel={t('settings.profile.heroHint')}
                 >
                   <Image source={{ uri: item.url }} style={styles.image} contentFit="cover" transition={120} />
-                  {index === 0 && (
-                    <View style={styles.firstBadge}>
-                      <Ionicons name="star" size={12} color="#fff" />
-                      <Text style={styles.firstBadgeText}>{t('settings.profile.first')}</Text>
-                    </View>
-                  )}
                   <TouchableOpacity
                     onPress={() => removeAt(index)}
                     style={styles.deletePill}

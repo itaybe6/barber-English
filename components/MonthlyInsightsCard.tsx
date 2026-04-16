@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager, Touch
 import Svg, { Circle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
+import { darkenHex, lightenHex } from '@/lib/colorContrast';
 
 interface MonthlyInsightsCardProps {
   appointmentsThisMonth: number;
@@ -13,9 +14,6 @@ interface MonthlyInsightsCardProps {
   /** Opens list of clients registered this month (insights legend). */
   onPressNewClients?: () => void;
 }
-
-const CANCELLED_SEGMENT_COLOR = '#EF4444';
-const NEW_CLIENTS_SEGMENT_COLOR = '#FF9500';
 
 const CHART_SIZE = 128;
 const STROKE_WIDTH = 14;
@@ -37,6 +35,16 @@ export default function MonthlyInsightsCard({
     (typeof i18n.language === 'string' && i18n.language.startsWith('he')) || I18nManager.isRTL;
   const total = appointmentsThisMonth + cancelledAppointmentsThisMonth + newClientsThisMonth;
 
+  /** Same hue as primary — strong light / mid / dark spread on donut + legend. */
+  const primaryShades = useMemo(() => {
+    const anchor = primaryChartSegment;
+    return {
+      month: anchor,
+      cancelled: darkenHex(anchor, 0.48),
+      newClients: lightenHex(anchor, 0.55),
+    };
+  }, [primaryChartSegment]);
+
   const monthLabel = useMemo(() => {
     const locale = typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he-IL' : 'en-US';
     return new Date().toLocaleString(locale, { month: 'long', year: 'numeric' });
@@ -47,19 +55,19 @@ export default function MonthlyInsightsCard({
       {
         key: 'month',
         value: appointmentsThisMonth,
-        color: primaryChartSegment,
+        color: primaryShades.month,
         label: t('admin.insights.monthLegend'),
       },
       {
         key: 'cancelled',
         value: cancelledAppointmentsThisMonth,
-        color: CANCELLED_SEGMENT_COLOR,
+        color: primaryShades.cancelled,
         label: t('admin.insights.cancelledLegend'),
       },
       {
         key: 'clients',
         value: newClientsThisMonth,
-        color: NEW_CLIENTS_SEGMENT_COLOR,
+        color: primaryShades.newClients,
         label: t('admin.insights.newClientsLegend'),
       },
     ],
@@ -67,7 +75,7 @@ export default function MonthlyInsightsCard({
       appointmentsThisMonth,
       cancelledAppointmentsThisMonth,
       newClientsThisMonth,
-      primaryChartSegment,
+      primaryShades,
       t,
     ]
   );

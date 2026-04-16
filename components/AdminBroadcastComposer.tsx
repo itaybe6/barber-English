@@ -8,7 +8,6 @@ import {
   StyleSheet,
   TextInput,
   Platform,
-  Alert,
   ViewStyle,
   I18nManager,
   Animated,
@@ -25,10 +24,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { messagesApi } from '@/lib/api/messages';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import BroadcastOwnerOnlyModal from '@/components/BroadcastOwnerOnlyModal';
+import ClientsListActionModal from '@/components/admin/ClientsListActionModal';
+
+type BroadcastComposerDialog =
+  | null
+  | 'confirm'
+  | { type: 'error'; message: string }
+  | { type: 'success'; message: string };
 
 type AdminBroadcastComposerProps = {
   variant?: 'floating' | 'icon';
@@ -66,10 +72,11 @@ export default function AdminBroadcastComposer({
   renderTrigger = true,
   ensureCanBroadcast,
 }: AdminBroadcastComposerProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { onPrimary } = usePrimaryContrast();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const effectiveIconColor = iconColor ?? colors.primary;
   const [internalOpen, setInternalOpen] = useState(false);
@@ -81,18 +88,11 @@ export default function AdminBroadcastComposer({
   };
 
   const isRTL = I18nManager.isRTL;
-  /** Modals often lay out as LTR — use language + dir so icon side/mirror still match the UI. */
-  const activeLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
-  const sendIconMirrored =
-    activeLang.startsWith('he') ||
-    activeLang.startsWith('iw') ||
-    activeLang.startsWith('ar') ||
-    (typeof i18n.dir === 'function' && i18n.dir() === 'rtl') ||
-    isRTL;
   const [title, setTitle] = useState('');
   const [notificationContent, setNotificationContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [ownerOnlyModalOpen, setOwnerOnlyModalOpen] = useState(false);
+  const [dialog, setDialog] = useState<BroadcastComposerDialog>(null);
   const [titleFocused, setTitleFocused] = useState(false);
   const [contentFocused, setContentFocused] = useState(false);
   const closeOwnerOnlyModal = useCallback(() => setOwnerOnlyModalOpen(false), []);
@@ -243,6 +243,19 @@ export default function AdminBroadcastComposer({
     [t]
   );
 
+  const confirmStrings = useMemo(
+    () => ({
+      title: t('admin.broadcastComposer.confirmTitle', 'לשלוח לכל הלקוחות?'),
+      body: t(
+        'admin.broadcastComposer.confirmBody',
+        'הודעה זו תישלח כעת לכל הלקוחות ותופיע גם בדף הבית.\n\nאפשר לערוך ולשלוח מחדש בכל זמן.',
+      ),
+    }),
+    [t],
+  );
+
+  const closeDialog = useCallback(() => setDialog(null), []);
+
   const resetState = () => {
     setTitle('');
     setNotificationContent('');
@@ -252,22 +265,14 @@ export default function AdminBroadcastComposer({
 
   const handleSendWithConfirm = () => {
     if (!canSend) return;
-    const confirmTitle = t('admin.broadcastComposer.confirmTitle', 'לשלוח לכל הלקוחות?');
-    const confirmBody = t(
-      'admin.broadcastComposer.confirmBody',
-      'הודעה זו תישלח כעת לכל הלקוחות ותופיע גם בדף הבית.\n\nאפשר לערוך ולשלוח מחדש בכל זמן.',
-    );
-    Alert.alert(confirmTitle, confirmBody, [
-      { text: strings.cancel, style: 'cancel' },
-      { text: strings.sendAll, style: 'default', onPress: () => void handleSend() },
-    ]);
+    setDialog('confirm');
   };
 
   const handleSend = async () => {
     const finalTitle = currentTitle;
     const body = notificationContent.trim();
     if (!finalTitle || !body) {
-      Alert.alert(strings.error, strings.errorFill);
+      setDialog({ type: 'error', message: strings.errorFill });
       return;
     }
 
@@ -279,7 +284,7 @@ export default function AdminBroadcastComposer({
           return;
         }
       } catch {
-        Alert.alert(strings.error, strings.failMsg);
+        setDialog({ type: 'error', message: strings.failMsg });
         return;
       }
     }
@@ -292,7 +297,7 @@ export default function AdminBroadcastComposer({
         userId: user?.id ?? null,
       });
       if (!created) {
-        Alert.alert(strings.error, strings.failMsg);
+        setDialog({ type: 'error', message: strings.failMsg });
         return;
       }
 
@@ -305,17 +310,9 @@ export default function AdminBroadcastComposer({
         msg = strings.successNotifyFailed;
       }
 
-      Alert.alert(strings.success, msg, [
-        {
-          text: strings.ok,
-          onPress: () => {
-            resetState();
-            requestCloseSheet();
-          },
-        },
-      ]);
+      setDialog({ type: 'success', message: msg });
     } catch {
-      Alert.alert(strings.error, strings.failMsg);
+      setDialog({ type: 'error', message: strings.failMsg });
     } finally {
       setIsSending(false);
     }
@@ -334,7 +331,7 @@ export default function AdminBroadcastComposer({
           return;
         }
       } catch {
-        Alert.alert(strings.error, strings.failMsg);
+        setDialog({ type: 'error', message: strings.failMsg });
         return;
       }
     }
@@ -343,6 +340,34 @@ export default function AdminBroadcastComposer({
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
+  const dialogTitle =
+    dialog === 'confirm'
+      ? confirmStrings.title
+      : dialog && typeof dialog === 'object' && dialog.type === 'error'
+        ? strings.error
+        : dialog && typeof dialog === 'object' && dialog.type === 'success'
+          ? strings.success
+          : '';
+  const dialogMessage =
+    dialog === 'confirm'
+      ? confirmStrings.body
+      : dialog && typeof dialog === 'object'
+        ? dialog.message
+        : '';
+
+  const handleDialogConfirm = () => {
+    if (dialog === 'confirm') {
+      closeDialog();
+      void handleSend();
+      return;
+    }
+    if (dialog && typeof dialog === 'object' && dialog.type === 'success') {
+      resetState();
+      requestCloseSheet();
+    }
+    closeDialog();
+  };
 
   return (
     <>
@@ -593,51 +618,57 @@ export default function AdminBroadcastComposer({
 
                 <TouchableOpacity
                   onPress={handleSendWithConfirm}
-                  activeOpacity={canSend ? 0.88 : 1}
+                  activeOpacity={canSend ? 0.85 : 1}
                   disabled={!canSend}
-                  style={styles.sendBtnWrap}
+                  style={[
+                    styles.sendBtnWrap,
+                    {
+                      backgroundColor: canSend ? colors.primary : '#C7C7CC',
+                      opacity: canSend ? 1 : 0.65,
+                    },
+                  ]}
                   accessibilityRole="button"
                   accessibilityLabel={strings.accessibilitySend}
                   accessibilityState={{ disabled: !canSend, busy: isSending }}
                 >
-                  <LinearGradient
-                    colors={
-                      canSend
-                        ? [colors.primary, darkenHex(colors.primary, 0.3)]
-                        : ['#C7C7CC', '#C7C7CC']
-                    }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[
-                      styles.sendBtn,
-                      !canSend && { opacity: 0.6 },
-                      /* Force LTR row so icon stays visually left of label even when Modal ignores app RTL. */
-                      styles.sendBtnRowLtr,
-                    ]}
-                  >
-                    {isSending ? (
-                      <>
-                        <Ionicons name="hourglass-outline" size={18} color="#fff" />
-                        <Text style={styles.sendBtnText}>{strings.sending}</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="send"
-                          size={16}
-                          color="#fff"
-                          style={sendIconMirrored ? { transform: [{ scaleX: -1 }] } : undefined}
-                        />
-                        <Text style={styles.sendBtnText}>{strings.sendAll}</Text>
-                      </>
-                    )}
-                  </LinearGradient>
+                  <Text style={[styles.sendBtnText, { color: canSend ? onPrimary : '#fff' }]}>
+                    {isSending ? strings.sending : strings.sendAll}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </Animated.View>
+
+          {dialog !== null ? (
+            <ClientsListActionModal
+              embedded
+              visible
+              title={dialogTitle}
+              message={dialogMessage}
+              showCancel={dialog === 'confirm'}
+              cancelText={strings.cancel}
+              confirmText={dialog === 'confirm' ? strings.sendAll : strings.ok}
+              confirmDestructive={false}
+              onCancel={closeDialog}
+              onConfirm={handleDialogConfirm}
+            />
+          ) : null}
         </View>
       </Modal>
+
+      {dialog !== null && !renderModal ? (
+        <ClientsListActionModal
+          visible
+          title={dialogTitle}
+          message={dialogMessage}
+          showCancel={dialog === 'confirm'}
+          cancelText={strings.cancel}
+          confirmText={dialog === 'confirm' ? strings.sendAll : strings.ok}
+          confirmDestructive={false}
+          onCancel={closeDialog}
+          onConfirm={handleDialogConfirm}
+        />
+      ) : null}
     </>
   );
 }
@@ -926,31 +957,14 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     },
     sendBtnWrap: {
       flex: 1.8,
-    },
-    sendBtnRowLtr: {
-      direction: 'ltr',
-    },
-    sendBtn: {
       height: 52,
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
-      flexDirection: 'row',
-      gap: 8,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.18,
-          shadowRadius: 10,
-        },
-        android: { elevation: 4 },
-      }),
     },
     sendBtnText: {
-      color: '#fff',
       fontSize: 16,
-      fontWeight: '700',
+      fontWeight: '600',
       letterSpacing: -0.2,
     },
   });

@@ -66,6 +66,17 @@ export function darkenHex(hex: string, ratio: number): string {
   return `#${to(rgb.r)}${to(rgb.g)}${to(rgb.b)}`;
 }
 
+/** Mix toward white — `ratio` 0 unchanged, 1 → white */
+export function lightenHex(hex: string, ratio: number): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return hex;
+  const mix = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n + (255 - n) * ratio)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${mix(rgb.r)}${mix(rgb.g)}${mix(rgb.b)}`;
+}
+
 /** Donut / legend segment on light card — darkened but still hue-related */
 export function getPrimaryForChartSegment(primaryHex: string): string {
   if (!isLightPrimaryColor(primaryHex)) return primaryHex;

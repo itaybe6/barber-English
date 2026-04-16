@@ -84,12 +84,6 @@ export default function ProductCarousel({
       {showHeader ? (
         <View style={styles.elegantHeader}>
           <Text style={[styles.elegantTitle, { color: colors.text }]}>{displayTitle}</Text>
-          <LinearGradient
-            colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.sectionAccentLine}
-          />
           {showSubtitle ? (
             <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
               {displaySubtitle}
@@ -254,35 +248,18 @@ const styles = StyleSheet.create({
   headerTitleContainer: {
     alignItems: 'center',
   },
-  sectionAccentLine: {
-    height: 2,
-    borderRadius: 1,
-    marginTop: 10,
-    opacity: 0.5,
-    marginHorizontal: 48,
-    alignSelf: 'stretch',
-  },
   elegantTitle: {
-    fontSize: 26,
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    ...(Platform.OS === 'ios'
-      ? {
-          fontFamily: 'Didot-Bold',
-          fontWeight: '400' as const,
-          letterSpacing: 0.65,
-        }
-      : {
-          fontFamily: 'serif',
-          fontWeight: '800' as const,
-          letterSpacing: 0.35,
-        }),
+    letterSpacing: -0.25,
+    marginBottom: 3,
   },
   elegantSubtitle: {
     fontSize: 14,
     fontWeight: '400',
     textAlign: 'center',
     letterSpacing: 0.2,
-    marginTop: 6,
   },
   productCarousel: {},
   productCarouselContent: {

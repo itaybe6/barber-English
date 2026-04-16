@@ -1193,12 +1193,6 @@ export default function ClientHomeScreen() {
               <Text style={[styles.sectionHeadingTitle, { color: colors.text }]}>
                 {t('how.to.get.here')}
               </Text>
-              <LinearGradient
-                colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sectionAccentLine}
-              />
             </View>
              
              <TouchableOpacity
@@ -2479,27 +2473,10 @@ const styles = StyleSheet.create<any>({
     marginBottom: 12,
   },
   sectionHeadingTitle: {
-    fontSize: 26,
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    ...(Platform.OS === 'ios'
-      ? {
-          fontFamily: 'Didot-Bold',
-          fontWeight: '400' as const,
-          letterSpacing: 0.65,
-        }
-      : {
-          fontFamily: 'serif',
-          fontWeight: '800' as const,
-          letterSpacing: 0.35,
-        }),
-  },
-  sectionAccentLine: {
-    height: 2,
-    borderRadius: 1,
-    marginTop: 10,
-    opacity: 0.5,
-    marginHorizontal: 48,
-    alignSelf: 'stretch',
+    letterSpacing: -0.25,
   },
   headerDecorationLeft: {
     flexDirection: 'row',

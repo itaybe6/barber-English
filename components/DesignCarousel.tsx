@@ -11,10 +11,8 @@ import {
   InteractionManager,
   AppState,
   Modal,
-  Platform,
   SafeAreaView,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
@@ -408,12 +406,6 @@ export default function DesignCarousel({
           <Text style={[styles.elegantTitle, { color: colors.text }]}>
             {title || t('admin.gallery.title', 'Gallery')}
           </Text>
-          <LinearGradient
-            colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.sectionAccentLine}
-          />
           {showSubtitle ? (
             <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
           ) : null}
@@ -524,28 +516,12 @@ const styles = StyleSheet.create({
   headerTitleContainer: {
     alignItems: 'center',
   },
-  sectionAccentLine: {
-    height: 2,
-    borderRadius: 1,
-    marginTop: 10,
-    opacity: 0.5,
-    marginHorizontal: 48,
-    alignSelf: 'stretch',
-  },
   elegantTitle: {
-    fontSize: 26,
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    ...(Platform.OS === 'ios'
-      ? {
-          fontFamily: 'Didot-Bold',
-          fontWeight: '400' as const,
-          letterSpacing: 0.65,
-        }
-      : {
-          fontFamily: 'serif',
-          fontWeight: '800' as const,
-          letterSpacing: 0.35,
-        }),
+    letterSpacing: -0.25,
+    marginBottom: 3,
   },
   elegantSubtitle: {
     fontSize: 14,
@@ -553,7 +529,6 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     letterSpacing: 0.2,
-    marginTop: 6,
   },
   scrollView: {},
   scrollContainer: {

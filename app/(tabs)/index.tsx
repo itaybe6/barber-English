@@ -487,9 +487,18 @@ export default function HomeScreen() {
   const heroMarqueeAnimatedStyle = useAnimatedStyle(() => {
     const y = Math.max(0, outerScrollYSV.value);
     const clamped = Math.min(y, HERO_HEIGHT + 40);
-    // Parallax: background shifts slightly slower than the sheet
     const translateY = -clamped * 0.22;
     return { transform: [{ translateY }] };
+  }, []);
+
+  const heroOverlayFadeStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      outerScrollYSV.value,
+      [0, 220],
+      [1, 0],
+      Extrapolate.CLAMP,
+    );
+    return { opacity };
   }, []);
 
   const formatClientMoney = useCallback(
@@ -1331,18 +1340,20 @@ export default function HomeScreen() {
       </View>
 
       {/* Fixed hero marquee — not a child of the sheet ScrollView; sheet slides over it, zero scroll coupling */}
-      <Animated.View
-        style={[styles.adminHeroMarqueeHost, heroMarqueeAnimatedStyle]}
-        pointerEvents="box-none"
-        collapsable={false}
-      >
-        <AdminHomeHeroMarquee
-          customImageUrls={heroImages ?? []}
-          layoutWidth={SCREEN_WIDTH}
-          layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
-          keyPrefix="admin-home"
-        />
-      </Animated.View>
+      {Platform.OS !== 'android' && (
+        <Animated.View
+          style={[styles.adminHeroMarqueeHost, heroMarqueeAnimatedStyle]}
+          pointerEvents="box-none"
+          collapsable={false}
+        >
+          <AdminHomeHeroMarquee
+            customImageUrls={heroImages ?? []}
+            layoutWidth={SCREEN_WIDTH}
+            layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
+            keyPrefix="admin-home"
+          />
+        </Animated.View>
+      )}
 
       {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}
       <Animated.ScrollView
@@ -1354,7 +1365,7 @@ export default function HomeScreen() {
         overScrollMode="never"
         pointerEvents="box-none"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryOnSurface} />}
-        contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
+        contentContainerStyle={{ paddingTop: Platform.OS === 'android' ? 0 : (HERO_HEIGHT - HERO_OVERLAP) }}
         scrollEventThrottle={1}
         onLayout={(e) => {
           outerScrollLayoutHRef.current = e.nativeEvent.layout.height;
@@ -1366,6 +1377,20 @@ export default function HomeScreen() {
         }}
         onScroll={outerScrollHandler}
       >
+        {/* On Android, hero marquee scrolls with content to avoid z-ordering issues */}
+        {Platform.OS === 'android' && (
+          <View
+            style={{ height: HERO_HEIGHT - HERO_OVERLAP, overflow: 'hidden' }}
+            pointerEvents="none"
+          >
+            <AdminHomeHeroMarquee
+              customImageUrls={heroImages ?? []}
+              layoutWidth={SCREEN_WIDTH}
+              layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
+              keyPrefix="admin-home"
+            />
+          </View>
+        )}
         {/* Content wrapper — fixed height so outer scroll stops below header */}
         <View
           style={[
@@ -1869,7 +1894,7 @@ export default function HomeScreen() {
       </Animated.ScrollView>
 
       {/* Top scrim over marquee — semi-transparent gradient so the white logo reads clearly */}
-      <View
+      <Animated.View
         pointerEvents="box-none"
         style={[
           styles.heroTopScheduleBand,
@@ -1878,6 +1903,7 @@ export default function HomeScreen() {
             borderBottomLeftRadius: HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS,
             borderBottomRightRadius: HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS,
           },
+          heroOverlayFadeStyle,
         ]}
       >
         <LinearGradient
@@ -1888,7 +1914,7 @@ export default function HomeScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-      </View>
+      </Animated.View>
 
       {/* Overlay Header - always on top of scroll */}
       <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
@@ -1902,9 +1928,9 @@ export default function HomeScreen() {
       </SafeAreaView>
 
       {/* Logo overlay (white tint on primary band) */}
-      <View
+      <Animated.View
         pointerEvents="none"
-        style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }]}
+        style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }, heroOverlayFadeStyle]}
       >
         {homeHeaderShowLogo ? (
           <View style={styles.overlayLogoInner}>
@@ -1926,7 +1952,7 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
-      </View>
+      </Animated.View>
 
        {/* Image Preview Modal for Admin */}
        <Modal

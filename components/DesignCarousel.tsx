@@ -11,6 +11,7 @@ import {
   InteractionManager,
   AppState,
   Modal,
+  Platform,
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -402,18 +403,22 @@ export default function DesignCarousel({
   return (
     <View style={styles.container}>
       {/* Elegant Header */}
-      {showHeader && (
+      {showHeader ? (
         <View style={styles.elegantHeader}>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.elegantTitle, { color: colors.text }]}>
-              {title || t('admin.gallery.title', 'Gallery')}
-            </Text>
-            {showSubtitle ? (
-              <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
-            ) : null}
-          </View>
+          <Text style={[styles.elegantTitle, { color: colors.text }]}>
+            {title || t('admin.gallery.title', 'Gallery')}
+          </Text>
+          <LinearGradient
+            colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sectionAccentLine}
+          />
+          {showSubtitle ? (
+            <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+          ) : null}
         </View>
-      )}
+      ) : null}
 
       {/* Carousel */}
       <ScrollView
@@ -519,12 +524,28 @@ const styles = StyleSheet.create({
   headerTitleContainer: {
     alignItems: 'center',
   },
+  sectionAccentLine: {
+    height: 2,
+    borderRadius: 1,
+    marginTop: 10,
+    opacity: 0.5,
+    marginHorizontal: 48,
+    alignSelf: 'stretch',
+  },
   elegantTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 26,
     textAlign: 'center',
-    letterSpacing: -0.25,
-    marginBottom: 3,
+    ...(Platform.OS === 'ios'
+      ? {
+          fontFamily: 'Didot',
+          fontWeight: '400' as const,
+          letterSpacing: 0.8,
+        }
+      : {
+          fontFamily: 'serif',
+          fontWeight: '600' as const,
+          letterSpacing: 0.4,
+        }),
   },
   elegantSubtitle: {
     fontSize: 14,
@@ -532,6 +553,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     letterSpacing: 0.2,
+    marginTop: 6,
   },
   scrollView: {},
   scrollContainer: {

@@ -83,14 +83,18 @@ export default function ProductCarousel({
     <View style={styles.container}>
       {showHeader ? (
         <View style={styles.elegantHeader}>
-          <View style={styles.headerTitleContainer}>
-            <Text style={[styles.elegantTitle, { color: colors.text }]}>{displayTitle}</Text>
-            {showSubtitle ? (
-              <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
-                {displaySubtitle}
-              </Text>
-            ) : null}
-          </View>
+          <Text style={[styles.elegantTitle, { color: colors.text }]}>{displayTitle}</Text>
+          <LinearGradient
+            colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sectionAccentLine}
+          />
+          {showSubtitle ? (
+            <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
+              {displaySubtitle}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       <ScrollView
@@ -250,18 +254,35 @@ const styles = StyleSheet.create({
   headerTitleContainer: {
     alignItems: 'center',
   },
+  sectionAccentLine: {
+    height: 2,
+    borderRadius: 1,
+    marginTop: 10,
+    opacity: 0.5,
+    marginHorizontal: 48,
+    alignSelf: 'stretch',
+  },
   elegantTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 26,
     textAlign: 'center',
-    letterSpacing: -0.25,
-    marginBottom: 3,
+    ...(Platform.OS === 'ios'
+      ? {
+          fontFamily: 'Didot',
+          fontWeight: '400' as const,
+          letterSpacing: 0.8,
+        }
+      : {
+          fontFamily: 'serif',
+          fontWeight: '600' as const,
+          letterSpacing: 0.4,
+        }),
   },
   elegantSubtitle: {
     fontSize: 14,
     fontWeight: '400',
     textAlign: 'center',
     letterSpacing: 0.2,
+    marginTop: 6,
   },
   productCarousel: {},
   productCarouselContent: {

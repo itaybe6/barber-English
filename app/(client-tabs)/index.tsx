@@ -388,6 +388,17 @@ export default function ClientHomeScreen() {
   const EMPTY_CARD_HEIGHT = 260; // increased to avoid clipping content
   
 
+  const scrollY = useRef(new RNAnimated.Value(0)).current;
+  const heroOverlayOpacity = useMemo(
+    () =>
+      scrollY.interpolate({
+        inputRange: [0, 220],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      }),
+    [scrollY],
+  );
+
   // Animated pulse for approved status dot
   const statusPulseAnim = React.useRef(new RNAnimated.Value(0)).current;
   const statusLoopRef = React.useRef<RNAnimated.CompositeAnimation | null>(null);
@@ -922,12 +933,17 @@ export default function ClientHomeScreen() {
         </View>
       )}
 
-      <ScrollView
+      <RNAnimated.ScrollView
         style={{ flex: 1, zIndex: 3, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         bounces={false}
         overScrollMode="never"
+        scrollEventThrottle={16}
+        onScroll={RNAnimated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1173,17 +1189,15 @@ export default function ClientHomeScreen() {
         {displayAddress ? (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: '700',
-                  color: colors.text,
-                  textAlign: 'center',
-                  letterSpacing: -0.25,
-                }}
-              >
+              <Text style={[styles.sectionHeadingTitle, { color: colors.text }]}>
                 {t('how.to.get.here')}
               </Text>
+              <LinearGradient
+                colors={[`${colors.primary}00`, `${colors.primary}99`, `${colors.primary}00`]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sectionAccentLine}
+              />
             </View>
              
              <TouchableOpacity
@@ -1323,9 +1337,9 @@ export default function ClientHomeScreen() {
 
             </SafeAreaView>
         </View>
-      </ScrollView>
+      </RNAnimated.ScrollView>
 
-      <View
+      <RNAnimated.View
         pointerEvents="none"
         style={[
           styles.heroTopScrimBand,
@@ -1334,6 +1348,7 @@ export default function ClientHomeScreen() {
             borderBottomLeftRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
             borderBottomRightRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
           },
+          { opacity: heroOverlayOpacity },
         ]}
       >
         <LinearGradient
@@ -1344,11 +1359,11 @@ export default function ClientHomeScreen() {
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-      </View>
+      </RNAnimated.View>
 
-      <View
+      <RNAnimated.View
         pointerEvents="none"
-        style={[styles.overlayHeaderLogoOnly, { top: insets.top + CLIENT_HOME_LOGO_TOP_OFFSET }]}
+        style={[styles.overlayHeaderLogoOnly, { top: insets.top + CLIENT_HOME_LOGO_TOP_OFFSET }, { opacity: heroOverlayOpacity }]}
       >
         {businessProfile ? (
           clientHomeHeaderShowLogo ? (
@@ -1371,7 +1386,7 @@ export default function ClientHomeScreen() {
             </View>
           )
         ) : null}
-      </View>
+      </RNAnimated.View>
 
       {/* Interested swap requests modal */}
       <InterestedSwapModal
@@ -2461,6 +2476,29 @@ const styles = StyleSheet.create<any>({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
+  },
+  sectionHeadingTitle: {
+    fontSize: 26,
+    textAlign: 'center',
+    ...(Platform.OS === 'ios'
+      ? {
+          fontFamily: 'Didot',
+          fontWeight: '400' as const,
+          letterSpacing: 0.8,
+        }
+      : {
+          fontFamily: 'serif',
+          fontWeight: '600' as const,
+          letterSpacing: 0.4,
+        }),
+  },
+  sectionAccentLine: {
+    height: 2,
+    borderRadius: 1,
+    marginTop: 10,
+    opacity: 0.5,
+    marginHorizontal: 48,
+    alignSelf: 'stretch',
   },
   headerDecorationLeft: {
     flexDirection: 'row',

@@ -38,16 +38,15 @@ verify_jwt = false
 [functions.pulseem-delete-subaccount]
 verify_jwt = false
 
-# Green Invoice (חשבונית ירוקה): app uses custom auth (no Supabase Auth session). Auth in function: caller_user_id + business_id vs users table (service role).
+# pg_cron / service role only — validates Bearer === service role in handler.
+[functions.finance-monthly-review-reminder]
+verify_jwt = false
+
+# Legacy stubs (410) — Green Invoice removed from app; keep names so old deploys do not 404.
 [functions.greeninvoice-connect]
 verify_jwt = false
 
-# Green Invoice: issue receipt (document) for a completed appointment — same caller auth as greeninvoice-connect.
 [functions.greeninvoice-issue-receipt]
-verify_jwt = false
-
-# pg_cron / service role only — validates Bearer === service role in handler.
-[functions.finance-monthly-review-reminder]
 verify_jwt = false
 
 # pg_cron: daily Pulseem Direct SMS balance → in-app admin notifications if low

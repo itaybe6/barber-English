@@ -37,8 +37,6 @@ import {
 } from '@/lib/api/calendarReminders';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { checkWaitlistAndNotify } from '@/lib/api/waitlistNotifications';
-import { businessProfileApi } from '@/lib/api/businessProfile';
-import { prepareLocalKabala320ReceiptPdf, shareLocalKabalaPdf } from '@/lib/localIsraeliKabalaReceipt';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Entypo, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -1024,7 +1022,6 @@ export default function AdminAppointmentsScreen() {
     anchor: AnchorRect | null;
   }>({ open: false, appointment: null, anchor: null });
   const [actionsAnchorSheetContentH, setActionsAnchorSheetContentH] = useState(0);
-  const [issuingLocalKabalaAppointmentId, setIssuingLocalKabalaAppointmentId] = useState<string | null>(null);
 
   /** Open confirm dialog only after anchor sheet Modal unmounts — avoids invisible layer / wrong z-order (esp. Android). */
   const pendingDeleteAppointmentRef = useRef<AvailableTimeSlot | null>(null);
@@ -1121,7 +1118,7 @@ export default function AdminAppointmentsScreen() {
       let query = supabase
         .from('appointments')
         .select(
-          'id, slot_date, slot_time, client_name, client_phone, service_name, service_id, barber_id, status, is_available, business_id, user_id, created_at, receipt_issued, duration_minutes'
+          'id, slot_date, slot_time, client_name, client_phone, service_name, service_id, barber_id, status, is_available, business_id, user_id, created_at, duration_minutes'
         )
         .eq('business_id', businessId)
         .eq('slot_date', dateString)
@@ -1183,7 +1180,7 @@ export default function AdminAppointmentsScreen() {
         const { data, error } = await supabase
           .from('appointments')
           .select(
-            'id, slot_date, slot_time, client_name, client_phone, service_name, service_id, barber_id, status, is_available, business_id, user_id, created_at, receipt_issued, duration_minutes'
+            'id, slot_date, slot_time, client_name, client_phone, service_name, service_id, barber_id, status, is_available, business_id, user_id, created_at, duration_minutes'
           )
           .eq('business_id', businessId)
           .eq('is_available', false)
@@ -1782,42 +1779,6 @@ export default function AdminAppointmentsScreen() {
       Alert.alert(t('error.generic','Error'), t('common.phoneOpenFailed','Unable to open the dialer on this device'));
     }
   }, []);
-
-  const issueLocalIsraeliKabalaReceiptForAppointment = useCallback(
-    async (apt: AvailableTimeSlot) => {
-      setIssuingLocalKabalaAppointmentId(apt.id);
-      try {
-        const profile = await businessProfileApi.getProfile();
-        if (!profile) {
-          Alert.alert(
-            tHe('admin.appointments.receiptIssueBlockedTitle', 'לא ניתן להפיק קבלה'),
-            tHe('admin.appointments.receiptProfileMissing', 'לא ניתן לטעון את פרופיל העסק.'),
-          );
-          return;
-        }
-        const res = await prepareLocalKabala320ReceiptPdf(apt, profile);
-        if (res.ok === false) {
-          Alert.alert(
-            tHe('admin.appointments.receiptIssueBlockedTitle', 'לא ניתן להפיק קבלה'),
-            res.messageHe,
-          );
-        } else {
-          try {
-            await shareLocalKabalaPdf(
-              res.fileUri,
-              tHe('admin.appointments.issueLocalKabala', 'הפק קבלה'),
-              res.mimeType,
-            );
-          } catch {
-            /* user dismissed share sheet */
-          }
-        }
-      } finally {
-        setIssuingLocalKabalaAppointmentId(null);
-      }
-    },
-    [tHe],
-  );
 
   const openActionsMenu = useCallback((apt: AvailableTimeSlot, anchor?: AnchorRect) => {
     pendingDeleteAppointmentRef.current = null;
@@ -2865,48 +2826,7 @@ export default function AdminAppointmentsScreen() {
 
                     <View style={styles.actionsSheetBody}>
                     {(() => {
-                      const showReceipt =
-                        (apt.status === 'confirmed' || apt.status === 'completed') && !apt.is_available;
                       const fullW = styles.actionsSecondaryCard;
-                      const receiptCard = (
-                        <PressableScale
-                          key="receipt"
-                          style={fullW}
-                          disabled={issuingLocalKabalaAppointmentId === apt.id}
-                          accessibilityLabel={tHe('admin.appointments.issueLocalKabala', 'הפק קבלה')}
-                          accessibilityHint={tHe(
-                            'admin.appointments.issueLocalKabalaHint',
-                            'PDF מעוצב עם מספר קבלה סידורי (ללא חשבונית ירוקה)',
-                          )}
-                          onPress={() => {
-                            void issueLocalIsraeliKabalaReceiptForAppointment(apt);
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.actionsSecondaryIconPrimary,
-                              { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) },
-                            ]}
-                          >
-                            {issuingLocalKabalaAppointmentId === apt.id ? (
-                              <ActivityIndicator size="small" color={calendarPrimary} />
-                            ) : (
-                              <Ionicons name="receipt-outline" size={16} color={calendarPrimary} />
-                            )}
-                          </View>
-                          <View style={styles.actionsSecondaryTitleWrap}>
-                            <Text style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]} numberOfLines={2}>
-                              {tHe('admin.appointments.issueLocalKabala', 'הפק קבלה')}
-                            </Text>
-                            <Text style={styles.actionsReceiptHint} numberOfLines={2}>
-                              {tHe(
-                                'admin.appointments.issueLocalKabalaHint',
-                                'PDF מעוצב עם מספר קבלה סידורי (ללא חשבונית ירוקה)',
-                              )}
-                            </Text>
-                          </View>
-                        </PressableScale>
-                      );
                       if (phoneLine) {
                         return (
                           <View style={styles.actionsStackedButtonsWrap}>
@@ -2953,31 +2873,6 @@ export default function AdminAppointmentsScreen() {
                                 </Text>
                               </View>
                             </PressableScale>
-                            {showReceipt ? receiptCard : null}
-                          </View>
-                        );
-                      }
-                      if (showReceipt) {
-                        return (
-                          <View style={styles.actionsStackedButtonsWrap}>
-                            <PressableScale
-                              style={fullW}
-                              accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                              onPress={() => {
-                                const a = actionsModal.appointment;
-                                if (a) beginDeleteAppointmentFromSheet(a);
-                              }}
-                            >
-                              <View style={styles.actionsSecondaryIconDanger}>
-                                <Ionicons name="trash-outline" size={16} color={Colors.error} />
-                              </View>
-                              <View style={styles.actionsSecondaryTitleWrap}>
-                                <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={2}>
-                                  {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                                </Text>
-                              </View>
-                            </PressableScale>
-                            {receiptCard}
                           </View>
                         );
                       }
@@ -4044,14 +3939,6 @@ const styles = StyleSheet.create({
   actionsStackedButtonsWrap: {
     gap: 10,
     marginTop: 0,
-  },
-  actionsReceiptHint: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(15,23,42,0.5)',
-    textAlign: 'right',
-    lineHeight: 16,
   },
   actionsSecondaryCard: {
     marginHorizontal: 14,

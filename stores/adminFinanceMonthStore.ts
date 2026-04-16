@@ -9,7 +9,7 @@ interface AdminFinanceMonthState {
   goToNextMonth: () => void;
 }
 
-/** Shared month navigation for admin finance + accountant screens (same tab area). */
+/** Shared month navigation for admin finance + monthly report screen (same tab area). */
 export const useAdminFinanceMonthStore = create<AdminFinanceMonthState>((set, get) => ({
   year: now.getFullYear(),
   month: now.getMonth() + 1,

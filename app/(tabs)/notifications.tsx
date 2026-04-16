@@ -456,12 +456,7 @@ export default function AdminNotificationsScreen() {
     if (isCancellationNotification(n)) return null;
     if (isAdmin) {
       if (isFinanceMonthlyReviewNotification(n)) {
-        const period = extractFinanceReviewPeriod(n);
-        if (period) {
-          const [y, mo] = period.split('-');
-          return `/(tabs)/finance-month-closure?year=${encodeURIComponent(y)}&month=${encodeURIComponent(mo)}`;
-        }
-        return '/(tabs)/finance-month-closure';
+        return '/(tabs)/finance';
       }
       if (isPendingClientApprovalNotification(n)) return '/(tabs)?openPendingClients=1';
       if (isWaitlistNotification(n)) return '/(tabs)/waitlist';

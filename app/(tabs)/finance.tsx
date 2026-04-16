@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   Text,
@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Switch,
   ScrollView,
   useWindowDimensions,
   type LayoutChangeEvent,
@@ -41,20 +40,17 @@ import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { expensesApi } from '@/lib/api/expenses';
-import { businessProfileApi } from '@/lib/api/businessProfile';
-import { greenInvoiceConnectApi } from '@/lib/api/greenInvoiceConnect';
-import { greenInvoiceReceiptApi } from '@/lib/api/greenInvoiceReceipt';
-import { financeApi, type CompletedAppointmentReceiptRow } from '@/lib/api/finance';
-import { GreenInvoiceConnectModal } from '@/components/GreenInvoiceConnectModal';
+import {
+  financeApi,
+  type WeekIncomeSlice,
+  type CompletedAppointmentIncomeRow,
+} from '@/lib/api/finance';
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 import { useAdminFinanceMonthReport } from '@/hooks/useAdminFinanceMonthReport';
-import { useGreenInvoiceDevModeStore } from '@/stores/greenInvoiceDevModeStore';
-import { useAuthStore } from '@/stores/authStore';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import {
   ChevronLeft,
   ChevronRight,
-  Search,
   Plus,
   Trash2,
   TrendingUp,
@@ -63,11 +59,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   FileImage,
-  Receipt,
-  CheckCircle2,
-  Settings2,
-  FileSpreadsheet,
-  Pencil,
+  CalendarDays,
 } from 'lucide-react-native';
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
@@ -134,16 +126,11 @@ function lightenHex(hex: string, ratio: number): string {
 }
 
 export default function FinanceScreen() {
-  const { t } = useTranslation();
-  const router = useRouter();
-  const isAdminUser = useAuthStore((s) => s.isAdmin);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { colors: theme } = useBusinessColors();
   const primaryColor = theme.primary || '#000000';
-  const greenInvoiceAccent = '#16A34A';
-  /** מקסימום גובה לרשימת תורים — גלילה פנימית כדי לא למתוח את העמוד */
-  const giReceiptListMaxHeight = Math.min(380, Math.round(windowHeight * 0.36));
+  const apptListMaxHeight = Math.min(380, Math.round(windowHeight * 0.36));
 
   const {
     year,
@@ -166,18 +153,9 @@ export default function FinanceScreen() {
   const [newExpenseReceipt, setNewExpenseReceipt] = useState<{ uri: string; base64?: string } | null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
 
-  const [showGreenInvoiceModal, setShowGreenInvoiceModal] = useState(false);
-  const [giConnected, setGiConnected] = useState(false);
-  const [giKeyIdStored, setGiKeyIdStored] = useState<string | null>(null);
-  const [giSaving, setGiSaving] = useState(false);
-
-  const [giReceiptRows, setGiReceiptRows] = useState<CompletedAppointmentReceiptRow[]>([]);
-  const [giReceiptLoading, setGiReceiptLoading] = useState(false);
-  const [selectedGiAppointmentId, setSelectedGiAppointmentId] = useState<string | null>(null);
-  const [issuingGiReceipt, setIssuingGiReceipt] = useState(false);
-  const [giReceiptSearchQuery, setGiReceiptSearchQuery] = useState('');
-  const giUseSandboxApi = useGreenInvoiceDevModeStore((s) => s.useSandboxApi);
-  const giSetUseSandboxApi = useGreenInvoiceDevModeStore((s) => s.setUseSandboxApi);
+  const [weekSlices, setWeekSlices] = useState<WeekIncomeSlice[]>([]);
+  const [monthAppointments, setMonthAppointments] = useState<CompletedAppointmentIncomeRow[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const [heroLavaLayout, setHeroLavaLayout] = useState<{ w: number; h: number } | null>(null);
   const onHeroLavaLayout = useCallback((e: LayoutChangeEvent) => {
@@ -238,85 +216,28 @@ export default function FinanceScreen() {
     [measuredFinanceHeaderHeight],
   );
 
-  const refreshGreenInvoiceStatus = useCallback(async () => {
-    const p = await businessProfileApi.getProfile();
-    setGiConnected(!!p?.greeninvoice_has_credentials);
-    setGiKeyIdStored(p?.greeninvoice_api_key_id?.trim() || null);
-  }, []);
-
   useEffect(() => {
     if (loading) return;
     let cancelled = false;
-    (async () => {
-      const p = await businessProfileApi.getProfile();
-      if (cancelled) return;
-      setGiConnected(!!p?.greeninvoice_has_credentials);
-      setGiKeyIdStored(p?.greeninvoice_api_key_id?.trim() || null);
+    setAnalyticsLoading(true);
+    void (async () => {
+      try {
+        const [w, a] = await Promise.all([
+          financeApi.getWeeklyIncomeSlices(year, month),
+          financeApi.listCompletedAppointmentsForMonth(year, month),
+        ]);
+        if (!cancelled) {
+          setWeekSlices(w);
+          setMonthAppointments(a);
+        }
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loading]);
-
-  const reloadGiReceiptRows = useCallback(async () => {
-    if (!giConnected || loading) {
-      setGiReceiptRows([]);
-      setSelectedGiAppointmentId(null);
-      setGiReceiptSearchQuery('');
-      return;
-    }
-    setGiReceiptLoading(true);
-    try {
-      const rows = await financeApi.listCompletedAppointmentsForReceipts(year, month);
-      setGiReceiptRows(rows);
-      setSelectedGiAppointmentId((prev) =>
-        prev && rows.some((r) => r.id === prev) ? prev : null,
-      );
-    } finally {
-      setGiReceiptLoading(false);
-    }
-  }, [giConnected, loading, year, month]);
-
-  useEffect(() => {
-    void reloadGiReceiptRows();
-  }, [reloadGiReceiptRows]);
-
-  useEffect(() => {
-    setGiReceiptSearchQuery('');
-  }, [year, month]);
-
-  const giReceiptFilteredRows = useMemo(() => {
-    const q = giReceiptSearchQuery.trim().toLowerCase();
-    if (!q) return giReceiptRows;
-    return giReceiptRows.filter((row) => {
-      const name = (row.client_label ?? '').trim().toLowerCase();
-      return name.includes(q);
-    });
-  }, [giReceiptRows, giReceiptSearchQuery]);
-
-  const giReceiptListCaption = useMemo(() => {
-    if (giReceiptSearchQuery.trim()) {
-      return t('finance.greenInvoice.receipt.listFiltered', {
-        shown: giReceiptFilteredRows.length,
-        total: giReceiptRows.length,
-      });
-    }
-    return t('finance.greenInvoice.receipt.listCount', { count: giReceiptRows.length });
-  }, [giReceiptFilteredRows.length, giReceiptRows.length, giReceiptSearchQuery, t]);
-
-  useEffect(() => {
-    if (
-      selectedGiAppointmentId &&
-      !giReceiptFilteredRows.some((r) => r.id === selectedGiAppointmentId)
-    ) {
-      setSelectedGiAppointmentId(null);
-    }
-  }, [giReceiptFilteredRows, selectedGiAppointmentId]);
-
-  const selectedGiRow = useMemo(
-    () => giReceiptFilteredRows.find((r) => r.id === selectedGiAppointmentId),
-    [giReceiptFilteredRows, selectedGiAppointmentId],
-  );
+  }, [loading, year, month]);
 
   /** Home tab uses transparent status bar; restore opaque bar + dark icons so top matches header. */
   useFocusEffect(
@@ -338,117 +259,6 @@ export default function FinanceScreen() {
       };
     }, [theme.surface, financeHeaderOffsetY, financeLastScrollY]),
   );
-
-  const openGreenInvoiceModal = () => {
-    setShowGreenInvoiceModal(true);
-  };
-
-  const giErrorMessage = (code: string, serverMessage?: string) => {
-    if (code === 'receipt_already_issued') {
-      return t(
-        'finance.greenInvoice.errors.receipt_already_issued',
-        'כבר הופקה קבלה לתור זה.',
-      );
-    }
-    if (
-      serverMessage &&
-      (code === 'greeninvoice_auth_failed' || code === 'greeninvoice_document_failed')
-    ) {
-      return serverMessage;
-    }
-    const key = `finance.greenInvoice.errors.${code}` as const;
-    const translated = t(key);
-    const base = translated !== key ? translated : t('finance.greenInvoice.errors.unknown');
-    if (code === 'invoke_network' && serverMessage) {
-      return `${base}\n\n${serverMessage}`;
-    }
-    return base;
-  };
-
-  const issueGreenInvoiceReceipt = async () => {
-    if (!selectedGiAppointmentId) return;
-    setIssuingGiReceipt(true);
-    try {
-      const res = await greenInvoiceReceiptApi.issueForAppointment(selectedGiAppointmentId);
-      if (res.ok === false) {
-        Alert.alert(
-          t('finance.greenInvoice.receipt.issueFailedTitle'),
-          giErrorMessage(res.error, res.message),
-        );
-        return;
-      }
-      let msg = t('finance.greenInvoice.receipt.successBody');
-      if (res.documentNumber) {
-        msg = t('finance.greenInvoice.receipt.successWithNumber', { number: res.documentNumber });
-      }
-      if (res.sandbox) {
-        msg = `${msg}\n\n${t('finance.greenInvoice.receipt.sandboxBadge')}`;
-      }
-      const actions: {
-        text: string;
-        style?: 'default' | 'cancel' | 'destructive';
-        onPress?: () => void;
-      }[] = [{ text: t('ok', 'אישור'), style: 'default' }];
-      if (res.viewUrl) {
-        const url = res.viewUrl;
-        actions.unshift({
-          text: t('finance.greenInvoice.receipt.openDocument'),
-          onPress: () => {
-            void Linking.openURL(url);
-          },
-        });
-      }
-      Alert.alert(t('finance.greenInvoice.receipt.successTitle'), msg, actions);
-      await reloadGiReceiptRows();
-      loadReport();
-    } finally {
-      setIssuingGiReceipt(false);
-    }
-  };
-
-  const handleGreenInvoiceSubmitCredentials = async (apiKeyId: string, apiSecret: string) => {
-    setGiSaving(true);
-    try {
-      const res = await greenInvoiceConnectApi.connect({ apiKeyId, apiSecret });
-      if (res.ok === false) {
-        Alert.alert(
-          t('finance.greenInvoice.saveFailed'),
-          giErrorMessage(res.error, res.message),
-        );
-        return;
-      }
-      await refreshGreenInvoiceStatus();
-      setShowGreenInvoiceModal(false);
-      Alert.alert('', t('finance.greenInvoice.saved'));
-    } finally {
-      setGiSaving(false);
-    }
-  };
-
-  const handleGreenInvoiceDisconnect = () => {
-    Alert.alert(t('finance.greenInvoice.disconnectConfirmTitle'), t('finance.greenInvoice.disconnectConfirmMessage'), [
-      { text: t('cancel', 'ביטול'), style: 'cancel' },
-      {
-        text: t('finance.greenInvoice.disconnect'),
-        style: 'destructive',
-        onPress: async () => {
-          setGiSaving(true);
-          try {
-            const res = await greenInvoiceConnectApi.disconnect();
-            if (res.ok === false) {
-              Alert.alert(t('finance.greenInvoice.saveFailed'), giErrorMessage(res.error));
-              return;
-            }
-            setGiConnected(false);
-            setGiKeyIdStored(null);
-            setShowGreenInvoiceModal(false);
-          } finally {
-            setGiSaving(false);
-          }
-        },
-      },
-    ]);
-  };
 
   const netProfit = totalIncome - totalExpenses;
 
@@ -678,37 +488,6 @@ export default function FinanceScreen() {
                     </View>
                   </View>
                 ) : null}
-
-                {isAdminUser ? (
-                  <View style={styles.monthlyReportCtaInHero}>
-                    <TouchableOpacity
-                      activeOpacity={0.88}
-                      onPress={() =>
-                        router.push(
-                          `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
-                        )
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="הפק דוח חודשי"
-                      style={styles.monthlyReportCtaOuter}
-                    >
-                      <LinearGradient
-                        colors={['#FFFFFF', '#F0FDF4']}
-                        locations={[0, 1]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.monthlyReportCtaGradientHero}
-                      >
-                        <FileSpreadsheet size={22} color="#16A34A" strokeWidth={2.2} />
-                        <RtlText style={styles.monthlyReportCtaTextHero}>הפק דוח חודשי</RtlText>
-                        <ChevronLeft size={20} color="#16A34A" />
-                      </LinearGradient>
-                    </TouchableOpacity>
-                    <RtlText style={styles.monthlyReportCtaHintHero}>
-                      קבלות נבחרות ושליחה לרואה החשבון
-                    </RtlText>
-                  </View>
-                ) : null}
               </View>
               {reportRefreshing ? (
                 <View
@@ -723,445 +502,6 @@ export default function FinanceScreen() {
               ) : null}
             </View>
           </View>
-
-          {/* ── Green Invoice (חשבונית ירוקה) ── */}
-          <View
-            style={[
-              styles.greenInvoiceCardOuter,
-              { backgroundColor: theme.surface },
-            ]}
-          >
-            {/* Rich diagonal gradient */}
-            <LinearGradient
-              pointerEvents="none"
-              colors={[`${greenInvoiceAccent}32`, `${greenInvoiceAccent}14`, `${greenInvoiceAccent}04`, 'transparent']}
-              locations={[0, 0.35, 0.65, 1]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            {/* Decorative background glow circle */}
-            <View
-              pointerEvents="none"
-              style={[styles.giDecoCircle, { backgroundColor: `${greenInvoiceAccent}0C` }]}
-            />
-            <View style={styles.greenInvoiceCardInner}>
-              <TouchableOpacity
-                onPress={openGreenInvoiceModal}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  giConnected ? t('finance.greenInvoice.manageConnection') : t('finance.greenInvoice.connectButton')
-                }
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={[
-                  styles.greenInvoiceEditBtn,
-                  { backgroundColor: `${theme.border}14` },
-                ]}
-              >
-                <Pencil size={18} color={greenInvoiceAccent} strokeWidth={2.2} />
-              </TouchableOpacity>
-              {/* Header row */}
-              <View style={styles.greenInvoiceCardTop}>
-                <View style={[styles.greenInvoiceIconWrap, { backgroundColor: `${greenInvoiceAccent}1C` }]}>
-                  <View style={[styles.giIconRing, { borderColor: `${greenInvoiceAccent}50` }]} />
-                  <Receipt size={28} color={greenInvoiceAccent} strokeWidth={1.8} />
-                </View>
-                <View style={styles.greenInvoiceTextBlock}>
-                  <View style={styles.greenInvoiceTitleRow}>
-                    <RtlText style={[styles.greenInvoiceTitle, { color: theme.text }]}>
-                      {t('finance.greenInvoice.modalTitle')}
-                    </RtlText>
-                    <View
-                      style={[
-                        styles.greenInvoiceStatusPill,
-                        {
-                          backgroundColor: giConnected ? `${greenInvoiceAccent}18` : `${theme.border}1C`,
-                          borderColor: giConnected ? `${greenInvoiceAccent}50` : `${theme.border}2C`,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.greenInvoiceStatusDot,
-                          { backgroundColor: giConnected ? greenInvoiceAccent : theme.textSecondary },
-                        ]}
-                      />
-                      <RtlText
-                        style={[
-                          styles.greenInvoiceStatusPillText,
-                          { color: giConnected ? greenInvoiceAccent : theme.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {giConnected ? t('finance.greenInvoice.connected') : t('finance.greenInvoice.notConnected')}
-                      </RtlText>
-                    </View>
-                  </View>
-                  <RtlText style={[styles.greenInvoiceHint, { color: theme.textSecondary }]}>
-                    {t('finance.greenInvoice.cardSummary')}
-                  </RtlText>
-                </View>
-              </View>
-
-              {/* Sandbox / Dev-mode toggle */}
-              <View
-                style={[
-                  styles.giSandboxPanel,
-                  { backgroundColor: `${theme.border}0E`, borderColor: `${theme.border}20` },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.giSandboxIconDot,
-                    { backgroundColor: giUseSandboxApi ? '#F59E0B22' : `${theme.border}1A` },
-                  ]}
-                >
-                  <Settings2
-                    size={13}
-                    color={giUseSandboxApi ? '#F59E0B' : theme.textSecondary}
-                    strokeWidth={2.2}
-                  />
-                </View>
-                <View style={styles.giDevModeTextBlock}>
-                  <RtlText style={[styles.giDevModeLabel, { color: theme.text }]}>
-                    {t('finance.greenInvoice.devModeToggle')}
-                  </RtlText>
-                  <RtlText style={[styles.giDevModeHint, { color: theme.textSecondary }]}>
-                    {t('finance.greenInvoice.devModeHint')}
-                  </RtlText>
-                </View>
-                <Switch
-                  value={giUseSandboxApi}
-                  onValueChange={giSetUseSandboxApi}
-                  trackColor={{ false: `${theme.border}44`, true: '#F59E0BAA' }}
-                  thumbColor="#fff"
-                  ios_backgroundColor={`${theme.border}44`}
-                  accessibilityLabel={t('finance.greenInvoice.devModeToggle')}
-                />
-              </View>
-            </View>
-          </View>
-
-          {giConnected ? (
-            <View
-              style={[
-                styles.giReceiptCard,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: `${greenInvoiceAccent}22`,
-                },
-              ]}
-            >
-              {/* Card header strip */}
-              <LinearGradient
-                pointerEvents="none"
-                colors={[`${greenInvoiceAccent}20`, `${greenInvoiceAccent}08`, 'transparent']}
-                locations={[0, 0.5, 1]}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.giReceiptCardHeaderGradient}
-              />
-              <View style={styles.giReceiptCardHeader}>
-                <View style={[styles.giReceiptCardHeaderIcon, { backgroundColor: `${greenInvoiceAccent}1C` }]}>
-                  <Receipt size={20} color={greenInvoiceAccent} strokeWidth={2} />
-                </View>
-                <View style={styles.giReceiptCardHeaderText}>
-                  <RtlText style={[styles.giReceiptCardHeaderTitle, { color: theme.text }]}>
-                    {t('finance.greenInvoice.receipt.sectionTitle')}
-                  </RtlText>
-                </View>
-                {giReceiptRows.length > 0 && (
-                  <View style={[styles.giReceiptCountBadge, { backgroundColor: `${greenInvoiceAccent}18`, borderColor: `${greenInvoiceAccent}40` }]}>
-                    <RtlText style={[styles.giReceiptCountBadgeText, { color: greenInvoiceAccent }]}>
-                      {giReceiptListCaption}
-                    </RtlText>
-                  </View>
-                )}
-              </View>
-
-              <View style={[styles.giReceiptCardBody]}>
-                {giReceiptLoading ? (
-                  <View style={styles.giReceiptLoading}>
-                    <ActivityIndicator size="small" color={greenInvoiceAccent} />
-                    <RtlText style={[styles.giReceiptLoadingText, { color: theme.textSecondary }]}>
-                      {t('finance.greenInvoice.receipt.loadingAppointments')}
-                    </RtlText>
-                  </View>
-                ) : giReceiptRows.length === 0 ? (
-                  <View style={styles.giReceiptEmptyBlock}>
-                    <View style={[styles.giReceiptEmptyIcon, { backgroundColor: `${greenInvoiceAccent}14` }]}>
-                      <Receipt size={28} color={greenInvoiceAccent} strokeWidth={1.8} />
-                    </View>
-                    <RtlText style={[styles.giReceiptEmptyTitle, { color: theme.text }]}>
-                      {t('finance.greenInvoice.receipt.sectionTitle')}
-                    </RtlText>
-                    <RtlText style={[styles.giReceiptEmpty, { color: theme.textSecondary }]}>
-                      {t('finance.greenInvoice.receipt.noCompletedInMonth')}
-                    </RtlText>
-                  </View>
-                ) : (
-                  <>
-                    {/* Search bar */}
-                    <View
-                      style={[
-                        styles.giReceiptSearchWrap,
-                        {
-                          backgroundColor: '#F4F7F9',
-                          borderColor: '#E4E9ED',
-                        },
-                      ]}
-                    >
-                      <View style={[styles.giSearchIconBubble, { backgroundColor: `${greenInvoiceAccent}18` }]}>
-                        <Search size={16} color={greenInvoiceAccent} strokeWidth={2.2} />
-                      </View>
-                      <RtlTextInput
-                        style={[styles.giReceiptSearchInput, { color: theme.text }]}
-                        placeholder={t('finance.greenInvoice.receipt.searchPlaceholder')}
-                        placeholderTextColor={theme.textSecondary}
-                        value={giReceiptSearchQuery}
-                        onChangeText={setGiReceiptSearchQuery}
-                        autoCorrect={false}
-                        autoCapitalize="none"
-                        clearButtonMode="while-editing"
-                        accessibilityLabel={t('finance.greenInvoice.receipt.searchPlaceholder')}
-                      />
-                      {giReceiptSearchQuery.trim().length > 0 ? (
-                        <TouchableOpacity
-                          onPress={() => setGiReceiptSearchQuery('')}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          style={styles.giSearchClearBtn}
-                          accessibilityRole="button"
-                          accessibilityLabel={t('finance.greenInvoice.receipt.clearSearch')}
-                        >
-                          <X size={16} color={theme.textSecondary} strokeWidth={2.2} />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-
-                    {giReceiptFilteredRows.length === 0 ? (
-                      <View style={styles.giReceiptNoResults}>
-                        <RtlText style={[styles.giReceiptNoResultsText, { color: theme.textSecondary }]}>
-                          {t('finance.greenInvoice.receipt.noSearchResults')}
-                        </RtlText>
-                      </View>
-                    ) : (
-                      <>
-                        <View
-                          style={[
-                            styles.giReceiptListShell,
-                            {
-                              maxHeight: giReceiptListMaxHeight,
-                              borderColor: '#E8ECEF',
-                              backgroundColor: '#F8FAFB',
-                            },
-                          ]}
-                        >
-                          <ScrollView
-                            nestedScrollEnabled
-                            keyboardShouldPersistTaps="handled"
-                            showsVerticalScrollIndicator
-                            contentContainerStyle={styles.giReceiptListScrollContent}
-                          >
-                            {giReceiptFilteredRows.map((row) => {
-                              const selected = selectedGiAppointmentId === row.id;
-                              const issued = row.receipt_issued;
-                              const client =
-                                row.client_label.trim() ||
-                                t('finance.greenInvoice.receipt.anonymousClient');
-                              const initial = (client.trim().charAt(0) || '?').toUpperCase();
-                              return (
-                                <TouchableOpacity
-                                  key={row.id}
-                                  onPress={() => setSelectedGiAppointmentId(row.id)}
-                                  activeOpacity={0.8}
-                                  style={[
-                                    styles.giReceiptRow,
-                                    issued
-                                      ? {
-                                          opacity: 0.72,
-                                          backgroundColor: '#F1F5F9',
-                                          borderColor: '#E2E8F0',
-                                        }
-                                      : selected
-                                      ? {
-                                          backgroundColor: `${greenInvoiceAccent}0D`,
-                                          borderColor: `${greenInvoiceAccent}60`,
-                                        }
-                                      : {
-                                          backgroundColor: '#FFFFFF',
-                                          borderColor: '#E8ECEF',
-                                        },
-                                  ]}
-                                  accessibilityRole="button"
-                                  accessibilityState={{ selected }}
-                                  accessibilityLabel={`${client}, ${row.service_name}, ${row.slot_date}`}
-                                >
-                                  <View style={styles.giReceiptRowInner}>
-                                    {/* Avatar */}
-                                    <View
-                                      style={[
-                                        styles.giReceiptAvatar,
-                                        selected
-                                          ? { backgroundColor: greenInvoiceAccent }
-                                          : { backgroundColor: '#EEF2F5' },
-                                      ]}
-                                    >
-                                      <Text
-                                        style={[
-                                          styles.giReceiptAvatarChar,
-                                          { color: selected ? '#fff' : '#6B7280' },
-                                        ]}
-                                      >
-                                        {initial}
-                                      </Text>
-                                    </View>
-
-                                    {/* Body */}
-                                    <View style={styles.giReceiptRowBody}>
-                                      <View style={styles.giReceiptClientRow}>
-                                        <RtlText style={[styles.giReceiptRowClient, { color: theme.text }]} numberOfLines={1}>
-                                          {client}
-                                        </RtlText>
-                                        {issued ? (
-                                          <View style={[styles.giIssuedPill, { backgroundColor: `${greenInvoiceAccent}18` }]}>
-                                            <CheckCircle2 size={12} color={greenInvoiceAccent} strokeWidth={2.4} />
-                                            <RtlText style={[styles.giIssuedPillText, { color: greenInvoiceAccent }]}>
-                                              הופקה
-                                            </RtlText>
-                                          </View>
-                                        ) : null}
-                                      </View>
-                                      <View style={styles.giReceiptMetaRow}>
-                                        <View
-                                          style={[
-                                            styles.giReceiptServiceChip,
-                                            {
-                                              backgroundColor: selected
-                                                ? `${greenInvoiceAccent}15`
-                                                : '#EEF2F5',
-                                            },
-                                          ]}
-                                        >
-                                          <RtlText
-                                            style={[
-                                              styles.giReceiptServiceChipText,
-                                              { color: selected ? greenInvoiceAccent : '#6B7280' },
-                                            ]}
-                                            numberOfLines={1}
-                                          >
-                                            {row.service_name}
-                                          </RtlText>
-                                        </View>
-                                        <RtlText
-                                          style={[styles.giReceiptRowWhen, { color: '#94A3B8' }]}
-                                          numberOfLines={1}
-                                        >
-                                          {row.slot_date} · {row.slot_time}
-                                        </RtlText>
-                                      </View>
-                                    </View>
-
-                                    {/* Price + selection */}
-                                    <View style={styles.giReceiptRowPriceCol}>
-                                      <View
-                                        style={[
-                                          styles.giReceiptPricePill,
-                                          {
-                                            backgroundColor: selected
-                                              ? `${greenInvoiceAccent}15`
-                                              : '#EEF2F5',
-                                          },
-                                        ]}
-                                      >
-                                        <RtlText
-                                          style={[
-                                            styles.giReceiptPricePillText,
-                                            { color: selected ? greenInvoiceAccent : '#374151' },
-                                          ]}
-                                        >
-                                          {formatCurrency(row.price)}
-                                        </RtlText>
-                                      </View>
-                                      <View style={styles.giReceiptRowPriceAndCheck}>
-                                        {selected ? (
-                                          <CheckCircle2
-                                            size={22}
-                                            color={greenInvoiceAccent}
-                                            strokeWidth={2.2}
-                                          />
-                                        ) : (
-                                          <View
-                                            style={[
-                                              styles.giReceiptSelectRing,
-                                              { borderColor: '#C8D0D8' },
-                                            ]}
-                                          />
-                                        )}
-                                      </View>
-                                    </View>
-                                  </View>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </ScrollView>
-                        </View>
-                        {giReceiptFilteredRows.length > 0 &&
-                        giReceiptFilteredRows.length * 68 > giReceiptListMaxHeight ? (
-                          <RtlText style={[styles.giReceiptListScrollHint, { color: theme.textSecondary }]}>
-                            {t('finance.greenInvoice.receipt.listScrollHint')}
-                          </RtlText>
-                        ) : null}
-                      </>
-                    )}
-
-                    {/* Issue receipt button */}
-                    <TouchableOpacity
-                      disabled={
-                        !selectedGiAppointmentId ||
-                        issuingGiReceipt ||
-                        !!selectedGiRow?.receipt_issued
-                      }
-                      onPress={issueGreenInvoiceReceipt}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('finance.greenInvoice.receipt.issueButton')}
-                      style={[
-                        styles.giReceiptIssueBtnOuter,
-                        {
-                          opacity:
-                            !selectedGiAppointmentId ||
-                            issuingGiReceipt ||
-                            selectedGiRow?.receipt_issued
-                              ? 0.4
-                              : 1,
-                        },
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={['#22C55E', greenInvoiceAccent, '#0F6B2C']}
-                        locations={[0, 0.55, 1]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.giReceiptIssueBtnGradient}
-                      >
-                        {issuingGiReceipt ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Receipt size={20} color="#fff" strokeWidth={2.2} />
-                            <RtlText style={styles.giReceiptIssueBtnText}>
-                              {t('finance.greenInvoice.receipt.issueButton')}
-                            </RtlText>
-                          </>
-                        )}
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
-          ) : null}
 
           {/* ── Income Breakdown ── */}
           <View style={[styles.card, styles.cardAfterHero, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
@@ -1206,6 +546,98 @@ export default function FinanceScreen() {
                 </View>
                 <RtlText style={styles.priceNote}>* ההכנסות מחושבות לפי המחיר הנוכחי של השירות</RtlText>
               </>
+            )}
+          </View>
+
+          {/* ── Weekly + appointments (same screen as main finance) ── */}
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
+            <View style={styles.analyticsSectionHead}>
+              <RtlText style={[styles.analyticsSectionTitle, { color: theme.text }]}>פירוט לפי שבוע</RtlText>
+              <CalendarDays size={20} color={primaryColor} />
+            </View>
+            <RtlText style={[styles.analyticsSectionHint, { color: theme.textSecondary }]}>
+              שבוע שמתחיל ביום ראשון. מוצגים רק ימים בתוך החודש.
+            </RtlText>
+            {analyticsLoading ? (
+              <ActivityIndicator style={{ marginVertical: 18 }} color={primaryColor} />
+            ) : weekSlices.length === 0 ? (
+              <RtlText style={[styles.emptySubtitle, { alignSelf: 'stretch', marginTop: 6, textAlign: 'center' }]}>
+                אין נתונים לחודש זה.
+              </RtlText>
+            ) : (
+              weekSlices.map((w, i) => (
+                <View
+                  key={`${w.rangeStart}-${w.rangeEnd}`}
+                  style={[
+                    styles.weekIncomeRow,
+                    i < weekSlices.length - 1 ? styles.incomeRowDivider : null,
+                  ]}
+                >
+                  <View style={styles.weekIncomeRowMain}>
+                    <RtlText style={[styles.weekIncomeLabel, { color: theme.text }]}>{w.label}</RtlText>
+                    <RtlText style={[styles.weekIncomeMeta, { color: theme.textSecondary }]}>
+                      {w.appointmentCount} תורים
+                    </RtlText>
+                  </View>
+                  <RtlText style={[styles.weekIncomeAmt, { color: primaryColor }]}>{formatCurrency(w.total)}</RtlText>
+                </View>
+              ))
+            )}
+          </View>
+
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
+            <View style={styles.analyticsSectionHead}>
+              <RtlText style={[styles.analyticsSectionTitle, { color: theme.text }]}>תורים בחודש</RtlText>
+              <TrendingUp size={20} color={primaryColor} />
+            </View>
+            <RtlText style={[styles.analyticsSectionHint, { color: theme.textSecondary }]}>
+              לפי מחיר השירות הנוכחי לכל תור.
+            </RtlText>
+            {analyticsLoading ? (
+              <ActivityIndicator style={{ marginVertical: 18 }} color={primaryColor} />
+            ) : monthAppointments.length === 0 ? (
+              <RtlText style={[styles.emptySubtitle, { alignSelf: 'stretch', marginTop: 6, textAlign: 'center' }]}>
+                אין תורים מתאימים בחודש זה.
+              </RtlText>
+            ) : (
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+                style={{ maxHeight: apptListMaxHeight }}
+                contentContainerStyle={styles.apptScrollContent}
+              >
+                {monthAppointments.map((row) => {
+                  const client = row.client_label.trim() || 'לקוח';
+                  const initial = (client.trim().charAt(0) || '?').toUpperCase();
+                  return (
+                    <View
+                      key={row.id}
+                      style={[
+                        styles.apptRowCard,
+                        { borderColor: `${theme.border}33`, backgroundColor: theme.surface },
+                      ]}
+                    >
+                      <View style={[styles.apptAvatar, { backgroundColor: `${primaryColor}22` }]}>
+                        <Text style={[styles.apptAvatarChar, { color: primaryColor }]}>{initial}</Text>
+                      </View>
+                      <View style={[styles.apptPriceTag, { backgroundColor: `${primaryColor}18` }]}>
+                        <RtlText style={[styles.apptPriceTagText, { color: primaryColor }]}>
+                          {formatCurrency(row.price)}
+                        </RtlText>
+                      </View>
+                      <View style={styles.apptRowBody}>
+                        <RtlText style={[styles.apptClientName, { color: theme.text }]} numberOfLines={1}>
+                          {client}
+                        </RtlText>
+                        <RtlText style={[styles.apptMeta, { color: theme.textSecondary }]} numberOfLines={1}>
+                          {row.service_name} · {row.slot_date} {row.slot_time}
+                        </RtlText>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
             )}
           </View>
 
@@ -1408,24 +840,6 @@ export default function FinanceScreen() {
           </KeyboardAwareScreenScroll>
         </View>
       </Modal>
-
-      <GreenInvoiceConnectModal
-        visible={showGreenInvoiceModal}
-        onClose={() => setShowGreenInvoiceModal(false)}
-        connected={giConnected}
-        storedKeyId={giKeyIdStored}
-        accentColor={greenInvoiceAccent}
-        theme={{
-          surface: theme.surface,
-          text: theme.text,
-          textSecondary: theme.textSecondary,
-          border: theme.border,
-          error: theme.error,
-        }}
-        saving={giSaving}
-        onSubmitCredentials={handleGreenInvoiceSubmitCredentials}
-        onDisconnect={handleGreenInvoiceDisconnect}
-      />
     </View>
   );
 }
@@ -1676,517 +1090,98 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  monthlyReportCtaInHero: {
-    marginTop: 20,
-    alignSelf: 'stretch',
-    width: '100%',
-  },
-  monthlyReportCtaOuter: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.22,
-        shadowRadius: 10,
-      },
-      android: { elevation: 5 },
-    }),
-  },
-  monthlyReportCtaGradientHero: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-  },
-  monthlyReportCtaTextHero: {
-    color: '#0F6B2C',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-  },
-  monthlyReportCtaHintHero: {
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 8,
-    color: 'rgba(255,255,255,0.82)',
-    lineHeight: 15,
-  },
-  giReceiptClientRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-  },
-  giIssuedPill: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  giIssuedPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-
-  greenInvoiceCardOuter: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 4,
-    borderRadius: 28,
-    overflow: 'hidden',
-    direction: 'ltr',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#16A34A',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  giDecoCircle: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    top: -60,
-    left: -40,
-    pointerEvents: 'none',
-  },
-  giIconRing: {
-    position: 'absolute',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1.5,
-  },
-  greenInvoiceCardInner: {
-    padding: 20,
-    direction: 'ltr',
-    position: 'relative',
-  },
-  greenInvoiceEditBtn: {
-    position: 'absolute',
-    left: 14,
-    top: 16,
-    zIndex: 2,
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  greenInvoiceCardTop: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
-    gap: 14,
-    marginBottom: 16,
-    paddingLeft: 44,
-  },
-  greenInvoiceIconWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  greenInvoiceTextBlock: {
-    flex: 1,
-  },
-  greenInvoiceTitleRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  greenInvoiceTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'right',
-    flexShrink: 1,
-    letterSpacing: -0.3,
-  },
-  greenInvoiceStatusPill: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  greenInvoiceStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  greenInvoiceStatusPillText: {
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'right',
-    letterSpacing: 0.2,
-  },
-  greenInvoiceHint: {
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'right',
-  },
-  giSandboxPanel: {
-    marginTop: 14,
+  analyticsSectionHead: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
-    direction: 'ltr',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    marginBottom: 8,
   },
-  giSandboxIconDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  giDevModeTextBlock: {
-    flex: 1,
-  },
-  giDevModeLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'right',
-    marginBottom: 3,
-  },
-  giDevModeHint: {
-    fontSize: 11,
-    lineHeight: 15,
-    textAlign: 'right',
-  },
-  giReceiptCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 28,
-    borderWidth: 1,
-    overflow: 'hidden',
-    direction: 'ltr',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#16A34A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-      },
-      android: { elevation: 5 },
-    }),
-  },
-  giReceiptCardHeaderGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-  },
-  giReceiptCardHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
-  },
-  giReceiptCardHeaderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  giReceiptCardHeaderText: {
-    flex: 1,
-  },
-  giReceiptCardHeaderTitle: {
+  analyticsSectionTitle: {
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'right',
-    letterSpacing: -0.2,
+    flex: 1,
   },
-  giReceiptCountBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexShrink: 0,
-  },
-  giReceiptCountBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  giReceiptCardBody: {
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-  },
-  giReceiptSectionHead: {
-    marginBottom: 14,
-  },
-  giReceiptSectionTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    textAlign: 'right',
-    marginBottom: 6,
-  },
-  giReceiptSectionSub: {
+  analyticsSectionHint: {
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'right',
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  giReceiptListCount: {
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  giReceiptSearchWrap: {
+  weekIncomeRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    minHeight: 48,
-    marginBottom: 14,
-    gap: 8,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
-  giSearchIconBubble: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  giSearchClearBtn: {
-    padding: 4,
-  },
-  giReceiptSearchInput: {
+  weekIncomeRowMain: {
     flex: 1,
-    fontSize: 14,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
-    textAlign: 'right',
+    marginLeft: 12,
   },
-  giReceiptLoading: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 24,
-    justifyContent: 'center',
-  },
-  giReceiptLoadingText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  giReceiptEmptyBlock: {
-    alignItems: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 16,
-  },
-  giReceiptEmptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  giReceiptEmptyTitle: {
+  weekIncomeLabel: {
     fontSize: 15,
     fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 6,
-    alignSelf: 'stretch',
-  },
-  giReceiptEmpty: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-    alignSelf: 'stretch',
-  },
-  giReceiptNoResults: {
-    paddingVertical: 22,
-    alignItems: 'center',
-  },
-  giReceiptNoResultsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  giReceiptListShell: {
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  giReceiptListScrollContent: {
-    padding: 10,
-    paddingBottom: 12,
-  },
-  giReceiptListScrollHint: {
-    fontSize: 11,
-    fontWeight: '600',
     textAlign: 'right',
-    marginTop: 8,
-    lineHeight: 15,
   },
-  giReceiptRow: {
+  weekIncomeMeta: {
+    fontSize: 12,
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  weekIncomeAmt: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  apptScrollContent: {
+    paddingVertical: 4,
+    paddingBottom: 8,
+  },
+  apptRowCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     paddingVertical: 11,
     paddingHorizontal: 12,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  giReceiptRowInner: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 10,
-  },
-  giReceiptRowPriceCol: {
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-  },
-  giReceiptRowPriceAndCheck: {
-    alignItems: 'center',
-  },
-  giReceiptPricePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    minWidth: 62,
-    alignItems: 'center',
-  },
-  giReceiptPricePillText: {
-    fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  giReceiptSelectRing: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-  },
-  giReceiptRowBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  giReceiptRowClient: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 15,
-    fontWeight: '800',
-    textAlign: 'right',
-    marginBottom: 5,
-    letterSpacing: -0.2,
-  },
-  giReceiptMetaRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    justifyContent: 'flex-end',
-  },
-  giReceiptServiceChip: {
-    maxWidth: '100%',
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  giReceiptServiceChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'right',
-  },
-  giReceiptRowWhen: {
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  giReceiptAvatar: {
-    width: 44,
-    height: 44,
+  apptAvatar: {
+    width: 40,
+    height: 40,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-    overflow: 'hidden',
+    marginLeft: 10,
   },
-  giReceiptAvatarChar: {
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'center',
-    ...Platform.select({
-      android: {
-        textAlignVertical: 'center',
-        includeFontPadding: false,
-      },
-    }),
-  },
-  giReceiptIssueBtnOuter: {
-    marginTop: 14,
-    borderRadius: 18,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#16A34A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 14,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  giReceiptIssueBtnGradient: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 17,
-    paddingHorizontal: 24,
-    minHeight: 56,
-  },
-  giReceiptIssueBtn: {
-    marginTop: 8,
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 14,
-    borderRadius: 16,
-    minHeight: 52,
-  },
-  giReceiptIssueBtnText: {
-    color: '#fff',
+  apptAvatarChar: {
     fontSize: 16,
     fontWeight: '900',
-    letterSpacing: 0.2,
   },
+  apptPriceTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  apptPriceTagText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  apptRowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  apptClientName: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  apptMeta: {
+    fontSize: 12,
+    marginTop: 3,
+    textAlign: 'right',
+  },
+
   expensesToolbar: {
     flexDirection: 'row-reverse',
     alignItems: 'center',

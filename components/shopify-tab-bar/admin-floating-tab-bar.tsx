@@ -15,7 +15,6 @@ import {
   Wallet,
   Palette,
   LayoutGrid,
-  FileText,
   ChevronRight,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
@@ -63,7 +62,6 @@ export const AdminFloatingTabBar: React.FC = () => {
   const editGalleryTabBar = useEditGalleryTabBar();
   const editProductsTabBar = useEditProductsTabBar();
   const pickPrimaryTabBar = usePickPrimaryColorTabBar();
-
   const currentTab = segments[1] as string | undefined;
   const isActive = (tab: string) =>
     currentTab === tab || (tab === "index" && !currentTab);
@@ -349,86 +347,6 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
-  if (
-    currentTab === "finance" ||
-    currentTab === "finance-accountant" ||
-    currentTab === "finance-month-closure"
-  ) {
-    const labelIncome = t(
-      "admin.financeTab.incomeExpenses",
-      "הכנסות והוצאות"
-    );
-    const labelAccountant = t(
-      "admin.financeTab.accountant",
-      "הגדרות רואה חשבון"
-    );
-    const financeMain =
-      currentTab === "finance" || currentTab === "finance-month-closure";
-    const financeAcct = currentTab === "finance-accountant";
-    return (
-      <View
-        style={[styles.root, { bottom: insets.bottom + 12 }]}
-        pointerEvents="box-none"
-      >
-        <View
-          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
-        >
-          {/* ltr row: פיננסים משמאל, בית מימין */}
-          <View
-            style={[
-              styles.pill,
-              styles.center,
-              styles.financeCenterPill,
-              styles.border,
-              styles.shadow,
-            ]}
-          >
-            <TabButton
-              focused={financeMain}
-              activeColor={primary}
-              onPress={() => router.push("/(tabs)/finance")}
-              buttonPadding={9}
-              accessibilityLabel={labelIncome}
-              accessibilityRole="button"
-            >
-              <View style={styles.financeTabCell}>
-                <Wallet
-                  size={23}
-                  color={financeMain ? onPrimary : INACTIVE}
-                />
-              </View>
-            </TabButton>
-            <TabButton
-              focused={financeAcct}
-              activeColor={primary}
-              onPress={() => router.push("/(tabs)/finance-accountant")}
-              buttonPadding={9}
-              accessibilityLabel={labelAccountant}
-              accessibilityRole="button"
-            >
-              <View style={styles.financeTabCell}>
-                <FileText
-                  size={23}
-                  color={financeAcct ? onPrimary : INACTIVE}
-                />
-              </View>
-            </TabButton>
-          </View>
-
-          <View style={[styles.pill, styles.border, styles.shadow]}>
-            <TabButton
-              focused={isActive("index")}
-              activeColor={primary}
-              onPress={() => router.push("/(tabs)")}
-            >
-              <Home size={22} color={iconColor("index")} />
-            </TabButton>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   if (currentTab === "pick-primary-color") {
     return (
       <View
@@ -533,23 +451,13 @@ export const AdminFloatingTabBar: React.FC = () => {
           </TabButton>
 
           <TabButton
-            focused={
-              isActive("finance") ||
-              currentTab === "finance-accountant" ||
-              currentTab === "finance-month-closure"
-            }
+            focused={isActive("finance")}
             activeColor={primary}
             onPress={() => router.push("/(tabs)/finance")}
           >
             <Wallet
               size={22}
-              color={
-                isActive("finance") ||
-              currentTab === "finance-accountant" ||
-              currentTab === "finance-month-closure"
-                  ? onPrimary
-                  : INACTIVE
-              }
+              color={isActive("finance") ? onPrimary : INACTIVE}
             />
           </TabButton>
         </View>
@@ -599,16 +507,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     justifyContent: "center",
-  },
-  /** סרגל פיננסים — פיל ארנק / רואה חשבון */
-  financeCenterPill: {
-    padding: 5,
-  },
-  financeTabCell: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-    minWidth: 46,
   },
   border: {
     borderWidth: 1,

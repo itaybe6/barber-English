@@ -48,8 +48,6 @@ export default function TabsLayout() {
                   <Tabs.Screen name="add-appointment" options={{ title: "Add appointment", href: null }} />
                   <Tabs.Screen name="add-recurring-appointment" options={{ title: "Add recurring appointment", href: null }} />
                   <Tabs.Screen name="finance" options={{ title: "Finance" }} />
-                  <Tabs.Screen name="finance-accountant" options={{ title: "Finance Accountant", href: null }} />
-                  <Tabs.Screen name="finance-month-closure" options={{ title: "Finance Month Closure", href: null }} />
                 </Tabs>
               </AnimatedTabsContainer>
 

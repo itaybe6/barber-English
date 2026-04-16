@@ -317,8 +317,6 @@ export interface BusinessProfile {
   // New per-barber booking open days map: { [userId: string]: number }
   booking_open_days_by_user?: Record<string, number>;
   business_number?: string;
-  /** When true, business is VAT-exempt (עוסק פטור). */
-  vat_exempt?: boolean;
   /** Storage folder `branding/<name>/` — matches CLIENT_NAME in pulled .env */
   branding_client_name?: string | null;
   pulseem_user_id?: string | null;

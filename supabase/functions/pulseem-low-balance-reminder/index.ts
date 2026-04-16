@@ -5,7 +5,7 @@
  * `notifications` type=system for every admin user (by phone) on that business_id.
  *
  * Dedupe: same business_id + marker in content within last DEDUPE_DAYS — skip.
- * Auth: POST Bearer === SUPABASE_SERVICE_ROLE_KEY (same as finance-monthly-review-reminder).
+ * Auth: POST Bearer === SUPABASE_SERVICE_ROLE_KEY.
  *
  * Deploy: supabase functions deploy pulseem-low-balance-reminder
  */

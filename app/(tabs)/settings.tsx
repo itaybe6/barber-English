@@ -322,7 +322,6 @@ export default function SettingsScreen() {
   const [receiptLegalDisplayName, setReceiptLegalDisplayName] = useState('');
   const [receiptLegalBusinessNumber, setReceiptLegalBusinessNumber] = useState('');
   const [receiptLegalBusinessPhone, setReceiptLegalBusinessPhone] = useState('');
-  const [receiptLegalVatExempt, setReceiptLegalVatExempt] = useState(false);
   const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
@@ -578,9 +577,8 @@ export default function SettingsScreen() {
     setReceiptLegalDisplayName((profileDisplayName || '').trim());
     setReceiptLegalBusinessNumber(String(profile?.business_number ?? '').trim());
     setReceiptLegalBusinessPhone(String(profile?.phone ?? '').trim());
-    setReceiptLegalVatExempt(profile?.vat_exempt === true);
     setShowReceiptLegalModal(true);
-  }, [profileDisplayName, profile?.business_number, profile?.phone, profile?.vat_exempt]);
+  }, [profileDisplayName, profile?.business_number, profile?.phone]);
 
   const handleSaveReceiptLegalDetails = async () => {
     setIsSavingProfile(true);
@@ -589,7 +587,6 @@ export default function SettingsScreen() {
         display_name: receiptLegalDisplayName.trim() || null as any,
         business_number: receiptLegalBusinessNumber.trim() || null as any,
         phone: receiptLegalBusinessPhone.trim() || null as any,
-        vat_exempt: receiptLegalVatExempt as any,
         address: (profileAddress || '').trim() || null as any,
         instagram_url: (profileInstagram || '').trim() || null as any,
         facebook_url: (profileFacebook || '').trim() || null as any,
@@ -3720,33 +3717,6 @@ export default function SettingsScreen() {
                   keyboardType="phone-pad"
                   textAlign="left"
                   editable={!isSavingProfile}
-                />
-              </View>
-              <View style={[styles.settingItemLTR, { borderBottomWidth: 0, paddingVertical: 12 }]}>
-                <View style={styles.settingContentLTR}>
-                  <Text style={styles.settingTitleLTR}>
-                    {t('settings.profile.receiptLegalVatExemptLabel', 'VAT-exempt business (עוסק פטור)')}
-                  </Text>
-                  <Text style={styles.settingSubtitleLTR}>
-                    {t(
-                      'settings.profile.receiptLegalVatExemptSubtitle',
-                      'On if you do not charge VAT; receipts omit the VAT breakdown.',
-                    )}
-                  </Text>
-                </View>
-                <Switch
-                  value={receiptLegalVatExempt}
-                  onValueChange={setReceiptLegalVatExempt}
-                  disabled={isSavingProfile}
-                  trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                  thumbColor={
-                    receiptLegalVatExempt
-                      ? businessColors.primary
-                      : Platform.OS === 'android'
-                        ? '#f4f3f4'
-                        : undefined
-                  }
-                  ios_backgroundColor="#E5E5EA"
                 />
               </View>
               <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 4, paddingBottom: 16, opacity: 0.85 }]}>

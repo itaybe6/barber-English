@@ -38,10 +38,6 @@ verify_jwt = false
 [functions.pulseem-delete-subaccount]
 verify_jwt = false
 
-# pg_cron / service role only — validates Bearer === service role in handler.
-[functions.finance-monthly-review-reminder]
-verify_jwt = false
-
 # Legacy stubs (410) — Green Invoice removed from app; keep names so old deploys do not 404.
 [functions.greeninvoice-connect]
 verify_jwt = false
@@ -51,10 +47,6 @@ verify_jwt = false
 
 # pg_cron: daily Pulseem Direct SMS balance → in-app admin notifications if low
 [functions.pulseem-low-balance-reminder]
-verify_jwt = false
-
-# Admin / super_admin: validates caller via users table (service role); issues receipts via shared core (no Edge→Edge HTTP).
-[functions.finance-accountant-package]
 verify_jwt = false
 
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>

@@ -2831,7 +2831,7 @@ export default function AdminAppointmentsScreen() {
                         return (
                           <View style={styles.actionsStackedButtonsWrap}>
                             <PressableScale
-                              style={fullW}
+                              style={[fullW, styles.actionsSecondaryCardRow]}
                               accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
                               onPress={async () => {
                                 const phone = actionsModal.appointment?.client_phone;
@@ -2857,7 +2857,7 @@ export default function AdminAppointmentsScreen() {
                               </View>
                             </PressableScale>
                             <PressableScale
-                              style={fullW}
+                              style={[fullW, styles.actionsSecondaryCardRow]}
                               accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
                               onPress={() => {
                                 const a = actionsModal.appointment;
@@ -3937,8 +3937,17 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   actionsStackedButtonsWrap: {
-    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
     marginTop: 0,
+    paddingHorizontal: 14,
+  },
+  /** כרטיסי משנה בשורה (חיוג + מחיקה) — חלוקת רוחב שווה */
+  actionsSecondaryCardRow: {
+    flex: 1,
+    marginHorizontal: 0,
+    minWidth: 0,
   },
   actionsSecondaryCard: {
     marginHorizontal: 14,

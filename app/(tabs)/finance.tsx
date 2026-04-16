@@ -70,7 +70,6 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
-  Activity,
 } from 'lucide-react-native';
 
 // ─────────────────────────────────────────────────────────────
@@ -137,14 +136,6 @@ function formatDateLabel(dateStr: string): string {
   const dow = DAY_NAMES_HE[date.getDay()] ?? '';
   const monthName = MONTH_NAMES_HE[(m || 1) - 1] ?? '';
   return `${dow}, ${d} ב${monthName}`;
-}
-
-/** Short date for expense rows (Apple-style compact line) */
-function formatExpenseDateShort(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  const monthName = MONTH_NAMES_HE[(m || 1) - 1] ?? '';
-  return `${d} ב${monthName}`;
 }
 
 /** Build a smooth cubic-bezier SVG path through points */
@@ -492,6 +483,7 @@ export default function FinanceScreen() {
   const [monthAppointments, setMonthAppointments] = useState<CompletedAppointmentIncomeRow[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [showAllAppointments, setShowAllAppointments] = useState(false);
+  const [showAllExpenseDays, setShowAllExpenseDays] = useState(false);
 
   const [heroLavaLayout, setHeroLavaLayout] = useState<{ w: number; h: number } | null>(null);
   const onHeroLavaLayout = useCallback((e: LayoutChangeEvent) => {
@@ -613,6 +605,22 @@ export default function FinanceScreen() {
   const visibleDateGroups = showAllAppointments
     ? appointmentsByDate
     : appointmentsByDate.slice(0, APPT_GROUPS_INITIAL);
+
+  /** Expenses grouped by expense_date, newest day first */
+  const expensesByDate = useMemo(() => {
+    const groups = new Map<string, BusinessExpense[]>();
+    for (const ex of expenses) {
+      const cur = groups.get(ex.expense_date);
+      if (cur) cur.push(ex);
+      else groups.set(ex.expense_date, [ex]);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => b.localeCompare(a));
+  }, [expenses]);
+
+  const EXPENSE_GROUPS_INITIAL = 3;
+  const visibleExpenseDateGroups = showAllExpenseDays
+    ? expensesByDate
+    : expensesByDate.slice(0, EXPENSE_GROUPS_INITIAL);
 
   // ── Expense handlers ──
   const pickReceipt = async () => {
@@ -831,19 +839,8 @@ export default function FinanceScreen() {
         {/* ── Daily trend sparkline ── */}
         {!analyticsLoading && dailyTotals.some((v) => v > 0) && (
           <>
-            <View style={styles.sectionLabel}>
-              <Activity size={15} color={primaryColor} />
-              <RtlText style={[styles.sectionLabelText, { color: theme.textSecondary }]}>מגמת הכנסות יומית</RtlText>
-              {(() => {
-                const peakDay = dailyTotals.indexOf(Math.max(...dailyTotals));
-                return (
-                  <View style={[styles.peakDayPill, { backgroundColor: `${primaryColor}14` }]}>
-                    <RtlText style={[styles.peakDayText, { color: primaryColor }]}>
-                      שיא ב-{peakDay + 1} לחודש
-                    </RtlText>
-                  </View>
-                );
-              })()}
+            <View style={styles.sectionHeading}>
+              <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>מגמת הכנסות יומית</RtlText>
             </View>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14`, paddingVertical: 16, paddingHorizontal: 16 }]}>
               <DailySparkline dailyTotals={dailyTotals} primaryColor={primaryColor} chartWidth={chartWidth - 0} />
@@ -857,9 +854,8 @@ export default function FinanceScreen() {
         )}
 
         {/* ── Income Breakdown (Donut + Legend) ── */}
-        <View style={styles.sectionLabel}>
-          <TrendingUp size={15} color={primaryColor} />
-          <RtlText style={[styles.sectionLabelText, { color: theme.textSecondary }]}>פירוט הכנסות לפי שירות</RtlText>
+        <View style={styles.sectionHeading}>
+          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>פירוט הכנסות לפי שירות</RtlText>
         </View>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
           {incomeBreakdown.length === 0 ? (
@@ -912,16 +908,8 @@ export default function FinanceScreen() {
         </View>
 
         {/* ── Weekly SVG Bar Chart ── */}
-        <View style={styles.sectionLabel}>
-          <CalendarDays size={15} color={primaryColor} />
-          <RtlText style={[styles.sectionLabelText, { color: theme.textSecondary }]}>ניתוח שבועי</RtlText>
-          {!analyticsLoading && quickStats.weekAvg > 0 && (
-            <View style={[styles.peakDayPill, { backgroundColor: `${primaryColor}14` }]}>
-              <RtlText style={[styles.peakDayText, { color: primaryColor }]}>
-                ממוצע {formatCurrency(quickStats.weekAvg)}/שבוע
-              </RtlText>
-            </View>
-          )}
+        <View style={styles.sectionHeading}>
+          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>ניתוח שבועי</RtlText>
         </View>
         <View
           style={[
@@ -956,14 +944,8 @@ export default function FinanceScreen() {
         </View>
 
         {/* ── Appointments by date ── */}
-        <View style={styles.sectionLabel}>
-          <CalendarDays size={15} color={primaryColor} />
-          <RtlText style={[styles.sectionLabelText, { color: theme.textSecondary }]}>תורים החודש</RtlText>
-          {!analyticsLoading && monthAppointments.length > 0 && (
-            <View style={[styles.apptCountPill, { backgroundColor: `${primaryColor}14` }]}>
-              <Text style={[styles.apptCountPillText, { color: primaryColor }]}>{monthAppointments.length}</Text>
-            </View>
-          )}
+        <View style={styles.sectionHeading}>
+          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>תורים החודש</RtlText>
         </View>
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
           {analyticsLoading ? (
@@ -1045,140 +1027,132 @@ export default function FinanceScreen() {
           )}
         </View>
 
-        {/* ── Expenses (Apple-style grouped list) ── */}
-        <View style={styles.expensesSection}>
-          <View style={styles.expensesSectionHeader}>
-            <View style={styles.expensesTitleBlock}>
-              <RtlText style={[styles.expensesSectionTitle, { color: theme.text }]}>הוצאות</RtlText>
-              {expenses.length > 0 ? (
-                <RtlText style={[styles.expensesSectionSubtitle, { color: theme.textSecondary }]}>
-                  {expenses.length} {expenses.length === 1 ? 'רשומה' : 'רשומות'} · {formatCurrency(totalExpenses)}
-                </RtlText>
-              ) : (
-                <RtlText style={[styles.expensesSectionSubtitle, { color: theme.textSecondary }]}>
-                  {MONTH_NAMES_HE[month - 1]} {year}
-                </RtlText>
-              )}
-            </View>
+        {/* ── Expenses (same section + card pattern as תורים החודש) ── */}
+        <View style={styles.sectionHeading}>
+          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>הוצאות החודש</RtlText>
+        </View>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
+          <View style={styles.financeCardToolbar}>
             <TouchableOpacity
-              style={[styles.expensesAddPill, { backgroundColor: primaryColor }, expensesAddPillShadow]}
+              style={[styles.expenseSectionAddCircle, { backgroundColor: primaryColor }]}
               onPress={() => setShowAddExpense(true)}
-              activeOpacity={0.85}
+              activeOpacity={0.82}
+              accessibilityLabel="הוסף הוצאה"
             >
-              <Plus size={16} color="#FFFFFF" strokeWidth={2.4} />
-              <RtlText style={styles.expensesAddPillLabel}>הוסף</RtlText>
+              <Plus size={17} color="#fff" strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
+          {expenses.length === 0 ? (
+            <View style={styles.emptyState}>
+              <ArrowDownRight size={36} color="#E5E7EB" />
+              <RtlText style={styles.emptyTitle}>אין הוצאות בחודש זה</RtlText>
+              <RtlText style={styles.emptySubtitle}>הוצאות יופיעו כאן לפי תאריך · לחץ על + להוספה</RtlText>
+            </View>
+          ) : (
+            <>
+              {visibleExpenseDateGroups.map(([date, dayExpenses], groupIdx) => {
+                const dayTotal = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
+                const isLastGroup = groupIdx === visibleExpenseDateGroups.length - 1;
+                return (
+                  <View
+                    key={date}
+                    style={[
+                      styles.apptDateGroup,
+                      !isLastGroup && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}22` },
+                    ]}
+                  >
+                    <View style={styles.apptDateHeader}>
+                      <View style={[styles.apptDayTotalPill, { backgroundColor: `${theme.error}12` }]}>
+                        <RtlText style={[styles.apptDayTotalText, { color: theme.error }]}>
+                          {formatCurrency(dayTotal)}
+                        </RtlText>
+                      </View>
+                      <RtlText style={[styles.apptDateLabel, { color: theme.text }]}>
+                        {formatDateLabel(date)}
+                      </RtlText>
+                    </View>
 
-          <View
-            style={[
-              styles.expensesCard,
-              {
-                backgroundColor: theme.surface,
-                borderColor: `${theme.border}12`,
-              },
-            ]}
-          >
-            {expenses.length === 0 ? (
-              <View style={styles.expensesEmpty}>
-                <View style={[styles.expensesEmptyGlyph, { backgroundColor: `${theme.border}35` }]}>
-                  <ArrowDownRight size={28} color={theme.textSecondary} strokeWidth={2} />
-                </View>
-                <RtlText style={[styles.expensesEmptyTitle, { color: theme.text }]}>אין הוצאות החודש</RtlText>
-                <RtlText style={[styles.expensesEmptyBody, { color: theme.textSecondary }]}>
-                  רשמו כאן עלויות כמו שכירות, חומרים ושיווק כדי לקבל תמונה פיננסית מדויקת.
-                </RtlText>
-                <TouchableOpacity
-                  style={[styles.expensesEmptyCta, { backgroundColor: `${primaryColor}10` }]}
-                  onPress={() => setShowAddExpense(true)}
-                  activeOpacity={0.8}
-                >
-                  <Plus size={15} color={primaryColor} strokeWidth={2.4} />
-                  <RtlText style={[styles.expensesEmptyCtaText, { color: primaryColor }]}>הוספת הוצאה ראשונה</RtlText>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <View style={[styles.expensesListInset, { backgroundColor: darkenHex(theme.surface, 0.03) }]}>
-                  {expenses.map((expense, index) => {
-                    const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
-                    const isLast = index === expenses.length - 1;
-                    const title = expense.description || cat.label;
-                    return (
-                      <View
-                        key={expense.id}
-                        style={[
-                          styles.expenseRow,
-                          { backgroundColor: theme.surface },
-                          !isLast && {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: `${theme.border}28`,
-                          },
-                        ]}
-                      >
-                        <View style={[styles.expenseRowIcon, { backgroundColor: `${cat.color}18` }]}>
-                          <RtlText style={[styles.expenseRowIconLetter, { color: cat.color }]}>{cat.label.charAt(0)}</RtlText>
-                        </View>
-                        <View style={styles.expenseRowBody}>
-                          <RtlText style={[styles.expenseRowTitle, { color: theme.text }]} numberOfLines={1}>
-                            {title}
-                          </RtlText>
-                          <View style={styles.expenseRowMeta}>
-                            <RtlText style={[styles.expenseRowDate, { color: theme.textSecondary }]}>
-                              {formatExpenseDateShort(expense.expense_date)}
+                    {dayExpenses.map((expense, rowIdx) => {
+                      const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
+                      const title = expense.description || cat.label;
+                      const isLastRow = rowIdx === dayExpenses.length - 1;
+                      return (
+                        <View
+                          key={expense.id}
+                          style={[
+                            styles.apptCompactRow,
+                            !isLastRow && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}12` },
+                          ]}
+                        >
+                          <View style={styles.apptCompactBody}>
+                            <RtlText style={[styles.apptCompactName, { color: theme.text }]} numberOfLines={1}>
+                              {title}
                             </RtlText>
-                            <View style={[styles.expenseRowChip, { backgroundColor: `${cat.color}14` }]}>
-                              <RtlText style={[styles.expenseRowChipText, { color: cat.color }]}>{cat.label}</RtlText>
-                            </View>
+                            <RtlText style={[styles.apptCompactMeta, { color: theme.textSecondary }]} numberOfLines={1}>
+                              {cat.label}
+                            </RtlText>
                           </View>
-                        </View>
-                        <View style={styles.expenseRowTrailing}>
-                          <RtlText style={[styles.expenseRowAmount, { color: theme.error }]}>
-                            −{formatCurrency(Number(expense.amount))}
-                          </RtlText>
-                          <View style={styles.expenseRowActions}>
-                            {expense.receipt_url ? (
+                          <View style={styles.expenseIconActions}>
+                            {expense.receipt_url && (
                               <TouchableOpacity
-                                style={[styles.expenseIconBtn, { backgroundColor: `${theme.border}2A` }]}
                                 onPress={() => Linking.openURL(expense.receipt_url!)}
-                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                                activeOpacity={0.65}
+                                activeOpacity={0.75}
+                                style={[
+                                  styles.expenseIconBtn,
+                                  {
+                                    backgroundColor: `${primaryColor}10`,
+                                    borderColor: `${primaryColor}22`,
+                                  },
+                                ]}
+                                accessibilityLabel="פתיחת קבלה"
                               >
-                                <FileImage size={15} color={theme.textSecondary} />
+                                <FileImage size={17} color={primaryColor} strokeWidth={2.1} />
                               </TouchableOpacity>
-                            ) : null}
+                            )}
                             <TouchableOpacity
-                              style={[styles.expenseIconBtn, { backgroundColor: `${theme.border}2A` }]}
                               onPress={() => handleDeleteExpense(expense)}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                              activeOpacity={0.65}
+                              activeOpacity={0.75}
+                              style={[
+                                styles.expenseIconBtn,
+                                {
+                                  backgroundColor: `${theme.error}08`,
+                                  borderColor: `${theme.error}22`,
+                                },
+                              ]}
+                              accessibilityLabel="מחיקת הוצאה"
                             >
-                              <Trash2 size={15} color={theme.textSecondary} />
+                              <Trash2 size={16} color={theme.error} strokeWidth={2.1} />
                             </TouchableOpacity>
                           </View>
+                          <RtlText style={[styles.apptCompactPrice, { color: theme.error }]}>
+                            {formatCurrency(Number(expense.amount))}
+                          </RtlText>
                         </View>
-                      </View>
-                    );
-                  })}
-                </View>
+                      );
+                    })}
+                  </View>
+                );
+              })}
 
-                <View
-                  style={[
-                    styles.expensesFooter,
-                    {
-                      borderTopColor: `${theme.border}22`,
-                      backgroundColor: darkenHex(theme.surface, 0.025),
-                    },
-                  ]}
+              {expensesByDate.length > EXPENSE_GROUPS_INITIAL && (
+                <TouchableOpacity
+                  style={[styles.showMoreBtn, { borderColor: `${primaryColor}28`, backgroundColor: `${primaryColor}07` }]}
+                  onPress={() => setShowAllExpenseDays((p) => !p)}
+                  activeOpacity={0.7}
                 >
-                  <RtlText style={[styles.expensesFooterLabel, { color: theme.textSecondary }]}>סך הוצאות לחודש</RtlText>
-                  <RtlText style={[styles.expensesFooterAmount, { color: theme.error }]}>
-                    {formatCurrency(totalExpenses)}
+                  {showAllExpenseDays ? <ChevronUp size={16} color={primaryColor} /> : <ChevronDown size={16} color={primaryColor} />}
+                  <RtlText style={[styles.showMoreBtnText, { color: primaryColor }]}>
+                    {showAllExpenseDays ? 'הצג פחות' : `הצג את כל הימים (${expensesByDate.length})`}
                   </RtlText>
-                </View>
-              </>
-            )}
-          </View>
+                </TouchableOpacity>
+              )}
+
+              <View style={[styles.incomeTotalRow, { borderTopColor: `${theme.border}20` }]}>
+                <RtlText style={[styles.totalLabel, { color: theme.text }]}>סך הכל הוצאות</RtlText>
+                <RtlText style={[styles.totalAmount, { color: theme.error }]}>{formatCurrency(totalExpenses)}</RtlText>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={{ height: Math.max(120, insets.bottom + 108) }} />
@@ -1280,11 +1254,6 @@ const cardShadow = Platform.select({
   android: { elevation: 3 },
 });
 
-const expensesAddPillShadow = Platform.select({
-  ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.2, shadowRadius: 12 },
-  android: { elevation: 6 },
-});
-
 const styles = StyleSheet.create({
   rtlRoot: { flex: 1, direction: 'ltr', backgroundColor: '#F2F4F8' },
   rtlText: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
@@ -1355,12 +1324,15 @@ const styles = StyleSheet.create({
   kpiValue: { fontSize: 14, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
   kpiLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
-  // ── Section labels ──
-  sectionLabel: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
-  sectionLabelText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.2, flex: 1, textAlign: 'right' },
-  sectionLabelWithAction: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
-  peakDayPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  peakDayText: { fontSize: 11, fontWeight: '700' },
+  // ── Section headings (centered title) ──
+  sectionHeading: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, alignItems: 'center' },
+  sectionHeadingTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
 
   // ── Card ──
   card: { borderRadius: 22, borderWidth: 1, marginHorizontal: 16, marginBottom: 4, padding: 18, direction: 'ltr', ...cardShadow },
@@ -1394,8 +1366,6 @@ const styles = StyleSheet.create({
   totalAmount: { fontSize: 20, fontWeight: '900', textAlign: 'right' },
 
   // ── Appointments ──
-  apptCountPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  apptCountPillText: { fontSize: 12, fontWeight: '800' },
   apptDateGroup: { paddingVertical: 12 },
   apptDateHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   apptDateLabel: { fontSize: 14, fontWeight: '800', textAlign: 'right', flex: 1 },
@@ -1416,115 +1386,23 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#9CA3AF', textAlign: 'center' },
   emptySubtitle: { fontSize: 13, color: '#C4C9D4', textAlign: 'center' },
 
-  // ── Expenses (Apple-style) ──
   rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F0F2F7' },
 
-  expensesSection: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 4 },
-  expensesSectionHeader: {
-    flexDirection: 'row-reverse',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-    paddingHorizontal: 2,
-  },
-  expensesTitleBlock: { flex: 1, marginEnd: 12 },
-  expensesSectionTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.6,
-    textAlign: 'right',
-    marginBottom: 4,
-  },
-  expensesSectionSubtitle: { fontSize: 14, fontWeight: '500', textAlign: 'right', letterSpacing: -0.1, opacity: 0.92 },
-  expensesAddPill: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    borderRadius: 22,
-  },
-  expensesAddPillLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', textAlign: 'right', letterSpacing: -0.2 },
-
-  expensesCard: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    ...cardShadow,
-  },
-
-  expensesEmpty: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 22, gap: 12 },
-  expensesEmptyGlyph: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  expensesEmptyTitle: { fontSize: 20, fontWeight: '600', textAlign: 'center', letterSpacing: -0.3 },
-  expensesEmptyBody: { fontSize: 15, fontWeight: '400', textAlign: 'center', lineHeight: 22, letterSpacing: -0.1, maxWidth: 300 },
-  expensesEmptyCta: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 14,
-  },
-  expensesEmptyCtaText: { fontSize: 15, fontWeight: '600', textAlign: 'right', letterSpacing: -0.2 },
-
-  expensesListInset: { borderRadius: 12, margin: 10, overflow: 'hidden' },
-  expenseRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    gap: 12,
-  },
-  expenseRowIcon: {
-    width: 44,
-    height: 44,
+  financeCardToolbar: { flexDirection: 'row-reverse', justifyContent: 'flex-start', marginBottom: 10, marginTop: -4 },
+  expenseSectionAddCircle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  expenseIconActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexShrink: 0 },
+  expenseIconBtn: {
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2 },
+      android: { elevation: 1 },
+    }),
   },
-  expenseRowIconLetter: { fontSize: 17, fontWeight: '700' },
-  expenseRowBody: { flex: 1, minWidth: 0 },
-  expenseRowTitle: { fontSize: 16, fontWeight: '600', textAlign: 'right', letterSpacing: -0.25, marginBottom: 5 },
-  expenseRowMeta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  expenseRowDate: { fontSize: 12, fontWeight: '500', textAlign: 'right' },
-  expenseRowChip: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20 },
-  expenseRowChipText: { fontSize: 11, fontWeight: '600', textAlign: 'right', letterSpacing: 0.1 },
-  expenseRowTrailing: { alignItems: 'flex-end', justifyContent: 'center', gap: 8, flexShrink: 0 },
-  expenseRowAmount: {
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'right',
-    letterSpacing: -0.2,
-    ...(Platform.OS === 'ios' ? { fontVariant: ['tabular-nums' as const] } : {}),
-  },
-  expenseRowActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
-  expenseIconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  expensesFooter: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  expensesFooterLabel: { fontSize: 13, fontWeight: '600', textAlign: 'right', letterSpacing: 0.1 },
-  expensesFooterAmount: { fontSize: 20, fontWeight: '700', textAlign: 'right', letterSpacing: -0.4 },
 
   // ── Modal ──
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },

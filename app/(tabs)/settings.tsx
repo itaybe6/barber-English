@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, InteractionManager, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, InteractionManager, LayoutAnimation, UIManager, type LayoutChangeEvent } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetTextInput,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -110,7 +117,7 @@ export default function SettingsScreen() {
   const updateUserProfile = useAuthStore((s) => s.updateUserProfile);
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
   const { colors: businessColors } = useBusinessColors();
-  const { onPrimary, onPrimaryMuted, isLightPrimary } = usePrimaryContrast();
+  const { onPrimary, onPrimaryMuted, isLightPrimary, primaryOnSurface } = usePrimaryContrast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
@@ -302,6 +309,8 @@ export default function SettingsScreen() {
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const bookingWindowSheetRef = useRef<BottomSheetModal>(null);
+  const clientReminderSheetRef = useRef<BottomSheetModal>(null);
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
   const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
   const homeFixedMessageInputRef = useRef<TextInput>(null);
@@ -512,6 +521,9 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (showBookingWindowModal) {
       setBookingWindowDraft(String(profileBookingOpenDays ?? 7));
+      bookingWindowSheetRef.current?.present();
+    } else {
+      bookingWindowSheetRef.current?.dismiss();
     }
   }, [showBookingWindowModal, profileBookingOpenDays]);
 
@@ -536,6 +548,14 @@ export default function SettingsScreen() {
     });
     return () => cancelAnimationFrame(id);
   }, [showClientReminderModal, clientReminderMinutes]);
+
+  useEffect(() => {
+    if (showClientReminderModal) {
+      clientReminderSheetRef.current?.present();
+    } else {
+      clientReminderSheetRef.current?.dismiss();
+    }
+  }, [showClientReminderModal]);
 
   useLayoutEffect(() => {
     if (!showAdminReminderModal) return;
@@ -1903,20 +1923,50 @@ export default function SettingsScreen() {
   }, [activeSettingsTab]);
 
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
+  const manageRecurringSheetRef = useRef<BottomSheetModal>(null);
+  const [expandedRecurringIds, setExpandedRecurringIds] = useState<Record<string, boolean>>({});
+  const recurringChevronRefs = useRef<Record<string, Animated.Value>>({});
 
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
 
   useEffect(() => {
     closeManageRecurringSheetRef.current = () => setShowManageRecurringModal(false);
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
   }, []);
 
-  /** No close animation — avoids the sheet flashing / jumping over the add screen when navigating away */
+  useEffect(() => {
+    if (showManageRecurringModal) {
+      manageRecurringSheetRef.current?.present();
+    } else {
+      manageRecurringSheetRef.current?.dismiss();
+    }
+  }, [showManageRecurringModal]);
+
+  const toggleRecurringCard = useCallback((id: string) => {
+    if (!recurringChevronRefs.current[id]) {
+      recurringChevronRefs.current[id] = new Animated.Value(0);
+    }
+    const isExpanded = !!expandedRecurringIds[id];
+    LayoutAnimation.configureNext({
+      duration: 230,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+    });
+    Animated.timing(recurringChevronRefs.current[id], {
+      toValue: isExpanded ? 0 : 1,
+      duration: 230,
+      useNativeDriver: true,
+    }).start();
+    setExpandedRecurringIds(prev => ({ ...prev, [id]: !prev[id] }));
+  }, [expandedRecurringIds]);
+
+  /** Dismiss instantly (no animation) to avoid flash when navigating to add screen */
   const dismissRecurringHubAndGoToAdd = useCallback(() => {
-    sheetAnim.stopAnimation();
-    dragY.stopAnimation();
-    sheetAnim.setValue(0);
-    dragY.setValue(0);
+    manageRecurringSheetRef.current?.dismiss();
     setShowManageRecurringModal(false);
     requestAnimationFrame(() => {
       router.push('/(tabs)/add-recurring-appointment');
@@ -2071,7 +2121,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitle}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevron}><ChevronLeft size={20} color={businessColors.primary} /></View>
+              <View style={styles.settingChevron}><ChevronLeft size={20} color={primaryOnSurface} /></View>
             </>
           ) : (
             <>
@@ -2126,7 +2176,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitleLTR}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevronLTR}><ChevronLeft size={20} color={businessColors.primary} /></View>
+              <View style={styles.settingChevronLTR}><ChevronLeft size={20} color={primaryOnSurface} /></View>
             </>
           ) : (
             <>
@@ -2289,16 +2339,7 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View
-            style={[
-              styles.settingsBelowTabs,
-              {
-                /** Reserve space for floating tab bar (general: logout is inside ScrollView). */
-                paddingBottom:
-                  activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
-              },
-            ]}
-          >
+          <View style={styles.settingsBelowTabs}>
         {activeSettingsTab === 'general' && (
           <ScrollView
             style={styles.settingsAppointmentsScroll}
@@ -2324,7 +2365,7 @@ export default function SettingsScreen() {
                 <>
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
-                    <User size={20} color={businessColors.primary} />
+                    <User size={20} color={primaryOnSurface} />
                   </View>
                   <View
                     style={{
@@ -2350,7 +2391,7 @@ export default function SettingsScreen() {
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       requireClientApproval
-                        ? businessColors.primary
+                        ? primaryOnSurface
                         : Platform.OS === 'android'
                           ? '#f4f3f4'
                           : undefined
@@ -2361,7 +2402,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingDivider} />
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
-                    <Megaphone size={20} color={businessColors.primary} />
+                    <Megaphone size={20} color={primaryOnSurface} />
                   </View>
                   <View
                     style={{
@@ -2389,7 +2430,7 @@ export default function SettingsScreen() {
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       homeFixedMessageEnabled
-                        ? businessColors.primary
+                        ? primaryOnSurface
                         : Platform.OS === 'android'
                           ? '#f4f3f4'
                           : undefined
@@ -2510,7 +2551,7 @@ export default function SettingsScreen() {
                         </Text>
                       </View>
                       <View style={styles.homeFixedMessageSummaryIconWrap}>
-                        <Pencil size={18} color={businessColors.primary} strokeWidth={2} />
+                        <Pencil size={18} color={primaryOnSurface} strokeWidth={2} />
                       </View>
                     </Pressable>
                   )
@@ -2521,7 +2562,7 @@ export default function SettingsScreen() {
                   <>
                     {canSeeAddEmployee ? <View style={styles.settingDivider} /> : null}
                     {renderSettingItem(
-                      <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
+                      <Ionicons name="globe-outline" size={20} color={primaryOnSurface} />,
                       t('profile.language.title', 'Language'),
                       (() => {
                         switch (normalizeAppLanguage(i18n.language)) {
@@ -2590,7 +2631,7 @@ export default function SettingsScreen() {
           <View style={styles.settingsAccordionBody}>
             {canSeeAddEmployee
               ? renderSettingItemLTR(
-                  <Calendar size={20} color={businessColors.primary} />,
+                  <Calendar size={20} color={primaryOnSurface} />,
                   t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
                   t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays ?? 7 }),
                   undefined,
@@ -2599,7 +2640,7 @@ export default function SettingsScreen() {
               : null}
             {isAdmin
               ? renderSettingItem(
-                  <Repeat size={20} color={businessColors.primary} />,
+                  <Repeat size={20} color={primaryOnSurface} />,
                   t('settings.recurring.hubTitle', 'Fixed appointments'),
                   t('settings.recurring.hubSubtitle', 'View the list — tap + to add'),
                   undefined,
@@ -2618,7 +2659,7 @@ export default function SettingsScreen() {
               : null}
             {canSeeAddEmployee
               ? renderSettingItemLTR(
-                  <Bell size={20} color={businessColors.primary} />,
+                  <Bell size={20} color={primaryOnSurface} />,
                   t('settings.reminder.clientRowTitle', 'Client reminder before appointment'),
                   clientReminderMinutes != null && clientReminderMinutes > 0
                     ? t('settings.reminder.clientRowValueHours', {
@@ -2635,7 +2676,7 @@ export default function SettingsScreen() {
               <>
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
-                    <Clock size={20} color={businessColors.primary} />
+                    <Clock size={20} color={primaryOnSurface} />
                   </View>
                   <Pressable
                     style={({ pressed }) => [
@@ -2684,7 +2725,7 @@ export default function SettingsScreen() {
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       cancellationLimitActive
-                        ? businessColors.primary
+                        ? primaryOnSurface
                         : Platform.OS === 'android'
                           ? '#f4f3f4'
                           : undefined
@@ -2697,7 +2738,7 @@ export default function SettingsScreen() {
             ) : null}
             <View style={styles.settingItemLTR}>
               <View style={styles.settingIconLTR}>
-                <Clock size={20} color={businessColors.primary} />
+                <Clock size={20} color={primaryOnSurface} />
               </View>
               <Pressable
                 style={({ pressed }) => [
@@ -2737,7 +2778,7 @@ export default function SettingsScreen() {
                 trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                 thumbColor={
                   adminSelfReminderOn
-                    ? businessColors.primary
+                    ? primaryOnSurface
                     : Platform.OS === 'android'
                       ? '#f4f3f4'
                       : undefined
@@ -2750,7 +2791,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingDivider} />
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
-                    <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
+                    <Ionicons name="swap-horizontal" size={20} color={primaryOnSurface} />
                   </View>
                   <View
                     style={{
@@ -2773,7 +2814,7 @@ export default function SettingsScreen() {
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       clientSwapEnabled
-                        ? businessColors.primary
+                        ? primaryOnSurface
                         : Platform.OS === 'android'
                           ? '#f4f3f4'
                           : undefined
@@ -2784,7 +2825,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingDivider} />
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
-                    <Layers size={20} color={businessColors.primary} />
+                    <Layers size={20} color={primaryOnSurface} />
                   </View>
                   <View
                     style={{
@@ -2813,7 +2854,7 @@ export default function SettingsScreen() {
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       allowMultiServiceBooking
-                        ? businessColors.primary
+                        ? primaryOnSurface
                         : Platform.OS === 'android'
                           ? '#f4f3f4'
                           : undefined
@@ -2839,7 +2880,7 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('settings.services.add', 'Add service')}
                 >
-                  <Plus size={22} color={Colors.white} strokeWidth={2.4} />
+                  <Plus size={22} color={onPrimary} strokeWidth={2.4} />
                 </TouchableOpacity>
                 <View style={styles.settingsListScreenHeaderTextCol}>
                   <Text style={styles.settingsListScreenHeaderTitle} numberOfLines={1}>
@@ -2883,7 +2924,7 @@ export default function SettingsScreen() {
                 {isLoadingServices && (
                   <View style={styles.servicesModalFullWidthBlock}>
                     <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                      <ActivityIndicator size="large" color={businessColors.primary} />
+                      <ActivityIndicator size="large" color={primaryOnSurface} />
                       <Text style={{ marginTop: 12, color: Colors.subtext, fontSize: 14 }}>{t('settings.services.loading','Loading services...')}</Text>
                     </View>
                   </View>
@@ -2898,7 +2939,7 @@ export default function SettingsScreen() {
                 {!isLoadingServices && !servicesError && editableServices.length === 0 && !showAddServiceModal && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
-                      <Ionicons name="cut-outline" size={32} color={businessColors.primary} />
+                      <Ionicons name="cut-outline" size={32} color={primaryOnSurface} />
                     </View>
                     <Text style={styles.svcEmptyTitle}>{t('settings.services.emptyTitle','No services yet')}</Text>
                     <Text style={styles.svcEmptySubtitle}>{t('settings.services.emptySubtitle','Add your first service to get started')}</Text>
@@ -2937,7 +2978,7 @@ export default function SettingsScreen() {
                             >
                               {justSaved ? (
                                 <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
-                                  <Check size={14} color={businessColors.primary} />
+                                  <Check size={14} color={primaryOnSurface} />
                                   <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
                                     {t('saved','Saved')}
                                   </Text>
@@ -2986,7 +3027,7 @@ export default function SettingsScreen() {
                               >
                                 {justSaved ? (
                                   <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}20` }]}>
-                                    <Check size={13} color={businessColors.primary} />
+                                    <Check size={13} color={primaryOnSurface} />
                                     <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>{t('saved','נשמר')}</Text>
                                   </View>
                                 ) : (
@@ -3081,7 +3122,7 @@ export default function SettingsScreen() {
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
               {renderSettingItemLTR(
-                <FileText size={20} color={businessColors.primary} />,
+                <FileText size={20} color={primaryOnSurface} />,
                 t('settings.profile.receiptLegalRowTitle', 'Receipt & tax details'),
                 t(
                   'settings.profile.receiptLegalRowSubtitle',
@@ -3106,7 +3147,7 @@ export default function SettingsScreen() {
                     placeholder={t('settings.profile.instagramUrlPlaceholder', 'https://instagram.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveInstagramInline}
-                    chevronColor={businessColors.primary}
+                    chevronColor={primaryOnSurface}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3120,7 +3161,7 @@ export default function SettingsScreen() {
                     placeholder={t('settings.profile.facebookUrlPlaceholder', 'https://facebook.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveFacebookInline}
-                    chevronColor={businessColors.primary}
+                    chevronColor={primaryOnSurface}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3134,7 +3175,7 @@ export default function SettingsScreen() {
                     placeholder={t('settings.profile.tiktokUrlPlaceholder', 'https://www.tiktok.com/@yourpage')}
                     keyboardType="url"
                     onSave={handleSaveTiktokInline}
-                    chevronColor={businessColors.primary}
+                    chevronColor={primaryOnSurface}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3170,7 +3211,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingDivider} />
               {renderSettingItemLTR(
-                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
+                <Ionicons name="images-outline" size={20} color={primaryOnSurface} />,
                 t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
                 t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
                 undefined,
@@ -3206,7 +3247,7 @@ export default function SettingsScreen() {
                       trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                       thumbColor={
                         profile?.home_header_show_logo !== false
-                          ? businessColors.primary
+                          ? primaryOnSurface
                           : Platform.OS === 'android'
                             ? '#f4f3f4'
                             : undefined
@@ -3340,7 +3381,7 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('settings.admin.addEmployee', 'Add employee user')}
                 >
-                  <Plus size={22} color={Colors.white} strokeWidth={2.4} />
+                  <Plus size={22} color={onPrimary} strokeWidth={2.4} />
                 </TouchableOpacity>
                 <View style={styles.settingsListScreenHeaderTextCol}>
                   <Text style={styles.settingsListScreenHeaderTitle} numberOfLines={1}>
@@ -3365,7 +3406,7 @@ export default function SettingsScreen() {
               >
                 {isLoadingEmployees ? (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color={businessColors.primary} />
+                    <ActivityIndicator size="large" color={primaryOnSurface} />
                     <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading', 'Loading...')}</Text>
                   </View>
                 ) : (
@@ -3747,114 +3788,101 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Client reminder — bottom sheet (same pattern as booking window) */}
-      <Modal
-        visible={showClientReminderModal}
-        animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={dismissClientReminderModal}
+      {/* Client reminder — compact bottom sheet, drag-to-close */}
+      <BottomSheetModal
+        ref={clientReminderSheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onDismiss={dismissClientReminderModal}
+        backdropComponent={(props: BottomSheetBackdropProps) => (
+          <BottomSheetBackdrop
+            {...props}
+            disappearsOnIndex={-1}
+            appearsOnIndex={0}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.bwSheetHandle}
+        backgroundStyle={styles.bwSheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.bwSheetContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.bwSheetTitle}>
+            {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
+          </Text>
+
+          <LinearGradient
+            colors={[`${businessColors.primary}15`, `${businessColors.primary}06`, 'transparent']}
+            locations={[0, 0.6, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.bwExplainerStrip}
           >
-            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
-              <TouchableOpacity
-                style={styles.cancellationModalCloseButton}
-                onPress={dismissClientReminderModal}
-                accessibilityRole="button"
-                accessibilityLabel={t('cancel', 'Cancel')}
-              >
-                <X size={22} color={Colors.text} strokeWidth={2} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
-                {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
-              </Text>
-              <View style={styles.bookingWindowHeaderSpacer} />
+            <View style={[styles.bwExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+              <Bell size={18} color={primaryOnSurface} strokeWidth={2} />
             </View>
+            <Text style={styles.bwExplainerText}>{t('settings.reminder.clientAutomatedHint')}</Text>
+          </LinearGradient>
 
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 8,
-                paddingBottom: insets.bottom + 120,
-              }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-            >
-              <LinearGradient
-                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
-                locations={[0, 0.55, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.bookingWindowExplainer}
-              >
-                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
-                  <Bell size={22} color={businessColors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.clientAutomatedHint')}</Text>
-              </LinearGradient>
+          <Text style={styles.bwFieldLabel}>
+            {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
+          </Text>
+          <View style={styles.bwRulerLtr}>
+            <BookingDaysRuler
+              ref={clientReminderHoursRulerRef}
+              minDay={CLIENT_REMINDER_HOURS_MIN}
+              maxDay={CLIENT_REMINDER_HOURS_MAX}
+              fadeColor={Colors.white}
+              tickColor={Colors.text}
+              indicatorColor={businessColors.primary}
+              unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
+              onDayChange={onClientReminderHoursRulerChange}
+            />
+          </View>
 
-              <View style={styles.bookingWindowHeroCard}>
-                <Text style={styles.bookingWindowFieldLabel}>
-                  {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
-                </Text>
-                <View style={styles.bookingWindowRulerLtr}>
-                  <BookingDaysRuler
-                    ref={clientReminderHoursRulerRef}
-                    minDay={CLIENT_REMINDER_HOURS_MIN}
-                    maxDay={CLIENT_REMINDER_HOURS_MAX}
-                    fadeColor={Colors.white}
-                    tickColor={Colors.text}
-                    indicatorColor={businessColors.primary}
-                    unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
-                    onDayChange={onClientReminderHoursRulerChange}
-                  />
-                </View>
-                <Text style={styles.bookingWindowManualLabel}>
-                  {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
-                </Text>
-                <TextInput
-                  style={styles.bookingWindowManualInput}
-                  value={clientReminderModalHoursDraft}
-                  onChangeText={onClientReminderHoursTextChange}
-                  placeholder="0"
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  selectTextOnFocus
-                />
-                <Text style={styles.bookingWindowRangeFoot}>
-                  {t('settings.reminder.clientDialogHoursRange', '0–24 hours. 0 turns the reminder off.')}
-                </Text>
-              </View>
-            </ScrollView>
+          <Text style={styles.bwManualLabel}>
+            {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
+          </Text>
+          <BottomSheetTextInput
+            style={styles.bwManualInput}
+            value={clientReminderModalHoursDraft}
+            onChangeText={onClientReminderHoursTextChange}
+            placeholder="0"
+            placeholderTextColor={Colors.subtext}
+            keyboardType="number-pad"
+            maxLength={2}
+            selectTextOnFocus
+          />
+          <Text style={styles.bwRangeFoot}>
+            {t('settings.reminder.clientDialogHoursRange', '0–24 hours. 0 turns the reminder off.')}
+          </Text>
 
-            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-              <TouchableOpacity
-                style={[
-                  styles.bookingWindowFooterBtn,
-                  { backgroundColor: businessColors.primary },
-                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
-                ]}
-                onPress={() => {
-                  void saveClientReminderFromModal();
-                }}
-                disabled={isSavingProfile}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+          <TouchableOpacity
+            style={[
+              styles.bwSaveBtn,
+              { backgroundColor: businessColors.primary },
+              isSavingProfile && styles.bwSaveBtnDisabled,
+            ]}
+            onPress={() => { void saveClientReminderFromModal(); }}
+            disabled={isSavingProfile}
+            activeOpacity={0.88}
+          >
+            <Text style={[styles.bwSaveBtnText, isSavingProfile && { opacity: 0.85 }]}>
+              {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+            </Text>
+          </TouchableOpacity>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       {/* Admin self-reminder — minutes 5–60, ruler + bottom sheet */}
       <Modal
@@ -3903,7 +3931,7 @@ export default function SettingsScreen() {
                 style={styles.bookingWindowExplainer}
               >
                 <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
-                  <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                  <Clock size={22} color={primaryOnSurface} strokeWidth={2} />
                 </View>
                 <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.adminAutomatedHint')}</Text>
               </LinearGradient>
@@ -4038,7 +4066,7 @@ export default function SettingsScreen() {
                     )}
                     {isUploadingAdminAvatar && (
                       <View style={styles.editAdminAvatarLoading}>
-                        <ActivityIndicator size="small" color={businessColors.primary} />
+                        <ActivityIndicator size="small" color={primaryOnSurface} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -4058,7 +4086,7 @@ export default function SettingsScreen() {
                   activeOpacity={0.88}
                   disabled={isUploadingAdminAvatar}
                 >
-                  <Camera size={17} color={businessColors.primary} strokeWidth={2} />
+                  <Camera size={17} color={primaryOnSurface} strokeWidth={2} />
                   <Text style={[styles.editAdminPhotoBtnText, { color: businessColors.primary }]}>
                     {isUploadingAdminAvatar
                       ? t('settings.common.uploading', 'Uploading...')
@@ -4239,7 +4267,7 @@ export default function SettingsScreen() {
                   </View>
                   <View style={styles.addressSheetTitleBlock}>
                     <View style={[styles.addressSheetTitleIconRing, { borderColor: `${businessColors.primary}33` }]}>
-                      <MapPin size={22} color={businessColors.primary} strokeWidth={2.2} />
+                      <MapPin size={22} color={primaryOnSurface} strokeWidth={2.2} />
                     </View>
                     <Text style={styles.addressSheetHeroTitle}>{t('settings.profile.businessAddressTitle', 'Business address')}</Text>
                     <Text style={styles.addressSheetHeroSubtitle}>
@@ -4272,7 +4300,7 @@ export default function SettingsScreen() {
                     </Text>
                     <View style={[styles.addressSearchShell, { borderColor: `${businessColors.primary}22` }]}>
                       <View style={[styles.addressSearchPin, { backgroundColor: pinTint }]}>
-                        <MapPin size={20} color={businessColors.primary} strokeWidth={2.2} />
+                        <MapPin size={20} color={primaryOnSurface} strokeWidth={2.2} />
                       </View>
                       <View style={styles.addressAutocompleteFlex}>
                         {hasGooglePlacesAutocomplete ? (
@@ -4389,7 +4417,7 @@ export default function SettingsScreen() {
                     {!!placesPlaceId && (
                       <View style={styles.addressMapSection}>
                         <View style={styles.addressMapSectionHeader}>
-                          <MapPin size={15} color={businessColors.primary} strokeWidth={2.2} />
+                          <MapPin size={15} color={primaryOnSurface} strokeWidth={2.2} />
                           <Text style={styles.addressMapSectionLabel}>{t('map.preview', 'Map preview')}</Text>
                         </View>
                         <View style={[styles.addressMapFrame, { borderColor: `${businessColors.primary}28` }]}>
@@ -4589,7 +4617,7 @@ export default function SettingsScreen() {
                             { backgroundColor: `${businessColors.primary}22` },
                           ]}
                         >
-                          <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                          <Clock size={22} color={primaryOnSurface} strokeWidth={2} />
                         </View>
                         <Text style={styles.cancellationModalExplainerText}>
                           {t(
@@ -4616,9 +4644,9 @@ export default function SettingsScreen() {
                           activeOpacity={0.92}
                         >
                           {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={22} color={businessColors.primary} />
+                            <Ionicons name="chevron-up" size={22} color={primaryOnSurface} />
                           ) : (
-                            <Ionicons name="chevron-down" size={22} color={businessColors.primary} />
+                            <Ionicons name="chevron-down" size={22} color={primaryOnSurface} />
                           )}
                           <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
                             {cancellationHoursDraft === '0'
@@ -4796,243 +4824,264 @@ export default function SettingsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Booking horizon (per staff) — explainer + Reanimated ruler + manual entry */}
-      <Modal
-        visible={showBookingWindowModal}
-        animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={() => setShowBookingWindowModal(false)}
+      {/* Booking horizon — compact bottom sheet with drag-to-close */}
+      <BottomSheetModal
+        ref={bookingWindowSheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onDismiss={() => setShowBookingWindowModal(false)}
+        backdropComponent={(props: BottomSheetBackdropProps) => (
+          <BottomSheetBackdrop
+            {...props}
+            disappearsOnIndex={-1}
+            appearsOnIndex={0}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.bwSheetHandle}
+        backgroundStyle={styles.bwSheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.bwSheetContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* title */}
+          <Text style={styles.bwSheetTitle}>
+            {t('settings.profile.bookingWindowModalTitle', 'Your booking range')}
+          </Text>
+
+          {/* explainer strip */}
+          <LinearGradient
+            colors={[`${businessColors.primary}15`, `${businessColors.primary}06`, 'transparent']}
+            locations={[0, 0.6, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.bwExplainerStrip}
           >
-            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
-              <TouchableOpacity
-                style={styles.cancellationModalCloseButton}
-                onPress={() => setShowBookingWindowModal(false)}
-                accessibilityRole="button"
-                accessibilityLabel={t('cancel', 'Cancel')}
-              >
-                <X size={22} color={Colors.text} strokeWidth={2} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
-                {t('settings.profile.bookingWindowModalTitle', 'Your booking range')}
-              </Text>
-              <View style={styles.bookingWindowHeaderSpacer} />
+            <View style={[styles.bwExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+              <Calendar size={18} color={primaryOnSurface} strokeWidth={2} />
             </View>
+            <Text style={styles.bwExplainerText}>{t('settings.profile.bookingWindowModalBody')}</Text>
+          </LinearGradient>
 
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 8,
-                paddingBottom: insets.bottom + 120,
-              }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-            >
-              <LinearGradient
-                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
-                locations={[0, 0.55, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.bookingWindowExplainer}
-              >
-                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
-                  <Calendar size={22} color={businessColors.primary} strokeWidth={2} />
-                </View>
-                <Text style={styles.bookingWindowExplainerText}>{t('settings.profile.bookingWindowModalBody')}</Text>
-              </LinearGradient>
+          {/* ruler section */}
+          <Text style={styles.bwFieldLabel}>
+            {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
+          </Text>
+          <View style={styles.bwRulerLtr}>
+            <BookingDaysRuler
+              ref={bookingDaysRulerRef}
+              minDay={BOOKING_RULER_MIN_DISPLAY}
+              maxDay={BOOKING_WINDOW_MAX}
+              fadeColor={Colors.white}
+              tickColor={Colors.text}
+              indicatorColor={businessColors.primary}
+              unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
+              onDayChange={onBookingWindowRulerDay}
+            />
+          </View>
 
-              <View style={styles.bookingWindowHeroCard}>
-                <Text style={styles.bookingWindowFieldLabel}>
-                  {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
-                </Text>
+          {/* manual input */}
+          <Text style={styles.bwManualLabel}>
+            {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
+          </Text>
+          <BottomSheetTextInput
+            style={styles.bwManualInput}
+            value={bookingWindowDraft}
+            onChangeText={onBookingWindowTextChange}
+            placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
+            placeholderTextColor={Colors.subtext}
+            keyboardType="number-pad"
+            maxLength={2}
+            selectTextOnFocus
+          />
+          <Text style={styles.bwRangeFoot}>
+            {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
+          </Text>
 
-                <View style={styles.bookingWindowRulerLtr}>
-                  <BookingDaysRuler
-                    ref={bookingDaysRulerRef}
-                    minDay={BOOKING_RULER_MIN_DISPLAY}
-                    maxDay={BOOKING_WINDOW_MAX}
-                    fadeColor={Colors.white}
-                    tickColor={Colors.text}
-                    indicatorColor={businessColors.primary}
-                    unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
-                    onDayChange={onBookingWindowRulerDay}
-                  />
-                </View>
+          {/* save button */}
+          <TouchableOpacity
+            style={[
+              styles.bwSaveBtn,
+              { backgroundColor: businessColors.primary },
+              isSavingProfile && styles.bwSaveBtnDisabled,
+            ]}
+            onPress={confirmBookingWindowModal}
+            disabled={isSavingProfile}
+            activeOpacity={0.88}
+          >
+            <Text style={[styles.bwSaveBtnText, isSavingProfile && { opacity: 0.85 }]}>
+              {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+            </Text>
+          </TouchableOpacity>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
-                <Text style={styles.bookingWindowManualLabel}>
-                  {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
-                </Text>
-                <TextInput
-                  style={styles.bookingWindowManualInput}
-                  value={bookingWindowDraft}
-                  onChangeText={onBookingWindowTextChange}
-                  placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  selectTextOnFocus
-                />
-                <Text style={styles.bookingWindowRangeFoot}>
-                  {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
-                </Text>
-              </View>
-            </ScrollView>
-
-            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-              <TouchableOpacity
-                style={[
-                  styles.bookingWindowFooterBtn,
-                  { backgroundColor: businessColors.primary },
-                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
-                ]}
-                onPress={confirmBookingWindowModal}
-                disabled={isSavingProfile}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Time selection now uses inline dropdown below the field (no nested modal) */}
-      {/* Manage Recurring Appointments Modal */}
-      <Modal
-        visible={showManageRecurringModal}
-        transparent
-        animationType="none"
-        onRequestClose={() => setShowManageRecurringModal(false)}
+      {/* Manage Recurring Appointments — fixed 75% height with internal scroll */}
+      <BottomSheetModal
+        ref={manageRecurringSheetRef}
+        snapPoints={['75%']}
+        enablePanDownToClose
+        onDismiss={() => setShowManageRecurringModal(false)}
+        backdropComponent={(props: BottomSheetBackdropProps) => (
+          <BottomSheetBackdrop
+            {...props}
+            disappearsOnIndex={-1}
+            appearsOnIndex={0}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.bwSheetHandle}
+        backgroundStyle={styles.bwSheetBackground}
       >
-        <View style={styles.sheetRoot}>
-          <TouchableWithoutFeedback onPress={() => animateCloseSheet(() => setShowManageRecurringModal(false))}>
-            <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
-          </TouchableWithoutFeedback>
-          <Animated.View style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }>
-            <View style={styles.dragHandleArea}>
-              <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
-                <View style={styles.sheetGrabber} />
-              </View>
-            </View>
-            <View style={[styles.servicesModalHeader, { paddingHorizontal: 12 }]}>
-              <TouchableOpacity style={[styles.servicesModalCloseButton, { marginLeft: 0 }]} onPress={() => animateCloseSheet(() => setShowManageRecurringModal(false))}>
-                <X size={20} color={Colors.text} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]} numberOfLines={2}>
-                {t('settings.recurring.hubTitle', 'Fixed appointments')}
-              </Text>
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.bwSheetContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* header: centered title + conditional pill add-button on left */}
+          <View style={styles.recurringSheetHeader}>
+            {/* right spacer — visible only when + is shown, to keep title centered */}
+            <View style={styles.recurringSheetAddBtn} />
+            <Text style={styles.recurringSheetTitle}>
+              {t('settings.recurring.hubTitle', 'Fixed appointments')}
+            </Text>
+            {/* + button on the left — only when list has items */}
+            {!isLoadingRecurring && recurringList.length > 0 ? (
               <TouchableOpacity
-                style={[styles.servicesModalCloseButton, { marginLeft: 0, marginRight: -4 }]}
+                style={[styles.recurringSheetAddBtn, styles.recurringSheetAddBtnCircle, { backgroundColor: businessColors.primary }]}
                 onPress={dismissRecurringHubAndGoToAdd}
                 accessibilityRole="button"
                 accessibilityLabel={t('settings.recurring.addFromHubA11y', 'Add fixed appointment')}
               >
-                <Plus size={22} color={businessColors.primary} strokeWidth={2.25} />
+                <Plus size={18} color={Colors.white} strokeWidth={2.4} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.recurringSheetAddBtn} />
+            )}
+          </View>
+
+          {/* list */}
+          {isLoadingRecurring ? (
+            <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={primaryOnSurface} />
+              <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading', 'Loading...')}</Text>
+            </View>
+          ) : recurringList.length === 0 ? (
+            <View style={styles.recurringEmptyState}>
+              <View style={[styles.recurringEmptyIconRing, { backgroundColor: `${businessColors.primary}12` }]}>
+                <Repeat size={32} color={businessColors.primary} strokeWidth={1.8} />
+              </View>
+              <Text style={styles.recurringEmptyTitle}>
+                {t('settings.recurring.emptyTitle', 'אין תורים קבועים עדיין')}
+              </Text>
+              <Text style={styles.recurringEmptySubtitle}>
+                {t('settings.recurring.emptyHint', 'לחצו על + כדי להוסיף תור קבוע ללקוח')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.recurringEmptyCta, { backgroundColor: businessColors.primary }]}
+                onPress={dismissRecurringHubAndGoToAdd}
+                activeOpacity={0.88}
+              >
+                <Plus size={16} color={Colors.white} strokeWidth={2.5} />
+                <Text style={styles.recurringEmptyCtaText}>
+                  {t('settings.recurring.addFromHubA11y', 'הוסף תור קבוע')}
+                </Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.sheetBody}>
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
-                showsVerticalScrollIndicator={false}>
-                <View style={styles.recurringCard}>
-                  {isLoadingRecurring ? (
-                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                      <ActivityIndicator size="large" color={businessColors.primary} />
-                      <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading','Loading...')}</Text>
-                    </View>
-                  ) : (
-                    <View>
-                      {recurringList.length === 0 ? (
-                        <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('settings.recurring.empty','No recurring appointments')}</Text>
-                      ) : (
-                        recurringList.map((item, idx) => (
-                          <View key={item.id} style={idx > 0 ? styles.recurringHubItemSpacing : undefined}>
-                            <View
-                              style={[
-                                styles.recurringHubItemCard,
-                                { borderStartColor: businessColors.primary },
-                              ]}
-                            >
-                              <View style={styles.recurringHubItemRow}>
-                                <View style={styles.recurringHubItemBody}>
-                                  <Text style={styles.recurringHubItemName} numberOfLines={1}>
-                                    {item.client_name}
-                                  </Text>
-                                  <View style={styles.recurringHubMetaStack}>
-                                    <View style={styles.recurringHubMetaRow}>
-                                      <Text style={styles.recurringHubMetaText} numberOfLines={1}>
-                                        {item.client_phone}
-                                      </Text>
-                                      <Phone size={15} color={Colors.subtext} strokeWidth={2.2} />
-                                    </View>
-                                    <View style={styles.recurringHubMetaRow}>
-                                      <Text style={styles.recurringHubMetaText} numberOfLines={2}>
-                                        {item.service_name}
-                                      </Text>
-                                      <Layers size={15} color={Colors.subtext} strokeWidth={2.2} />
-                                    </View>
-                                    <View style={styles.recurringHubMetaRow}>
-                                      <Text style={styles.recurringHubMetaText} numberOfLines={1}>
-                                        {t(`day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`)} ·{' '}
-                                        {formatBookingTimeLabel(String(item.slot_time).slice(0, 5), i18n.language)}
-                                      </Text>
-                                      <Calendar size={15} color={Colors.subtext} strokeWidth={2.2} />
-                                    </View>
-                                    {!!item.repeat_interval && (
-                                      <View style={styles.recurringHubMetaRow}>
-                                        <Text style={styles.recurringHubMetaTextMuted} numberOfLines={2}>
-                                          {t('settings.recurring.listRepeat', 'Repeats {{label}}', {
-                                            label:
-                                              item.repeat_interval === 1
-                                                ? t('settings.recurring.everyWeek', 'every week')
-                                                : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', {
-                                                    count: item.repeat_interval,
-                                                  }),
-                                          })}
-                                        </Text>
-                                        <Repeat size={15} color={Colors.subtext} strokeWidth={2.2} />
-                                      </View>
-                                    )}
-                                  </View>
-                                </View>
-                                <TouchableOpacity
-                                  style={styles.recurringHubDeleteBtn}
-                                  onPress={async () => {
-                                    const ok = await recurringAppointmentsApi.delete(item.id);
-                                    if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                                    else
-                                      Alert.alert(
-                                        t('error.generic', 'Error'),
-                                        t('settings.recurring.deleteFailed', 'Failed to delete appointment'),
-                                      );
-                                  }}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Trash2 size={18} color="#FF3B30" strokeWidth={2.2} />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
+          ) : (
+            recurringList.map((item, idx) => {
+              const isExpanded = !!expandedRecurringIds[item.id];
+              if (!recurringChevronRefs.current[item.id]) {
+                recurringChevronRefs.current[item.id] = new Animated.Value(isExpanded ? 1 : 0);
+              }
+              const chevronRotate = recurringChevronRefs.current[item.id].interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0deg', '180deg'],
+              });
+              return (
+                <View key={item.id} style={idx > 0 ? styles.recurringCardSpacing : undefined}>
+                  <View style={styles.recurringCard}>
+                    {/* header row: [🗑][▼] ← name */}
+                    <TouchableOpacity
+                      style={styles.recurringCardHeader}
+                      onPress={() => toggleRecurringCard(item.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.recurringCardName} numberOfLines={1}>
+                        {item.client_name}
+                      </Text>
+                      <View style={styles.recurringCardActions}>
+                        <TouchableOpacity
+                          style={styles.recurringCardDeleteBtn}
+                          onPress={async () => {
+                            const ok = await recurringAppointmentsApi.delete(item.id);
+                            if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
+                            else Alert.alert(t('error.generic', 'Error'), t('settings.recurring.deleteFailed', 'Failed to delete appointment'));
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                        >
+                          <Trash2 size={15} color="#FF3B30" strokeWidth={2.2} />
+                        </TouchableOpacity>
+                        <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+                          <ChevronDown size={18} color={Colors.subtext} strokeWidth={2.2} />
+                        </Animated.View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* expandable details */}
+                    {isExpanded && (
+                      <View style={styles.recurringCardDetails}>
+                        {/* time chip */}
+                        <View style={[styles.recurringCardTimeChip, { backgroundColor: `${businessColors.primary}15` }]}>
+                          <Text style={[styles.recurringCardTimeText, { color: businessColors.primary }]}>
+                            {t(`day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`)}
+                            {' · '}
+                            {formatBookingTimeLabel(String(item.slot_time).slice(0, 5), i18n.language)}
+                          </Text>
+                          <Calendar size={13} color={businessColors.primary} strokeWidth={2.2} />
+                        </View>
+                        {/* meta */}
+                        <View style={styles.recurringCardMeta}>
+                          <View style={styles.recurringCardMetaRow}>
+                            <Text style={styles.recurringCardMetaText} numberOfLines={1}>{item.client_phone}</Text>
+                            <Phone size={13} color={Colors.subtext} strokeWidth={2.2} />
                           </View>
-                        ))
-                      )}
-                    </View>
-                  )}
+                          <View style={styles.recurringCardMetaRow}>
+                            <Text style={styles.recurringCardMetaText} numberOfLines={2}>{item.service_name}</Text>
+                            <Layers size={13} color={Colors.subtext} strokeWidth={2.2} />
+                          </View>
+                          {!!item.repeat_interval && (
+                            <View style={styles.recurringCardMetaRow}>
+                              <Text style={styles.recurringCardMetaMuted} numberOfLines={1}>
+                                {item.repeat_interval === 1
+                                  ? t('settings.recurring.everyWeek', 'every week')
+                                  : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', { count: item.repeat_interval })}
+                              </Text>
+                              <Repeat size={13} color={Colors.subtext} strokeWidth={2.2} />
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </ScrollView>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
+              );
+            })
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       {activeSettingsTab === 'services' && (
       <>
@@ -5078,7 +5127,7 @@ export default function SettingsScreen() {
                       <Text style={[styles.durationPickerRowText, isSelected && { color: businessColors.primary, fontWeight: '700' }]}>
                         {mins} {t('settings.services.minShort','דק׳')}
                       </Text>
-                      {isSelected && <Check size={18} color={businessColors.primary} />}
+                      {isSelected && <Check size={18} color={primaryOnSurface} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -5231,7 +5280,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexGrow: 1,
     paddingTop: 16,
-    paddingBottom: 12,
     backgroundColor: SETTINGS_GROUPED_BG,
   },
   settingsAppointmentsScroll: {
@@ -6827,6 +6875,206 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
   },
+  /* ── Booking window bottom sheet ────────────────────────────── */
+  bwSheetBackground: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  bwSheetHandle: {
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 2,
+  },
+  bwSheetContent: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  bwSheetTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  bwExplainerStrip: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    overflow: 'hidden',
+  },
+  bwExplainerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  bwExplainerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: Colors.text,
+    textAlign: 'left',
+    fontWeight: '500',
+  },
+  bwFieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+    letterSpacing: 0.1,
+    marginBottom: 4,
+  },
+  bwRulerLtr: {
+    direction: 'ltr',
+  },
+  bwManualLabel: {
+    marginTop: 16,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+  },
+  bwManualInput: {
+    marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: Colors.text,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    fontVariant: ['tabular-nums'],
+  },
+  bwRangeFoot: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  bwSaveBtn: {
+    marginTop: 18,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bwSaveBtnDisabled: {
+    opacity: 0.55,
+  },
+  bwSaveBtnText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  recurringSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 8,
+  },
+  recurringSheetTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  recurringSheetAddBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  recurringSheetAddBtnCircle: {
+    borderRadius: 17,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  recurringEmptyState: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  recurringEmptyIconRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  recurringEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  recurringEmptySubtitle: {
+    fontSize: 14,
+    color: Colors.subtext,
+    textAlign: 'center',
+    lineHeight: 20,
+    fontWeight: '400',
+  },
+  recurringEmptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  recurringEmptyCtaText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  /* ─────────────────────────────────────────────────────────── */
   modalContent: {
     flex: 1,
     backgroundColor: '#F2F2F7',
@@ -7417,6 +7665,100 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     marginVertical: 8,
   },
+  recurringCardSpacing: {
+    marginTop: 10,
+  },
+  recurringCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.07)',
+    gap: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  recurringCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recurringCardName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+  },
+  recurringCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  recurringCardDeleteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF0F0',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFD1D1',
+  },
+  recurringCardDetails: {
+    gap: 8,
+    paddingTop: 4,
+    alignItems: 'flex-start',
+  },
+  recurringCardTimeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 10,
+  },
+  recurringCardTimeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  recurringCardMeta: {
+    gap: 5,
+    alignItems: 'flex-start',
+  },
+  recurringCardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  recurringCardMetaText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.text,
+    textAlign: 'left',
+    lineHeight: 18,
+    flexShrink: 1,
+  },
+  recurringCardMetaMuted: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'left',
+    lineHeight: 17,
+    flexShrink: 1,
+  },
+  /* keep old names to avoid breaking other refs */
   recurringHubItemSpacing: {
     marginTop: 12,
   },
@@ -7432,57 +7774,14 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(0,0,0,0.06)',
     borderEndColor: 'rgba(0,0,0,0.06)',
     borderBottomColor: 'rgba(0,0,0,0.06)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: { elevation: 3 },
-    }),
   },
-  recurringHubItemRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  recurringHubItemBody: {
-    flex: 1,
-    minWidth: 0,
-    paddingEnd: 4,
-  },
-  recurringHubItemName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.25,
-    marginBottom: 4,
-  },
-  recurringHubMetaStack: {
-    marginTop: 4,
-    gap: 8,
-  },
-  recurringHubMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  recurringHubMetaText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    lineHeight: 20,
-  },
-  recurringHubMetaTextMuted: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    fontWeight: '500',
-    color: Colors.subtext,
-    lineHeight: 18,
-  },
+  recurringHubItemRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  recurringHubItemBody: { flex: 1, minWidth: 0, paddingEnd: 4 },
+  recurringHubItemName: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  recurringHubMetaStack: { marginTop: 4, gap: 8 },
+  recurringHubMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  recurringHubMetaText: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: '600', color: Colors.text, lineHeight: 20 },
+  recurringHubMetaTextMuted: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: '500', color: Colors.subtext, lineHeight: 18 },
   recurringHubDeleteBtn: {
     width: 40,
     height: 40,
@@ -7681,19 +7980,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     marginBottom: 12,
-  },
-  recurringCard: {
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   wizardSectionCard: {
     backgroundColor: Colors.white,

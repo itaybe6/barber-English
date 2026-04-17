@@ -229,132 +229,85 @@ export default function DaySelector({
     );
     const a11yLabel = fullBlock ? `${getDayName(date)} ${date.getDate()}, ${blockHint}` : undefined;
 
-    const pillBase = [
-      styles.dayPill,
-      ...(fitWeekToScreen ? [styles.dayPillWeekFit] : []),
+    const cellBase = [
+      styles.dayCell,
+      ...(fitWeekToScreen ? [styles.dayCellWeekFit] : []),
       pillLayoutStyle,
     ];
 
-    const nameStrip = fitWeekToScreen ? styles.dayNameWeekStrip : undefined;
-    const numStrip = fitWeekToScreen ? styles.dayNumberWeekStrip : undefined;
+    const circleBg = selected
+      ? fullBlock ? FULL_BLOCK_SELECTED_BG : colors.primary
+      : today
+        ? '#1C1C1E'
+        : fullBlock
+          ? FULL_BLOCK_BG
+          : 'transparent';
 
-    if (selected) {
-      const selBg = fullBlock ? FULL_BLOCK_SELECTED_BG : colors.primary;
-      const selShadow = fullBlock ? FULL_BLOCK_SELECTED_SHADOW : colors.primary;
-      return (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={a11yLabel}
-          accessibilityState={{ selected: true }}
-          onPress={() => onSelectDate(date)}
-          style={({ pressed }) => [
-            ...pillBase,
-            styles.dayPillSelected,
-            {
-              backgroundColor: selBg,
-              shadowColor: selShadow,
-            },
-            pressed && styles.dayPillPressed,
-          ]}
-        >
-          <Text
-            style={[styles.dayName, nameStrip, styles.dayNameOnPrimary]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-          >
-            {getDayName(date)}
-          </Text>
-          <Text
-            style={[styles.dayNumber, numStrip, styles.dayNumberOnPrimary]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-          >
-            {date.getDate()}
-          </Text>
-          {isMarked ? <View style={styles.markDotSelected} /> : <View style={styles.markDotPlaceholder} />}
-        </Pressable>
-      );
-    }
+    const numColor = selected || today
+      ? '#FFFFFF'
+      : fullBlock
+        ? FULL_BLOCK_TEXT
+        : colors.text;
 
-    if (fullBlock) {
-      return (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={a11yLabel}
-          accessibilityState={{ selected: false }}
-          onPress={() => onSelectDate(date)}
-          android_ripple={{ color: 'rgba(220,38,38,0.10)', borderless: false }}
-          style={({ pressed }) => [
-            ...pillBase,
-            styles.dayPillIdle,
-            styles.dayPillFullBlock,
-            fitWeekToScreen && styles.dayPillFullBlockWeekStrip,
-            today && styles.dayPillFullBlockToday,
-            pressed && styles.dayPillPressedIdle,
-          ]}
-        >
-          <Text
-            style={[styles.dayName, nameStrip, { color: FULL_BLOCK_TEXT }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-          >
-            {getDayName(date)}
-          </Text>
-          <Text
-            style={[styles.dayNumber, numStrip, { color: FULL_BLOCK_TEXT }, today && styles.dayNumberFullBlockToday]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.8}
-          >
-            {date.getDate()}
-          </Text>
-          {isMarked ? (
-            <View style={[styles.markDotIdle, { backgroundColor: FULL_BLOCK_TEXT }]} />
-          ) : (
-            <View style={styles.markDotPlaceholder} />
-          )}
-        </Pressable>
-      );
-    }
+    const nameColor = selected
+      ? colors.primary
+      : today
+        ? '#1C1C1E'
+        : fullBlock
+          ? FULL_BLOCK_TEXT
+          : colors.textSecondary;
+
+    const showCircle = selected || today || fullBlock;
 
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ selected: false }}
+        accessibilityLabel={a11yLabel}
+        accessibilityState={{ selected }}
         onPress={() => onSelectDate(date)}
-        android_ripple={{ color: 'rgba(0,0,0,0.05)', borderless: false }}
+        android_ripple={{ color: 'rgba(0,0,0,0.06)', borderless: true, radius: 26 }}
         style={({ pressed }) => [
-          ...pillBase,
-          styles.dayPillIdle,
-          today && styles.dayPillToday,
-          today && { borderColor: colors.primary },
-          pressed && styles.dayPillPressedIdle,
+          ...cellBase,
+          pressed && styles.dayCellPressed,
         ]}
       >
         <Text
-          style={[styles.dayName, nameStrip, { color: today ? colors.primary : colors.textSecondary }]}
+          style={[
+            styles.dayName,
+            fitWeekToScreen ? styles.dayNameWeekStrip : undefined,
+            { color: nameColor },
+          ]}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.85}
         >
           {getDayName(date)}
         </Text>
-        <Text
-          style={[styles.dayNumber, numStrip, { color: today ? colors.primary : colors.text }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.8}
+        <View
+          style={[
+            styles.numCircle,
+            fitWeekToScreen ? styles.numCircleWeekFit : undefined,
+            showCircle && { backgroundColor: circleBg },
+            fullBlock && !selected && { borderWidth: 1.5, borderColor: FULL_BLOCK_BORDER },
+          ]}
         >
-          {date.getDate()}
-        </Text>
-        {today && !isMarked && <View style={[styles.todayDot, { backgroundColor: colors.primary }]} />}
+          <Text
+            style={[
+              styles.dayNumber,
+              fitWeekToScreen ? styles.dayNumberWeekStrip : undefined,
+              { color: numColor },
+            ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {date.getDate()}
+          </Text>
+        </View>
         {isMarked ? (
-          <View style={[styles.markDotIdle, { backgroundColor: today ? colors.primary : colors.primary }]} />
+          <View style={[styles.markDot, { backgroundColor: selected || today ? (selected ? '#fff' : '#fff') : colors.primary }]} />
         ) : (
-          !today && <View style={styles.markDotPlaceholder} />
+          <View style={styles.markDotPlaceholder} />
         )}
       </Pressable>
     );
@@ -425,7 +378,7 @@ export default function DaySelector({
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 4,
   },
   scrollLtr: {
@@ -436,139 +389,78 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'stretch',
     alignSelf: 'center',
-    paddingVertical: 4,
-  },
-  dayPillWeekFit: {
-    paddingTop: 8,
-    paddingBottom: 6,
-    minHeight: 0,
-    minWidth: 0,
-    borderRadius: 14,
-  },
-  dayNameWeekStrip: {
-    fontSize: 10,
-    marginBottom: 2,
-    letterSpacing: 0.3,
-    maxWidth: '100%',
-  },
-  dayNumberWeekStrip: {
-    fontSize: 15,
-    letterSpacing: -0.3,
-    maxWidth: '100%',
-  },
-  dayPillFullBlockWeekStrip: {
-    borderWidth: 1.5,
+    paddingVertical: 2,
   },
   daysContainer: {
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
-  dayPill: {
-    borderRadius: 20,
+  /** תא יום — ללא רקע, ללא צל. רק טקסט + עיגול סמן */
+  dayCell: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 11,
-    paddingBottom: 9,
-    minHeight: 76,
+    paddingTop: 6,
+    paddingBottom: 6,
+    minHeight: 66,
   },
-  dayPillFullBlock: {
-    backgroundColor: FULL_BLOCK_BG,
-    borderWidth: 1.5,
-    borderColor: FULL_BLOCK_BORDER,
+  dayCellWeekFit: {
+    paddingTop: 4,
+    paddingBottom: 4,
+    minHeight: 0,
+    minWidth: 0,
   },
-  dayPillFullBlockToday: {
-    borderColor: FULL_BLOCK_SELECTED_BG,
-    backgroundColor: '#FEE2E2',
-  },
-  dayNumberFullBlockToday: {
-    fontWeight: '900',
-  },
-  dayPillIdle: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#1A1A2E',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.07,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-  dayPillToday: {
-    borderWidth: 1.5,
-    ...Platform.select({
-      ios: {
-        shadowOpacity: 0.10,
-        shadowRadius: 10,
-      },
-      android: { elevation: 3 },
-    }),
-  },
-  dayPillSelected: {
-    borderWidth: 0,
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.32,
-        shadowRadius: 14,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  dayPillPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.96 }],
-  },
-  dayPillPressedIdle: {
-    opacity: 0.85,
-    transform: [{ scale: 0.97 }],
+  dayCellPressed: {
+    opacity: 0.7,
   },
   dayName: {
     fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-    marginBottom: 3,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    marginBottom: 4,
     textTransform: 'uppercase',
   },
-  dayNameOnPrimary: {
-    color: 'rgba(255,255,255,0.85)',
+  dayNameWeekStrip: {
+    fontSize: 10,
+    marginBottom: 3,
+    letterSpacing: 0.2,
+    maxWidth: '100%',
+  },
+  /** עיגול סמן סביב המספר — רק לתאריך היום / הנבחר */
+  numCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  numCircleWeekFit: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   dayNumber: {
     fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontWeight: '400',
+    letterSpacing: -0.3,
   },
-  dayNumberOnPrimary: {
-    color: '#FFFFFF',
+  dayNumberWeekStrip: {
+    fontSize: 18,
+    letterSpacing: -0.3,
+    maxWidth: '100%',
   },
-  todayDot: {
+  markDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    marginTop: 5,
-    opacity: 0.9,
-  },
-  markDotIdle: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 5,
-    opacity: 0.75,
-  },
-  markDotSelected: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    marginTop: 5,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    marginTop: 4,
+    opacity: 0.85,
   },
   markDotPlaceholder: {
     height: 4,
-    marginTop: 5,
+    marginTop: 4,
   },
 });

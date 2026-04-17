@@ -209,10 +209,11 @@ const DayCell = React.memo(function DayCell({
     displayMode === 'availability' && inRange && hasAvail && !isSel && !isToday;
   const showAvailGreen = showBookingGreen;
 
-  const circleColor = isSel ? primaryColor : 'transparent';
+  // Today = filled primary circle; selected (not today) = filled black circle
+  const circleColor = isToday ? primaryColor : isSel ? '#1C1C1E' : 'transparent';
 
   const textColor =
-    isSel ? '#FFFFFF' : inRange ? '#1C1C1E' : '#C7C7CC';
+    isToday ? '#FFFFFF' : isSel ? '#FFFFFF' : inRange ? '#1C1C1E' : '#C7C7CC';
 
   const isPast = !isToday && date < TODAY;
   const textOpacity = isPast && inRange && !isSel && !isToday ? 0.4 : 1;
@@ -227,16 +228,15 @@ const DayCell = React.memo(function DayCell({
       ? STATUS_DOT_GRAY
       : STATUS_DOT_RED;
 
-  const onCircle = isToday || isSel;
+  // Only today has a filled primary circle; selected uses a border-only ring
+  const onCircle = isToday;
 
   const hebrewDay = showHebrewDates ? formatHebrewDay(date) : '';
   const hebrewTextColor = !inRange
     ? '#D1D1D6'
-    : isToday
-      ? IOS_TODAY_RED
-      : isSel
-        ? primaryColor
-        : '#8E8E93';
+    : isToday || isSel
+      ? primaryColor
+      : '#8E8E93';
 
   const fmtBadge = formatAppointmentBadge ?? ((c: number) => `${c} תורים`);
   const badgeLabel = displayMode === 'count' && hasAvail ? fmtBadge(availCount) : null;
@@ -288,23 +288,17 @@ const DayCell = React.memo(function DayCell({
             backgroundColor: circleColor,
             alignItems: 'center',
             justifyContent: 'center',
-            ...(isToday && !isSel
-              ? {
-                  borderWidth: 2,
-                  borderColor: primaryColor,
-                }
-              : {}),
           }}
         >
           <Text
-            style={{
-              fontSize: circleSize >= 34 ? 16 : 14,
-              fontWeight: isSel ? '700' : isToday ? '600' : '400',
-              color: textColor,
-              opacity: textOpacity,
-              includeFontPadding: false,
-              lineHeight: circleSize,
-            }}
+          style={{
+            fontSize: circleSize >= 34 ? 16 : 14,
+            fontWeight: isToday || isSel ? '700' : '400',
+            color: textColor,
+            opacity: textOpacity,
+            includeFontPadding: false,
+            lineHeight: circleSize,
+          }}
           >
             {date.getDate()}
           </Text>

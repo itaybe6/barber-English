@@ -848,7 +848,7 @@
       "bookingWindowRowTitle": "How many days ahead can clients book?",
       "bookingWindowRowSubtitle": "{{count}} days ahead",
       "bookingWindowModalTitle": "Your booking range",
-      "bookingWindowModalBody": "Clients can pick dates only within this many days from today. This applies only to your calendar—each team member sets their own under Manage employees.",
+      "bookingWindowModalBody": "Clients see available dates only within this range. Each staff member sets their own.",
       "bookingWindowModalDaysLabel": "Days open for booking",
       "bookingWindowModalRange": "You can choose between 0 and 60 days.",
       "bookingWindowModalDaysUnit": "days",

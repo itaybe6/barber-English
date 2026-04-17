@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -123,6 +124,47 @@ export default function AdminVerticalMonthCalendar({
   const selectedAtMountRef = useRef(selectedDate);
   const didScheduleInitialScroll = useRef(false);
 
+  // ── Sticky header ─────────────────────────────────────────────────────────
+  const [displayedMonth, setDisplayedMonth] = useState<Date>(() => {
+    const parsed = parseAnchorMonthKey(anchorMonthKey);
+    if (parsed) return new Date(parsed.y, parsed.m - 1, 1);
+    if (selectedDate) return new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    return new Date();
+  });
+  const headerSlide = useRef(new Animated.Value(0)).current;
+  // Guard: skip animation when the displayed month hasn't actually changed
+  const lastHeaderMonthRef = useRef<{ y: number; m: number }>({
+    y: displayedMonth.getFullYear(),
+    m: displayedMonth.getMonth(),
+  });
+  // Flag: a slide animation should play after the next React render commit
+  const animPendingRef = useRef(false);
+
+  /**
+   * Trigger a month change.
+   * We only update React state here — the slide animation starts in
+   * useLayoutEffect, AFTER React has painted the new text. This prevents the
+   * old text from jumping before the new text appears.
+   */
+  const animateToMonth = useCallback(
+    (newDate: Date) => {
+      headerSlide.stopAnimation();
+      animPendingRef.current = true;
+      setDisplayedMonth(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+    },
+    [headerSlide],
+  );
+
+  // Runs synchronously after React commits the new month name to the screen.
+  // At this point the new text is already rendered — we can safely start the slide-in
+  // with no risk of moving the old text or showing an intermediate jump.
+  useLayoutEffect(() => {
+    if (!animPendingRef.current) return;
+    animPendingRef.current = false;
+    headerSlide.setValue(9);
+    Animated.timing(headerSlide, { toValue: 0, duration: 210, useNativeDriver: true }).start();
+  }, [displayedMonth, headerSlide]);
+
   const calendarData = useMemo(
     () => buildMonthRange(adminMonthsBack, adminMonthsForward, language.startsWith('he') ? 'he' : 'en'),
     [adminMonthsBack, adminMonthsForward, language]
@@ -194,31 +236,57 @@ export default function AdminVerticalMonthCalendar({
     };
   }, []);
 
-  const reportVisibleMonthFromOffset = useCallback(
-    (scrollY: number) => {
-      let bestIdx = 0;
-      const anchorY = scrollY + 80;
+  const updateStickyHeader = useCallback(
+    (monthFirstDay: Date) => {
+      const newY = monthFirstDay.getFullYear();
+      const newM = monthFirstDay.getMonth();
+      if (lastHeaderMonthRef.current.y !== newY || lastHeaderMonthRef.current.m !== newM) {
+        lastHeaderMonthRef.current = { y: newY, m: newM };
+        animateToMonth(monthFirstDay);
+      }
+    },
+    [animateToMonth],
+  );
+
+  /** Find which month index is currently at the top of the visible area. */
+  const findVisibleMonthIdx = useCallback(
+    (scrollY: number): number => {
+      let best = 0;
+      const anchor = scrollY + 80;
       for (let i = 0; i < calendarData.length; i++) {
         const y = monthYRef.current[i];
         if (y == null) continue;
-        if (y <= anchorY) bestIdx = i;
+        if (y <= anchor) best = i;
         else break;
       }
+      return best;
+    },
+    [calendarData],
+  );
+
+  /** Debounced: notify parent that visible month changed. */
+  const reportVisibleMonthFromOffset = useCallback(
+    (scrollY: number) => {
+      const bestIdx = findVisibleMonthIdx(scrollY);
       if (bestIdx !== lastReportedMonthIdx.current && calendarData[bestIdx]) {
         lastReportedMonthIdx.current = bestIdx;
         onVisibleMonthChange?.(calendarData[bestIdx]!.date);
       }
     },
-    [calendarData, onVisibleMonthChange]
+    [calendarData, findVisibleMonthIdx, onVisibleMonthChange]
   );
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = e.nativeEvent.contentOffset.y;
+      // Sticky header: update immediately on every scroll frame (no debounce)
+      const idx = findVisibleMonthIdx(y);
+      if (calendarData[idx]) updateStickyHeader(calendarData[idx]!.date);
+      // Parent notification: debounced so we don't spam callbacks
       if (scrollReportTimer.current) clearTimeout(scrollReportTimer.current);
       scrollReportTimer.current = setTimeout(() => reportVisibleMonthFromOffset(y), 100);
     },
-    [reportVisibleMonthFromOffset]
+    [calendarData, findVisibleMonthIdx, updateStickyHeader, reportVisibleMonthFromOffset]
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -234,25 +302,79 @@ export default function AdminVerticalMonthCalendar({
     const idx = monthIndexForDate(calendarData, now);
     scrollToMonthIndex(idx, true);
     lastReportedMonthIdx.current = idx;
+    updateStickyHeader(new Date(now.getFullYear(), now.getMonth(), 1));
     onJumpToDate?.(now);
-  }, [calendarData, onJumpToDate, scrollToMonthIndex]);
+  }, [calendarData, onJumpToDate, scrollToMonthIndex, updateStickyHeader]);
 
   const tabBarReserve = 56;
   const isHebrewUi = language.startsWith('he');
 
+  // Grey out the Today button when the currently visible month IS today's month
+  const isOnCurrentMonth = useMemo(() => {
+    const now = new Date();
+    return (
+      displayedMonth.getFullYear() === now.getFullYear() &&
+      displayedMonth.getMonth() === now.getMonth()
+    );
+  }, [displayedMonth]);
+
   return (
     <View style={styles.root}>
+      {/* ── Sticky month header ── */}
+      <View
+        style={[
+          styles.stickyHeader,
+          { flexDirection: isHebrewUi ? 'row' : 'row-reverse', alignItems: 'center' },
+        ]}
+      >
+        {/* Month name — left side in Hebrew RTL */}
+        <Animated.Text
+          style={[
+            styles.stickyMonthName,
+            isHebrewUi && styles.stickyMonthNameHebrew,
+            { transform: [{ translateY: headerSlide }], flex: 1 },
+          ]}
+        >
+          {formatMonthLong(displayedMonth, language)}
+        </Animated.Text>
+
+        {/* Today button — right side in Hebrew RTL */}
+        {showTodayPill ? (
+          <Pressable
+            onPress={onTodayPress}
+            style={({ pressed }) => [
+              styles.todayHeaderBtn,
+              isOnCurrentMonth
+                ? styles.todayHeaderBtnInactive
+                : { backgroundColor: primaryColor, borderWidth: 0 },
+              pressed && { opacity: 0.72 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={todayLabel}
+          >
+            <Text
+              style={[
+                styles.todayHeaderBtnText,
+                { color: isOnCurrentMonth ? '#9CA3AF' : '#FFFFFF' },
+              ]}
+            >
+              {todayLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + tabBarReserve + 96 },
+          { paddingBottom: insets.bottom + tabBarReserve + 20 },
         ]}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
         onScroll={onScroll}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
         onMomentumScrollEnd={onMomentumScrollEnd}
         refreshControl={
           onRefresh ? (
@@ -314,35 +436,6 @@ export default function AdminVerticalMonthCalendar({
         ) : null}
       </ScrollView>
 
-      {showTodayPill ? (
-        <View
-          pointerEvents="box-none"
-          style={[styles.todayWrap, { bottom: insets.bottom + tabBarReserve + 8 }]}
-        >
-          <Pressable
-            onPress={onTodayPress}
-            style={({ pressed }) => [
-              styles.todayPill,
-              {
-                opacity: pressed ? 0.88 : 1,
-                ...Platform.select({
-                  ios: {
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.12,
-                    shadowRadius: 8,
-                  },
-                  android: { elevation: 4 },
-                }),
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={todayLabel}
-          >
-            <Text style={styles.todayPillText}>{todayLabel}</Text>
-          </Pressable>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -358,6 +451,56 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 4,
+  },
+  stickyHeader: {
+    backgroundColor: '#F8F9FA',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    gap: 10,
+    // overflow:hidden is intentionally omitted — it would clip the iOS shadow
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.09,
+        shadowRadius: 3,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  stickyMonthName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.8,
+    includeFontPadding: false,
+    textAlign: 'left',
+    ...Platform.select({
+      ios: { fontFamily: 'System' },
+      android: { fontFamily: 'sans-serif-medium' },
+    }),
+  },
+  stickyMonthNameHebrew: {
+    writingDirection: 'rtl',
+  },
+  todayHeaderBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    flexShrink: 0,
+  },
+  todayHeaderBtnInactive: {
+    backgroundColor: '#F2F2F7',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  todayHeaderBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    includeFontPadding: false,
   },
   monthBlock: {
     paddingTop: 20,
@@ -419,24 +562,5 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
     writingDirection: 'rtl',
-  },
-  todayWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  todayPill: {
-    backgroundColor: '#F2F2F7',
-    paddingHorizontal: 22,
-    paddingVertical: 11,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60, 60, 67, 0.12)',
-  },
-  todayPillText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
   },
 });

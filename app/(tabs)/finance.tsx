@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  PanResponder,
   useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -27,6 +28,9 @@ import Svg, {
   LinearGradient as SvgLinearGradient,
   Stop,
 } from 'react-native-svg';
+// Animated SVG Path (Reanimated + react-native-svg)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const AnimatedSvgPath = Animated.createAnimatedComponent(Path as any);
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,13 +39,28 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view
 import Animated, {
   Easing,
   Extrapolation,
+  FadeInUp,
+  FadeInRight,
   interpolate,
+  interpolateColor,
+  runOnJS,
+  type SharedValue,
+  useAnimatedProps,
   useAnimatedScrollHandler,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
+  withDelay,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
@@ -164,13 +183,13 @@ function IncomeDonut({
   totalIncome: number;
   fmtCurrency: (n: number) => string;
 }) {
-  const SIZE = 148;
-  const STROKE = 23;
+  const SIZE = 172;
+  const STROKE = 26;
   const cx = SIZE / 2;
   const cy = SIZE / 2;
   const r = (SIZE - STROKE) / 2;
   const C = 2 * Math.PI * r;
-  const GAP = C / 100; // ~3.6° gap between segments
+  const GAP = C / 90;
 
   if (totalIncome === 0 || breakdown.length === 0) return null;
 
@@ -183,12 +202,14 @@ function IncomeDonut({
     return { color: CHART_COLORS[i % CHART_COLORS.length], dashLen, dashOffset };
   });
 
+  const displayAmt = totalIncome >= 10000
+    ? `₪${(totalIncome / 1000).toFixed(0)}K`
+    : fmtCurrency(totalIncome);
+
   return (
     <View style={{ width: SIZE, height: SIZE }}>
       <Svg width={SIZE} height={SIZE}>
-        {/* Background track */}
         <Circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEF0F5" strokeWidth={STROKE} />
-        {/* Coloured segments */}
         {segments.map((seg, i) => (
           <Circle
             key={i}
@@ -202,99 +223,210 @@ function IncomeDonut({
             origin={`${cx}, ${cy}`}
           />
         ))}
+        {/* Inner white fill circle for depth */}
+        <Circle cx={cx} cy={cy} r={r - STROKE / 2 - 4} fill="#FFFFFF" />
       </Svg>
-      {/* Centre label */}
       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
-        <Text style={donutStyles.centreValue} numberOfLines={1}>{fmtCurrency(totalIncome)}</Text>
+        <Text style={donutStyles.centreValue} numberOfLines={1}>{displayAmt}</Text>
         <Text style={donutStyles.centreLabel}>הכנסות</Text>
       </View>
     </View>
   );
 }
 const donutStyles = StyleSheet.create({
-  centreValue: { fontSize: 13, fontWeight: '900', color: Colors.text, textAlign: 'center' },
-  centreLabel: { fontSize: 9, color: Colors.subtext, textAlign: 'center', marginTop: 1 },
+  centreValue: { fontSize: 14, fontWeight: '900', color: Colors.text, textAlign: 'center', letterSpacing: -0.5 },
+  centreLabel: { fontSize: 10, color: Colors.subtext, textAlign: 'center', marginTop: 2, fontWeight: '600' },
 });
 
-/** Daily-income area / line sparkline for the current month */
+/** Daily-income area / line sparkline for the current month — interactive with pan tooltip */
 function DailySparkline({
   dailyTotals,
   primaryColor,
   chartWidth,
+  trigger,
 }: {
   dailyTotals: number[];
   primaryColor: string;
   chartWidth: number;
+  trigger?: number;
 }) {
-  const H = 100;
-  const padTop = 22;
+  const H = 110;
+  const padTop = 30;
   const padBottom = 18;
   const n = dailyTotals.length;
-
-  if (n < 2 || chartWidth < 10) return null;
-
   const maxVal = Math.max(...dailyTotals, 1);
   const hasData = dailyTotals.some((v) => v > 0);
-  if (!hasData) return null;
 
-  const pts = dailyTotals.map((v, i) => ({
-    x: n > 1 ? (i / (n - 1)) * chartWidth : 0,
-    y: padTop + (1 - v / maxVal) * (H - padTop - padBottom),
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Draw animation
+  const drawSv = useSharedValue(0);
+  const PATH_EST = Math.max(chartWidth * 4, 1200); // generous upper bound
+
+  useEffect(() => {
+    drawSv.value = 0;
+    drawSv.value = withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyTotals, chartWidth, trigger]);
+
+  const lineAnimProps = useAnimatedProps(() => ({
+    strokeDasharray: [PATH_EST],
+    strokeDashoffset: interpolate(drawSv.value, [0, 1], [PATH_EST, 0]),
   }));
+
+  const areaAnimProps = useAnimatedProps(() => ({
+    opacity: interpolate(drawSv.value, [0, 0.65, 1], [0, 0, 0.25]),
+  }));
+
+  const INSET = 8; // horizontal margin so edge dots aren't clipped by SVG bounds
+  const pts = useMemo(
+    () =>
+      dailyTotals.map((v, i) => ({
+        x: INSET + (n > 1 ? (i / (n - 1)) * (chartWidth - INSET * 2) : 0),
+        y: padTop + (1 - v / maxVal) * (H - padTop - padBottom),
+      })),
+    [dailyTotals, chartWidth, maxVal, n],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (e) => {
+          if (hideTimer.current) clearTimeout(hideTimer.current);
+          const rawIdx = Math.round((e.nativeEvent.locationX / chartWidth) * (n - 1));
+          setActiveIdx(Math.max(0, Math.min(n - 1, rawIdx)));
+        },
+        onPanResponderMove: (e) => {
+          if (hideTimer.current) clearTimeout(hideTimer.current);
+          const rawIdx = Math.round((e.nativeEvent.locationX / chartWidth) * (n - 1));
+          setActiveIdx(Math.max(0, Math.min(n - 1, rawIdx)));
+        },
+        onPanResponderRelease: () => {
+          if (hideTimer.current) clearTimeout(hideTimer.current);
+          hideTimer.current = setTimeout(() => setActiveIdx(null), 1400);
+        },
+        onPanResponderTerminate: () => setActiveIdx(null),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chartWidth, n],
+  );
+
+  if (n < 2 || chartWidth < 10 || !hasData) return null;
 
   const line = smoothPath(pts);
   const area = `${line} L ${pts[n - 1].x} ${H - padBottom} L ${pts[0].x} ${H - padBottom} Z`;
   const peakIdx = dailyTotals.indexOf(maxVal);
-
-  // Sample day labels: 1st, ~mid, last
   const labelDays = [0, Math.floor(n / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
+  const activePt = activeIdx !== null ? pts[activeIdx] : null;
+  const activeVal = activeIdx !== null ? dailyTotals[activeIdx] : null;
+
+  const TOOLTIP_W = 88;
+  const tooltipLeft = activePt
+    ? Math.max(0, Math.min(chartWidth - TOOLTIP_W, activePt.x - TOOLTIP_W / 2))
+    : 0;
+  const tooltipTop = activePt ? Math.max(2, activePt.y - 52) : 0;
+
   return (
-    <Svg width={chartWidth} height={H}>
-      <Defs>
-        <SvgLinearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={primaryColor} stopOpacity="0.28" />
-          <Stop offset="1" stopColor={primaryColor} stopOpacity="0" />
-        </SvgLinearGradient>
-      </Defs>
+    <View style={{ position: 'relative' }} {...panResponder.panHandlers}>
+      <Svg width={chartWidth} height={H} style={{ overflow: 'visible' }}>
+        <Defs>
+          <SvgLinearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={primaryColor} stopOpacity="0.25" />
+            <Stop offset="1" stopColor={primaryColor} stopOpacity="0" />
+          </SvgLinearGradient>
+        </Defs>
 
-      {/* Baseline */}
-      <Line
-        x1={0} y1={H - padBottom}
-        x2={chartWidth} y2={H - padBottom}
-        stroke="#E5E7EB"
-        strokeWidth={1}
-      />
+        {/* Baseline */}
+        <Line x1={0} y1={H - padBottom} x2={chartWidth} y2={H - padBottom} stroke="#E5E7EB" strokeWidth={1} />
 
-      {/* Area fill */}
-      <Path d={area} fill="url(#areaGrad)" />
+        {/* Area fill — fades in after line draws */}
+        <AnimatedSvgPath d={area} fill="url(#areaGrad)" animatedProps={areaAnimProps} />
 
-      {/* Line */}
-      <Path d={line} fill="none" stroke={primaryColor} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+        {/* Line — draws itself like a snake */}
+        <AnimatedSvgPath
+          d={line}
+          fill="none"
+          stroke={primaryColor}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          animatedProps={lineAnimProps}
+        />
 
-      {/* Peak pulse */}
-      {dailyTotals[peakIdx] > 0 && (
-        <>
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={9} fill={primaryColor} opacity={0.12} />
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={4.5} fill={primaryColor} />
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={2.2} fill="#fff" />
-        </>
-      )}
+        {/* Active cursor */}
+        {activePt && (
+          <>
+            <Line
+              x1={activePt.x} y1={padTop - 10}
+              x2={activePt.x} y2={H - padBottom}
+              stroke={primaryColor}
+              strokeWidth={1.5}
+              strokeDasharray={[4, 3]}
+              opacity={0.5}
+            />
+            <Circle cx={activePt.x} cy={activePt.y} r={11} fill={primaryColor} opacity={0.15} />
+            <Circle cx={activePt.x} cy={activePt.y} r={5.5} fill={primaryColor} />
+            <Circle cx={activePt.x} cy={activePt.y} r={2.5} fill="#fff" />
+          </>
+        )}
 
-      {/* Day labels */}
-      {labelDays.map((di) => (
-        <SvgText
-          key={di}
-          x={pts[di].x}
-          y={H - 3}
-          textAnchor="middle"
-          fontSize={9}
-          fill="#9CA3AF"
+        {/* Peak pulse — only when idle */}
+        {!activePt && dailyTotals[peakIdx] > 0 && (
+          <>
+            <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={9} fill={primaryColor} opacity={0.12} />
+            <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={4.5} fill={primaryColor} />
+            <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={2.2} fill="#fff" />
+          </>
+        )}
+
+        {/* Day labels — anchor adjusted at edges so text doesn't overflow */}
+        {labelDays.map((di) => (
+          <SvgText
+            key={di}
+            x={pts[di].x}
+            y={H - 3}
+            textAnchor={di === 0 ? 'start' : di === n - 1 ? 'end' : 'middle'}
+            fontSize={9}
+            fill="#9CA3AF"
+          >
+            {di + 1}
+          </SvgText>
+        ))}
+      </Svg>
+
+      {/* Floating tooltip */}
+      {activePt && activeVal !== null && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: tooltipLeft,
+            top: tooltipTop,
+            width: TOOLTIP_W,
+            backgroundColor: primaryColor,
+            borderRadius: 12,
+            paddingVertical: 7,
+            paddingHorizontal: 10,
+            alignItems: 'center',
+            ...Platform.select({
+              ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10 },
+              android: { elevation: 7 },
+            }),
+          }}
         >
-          {di + 1}
-        </SvgText>
-      ))}
-    </Svg>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: -0.3 }}>
+            ₪{activeVal.toLocaleString('he-IL', { maximumFractionDigits: 0 })}
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 11, marginTop: 1 }}>
+            יום {(activeIdx ?? 0) + 1}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -376,14 +508,6 @@ function WeeklyBarChart({
 
         return (
           <G key={i}>
-            {/* Bar shadow (android-style bottom tint) */}
-            <Rect
-              x={x + 2} y={y + 4}
-              width={BAR_W} height={barH}
-              rx={8}
-              fill={isBest ? '#D97706' : primaryColor}
-              opacity={0.15}
-            />
             {/* Bar body */}
             <Rect
               x={x} y={y}
@@ -454,6 +578,496 @@ function RtlTextInput({ style, ...props }: TextInputProps) {
   return <TextInput {...props} style={[isRTL ? styles.rtlText : styles.ltrText, style]} />;
 }
 
+function SectionHeader({ title, primaryColor, textColor, action }: {
+  title: string;
+  primaryColor: string;
+  textColor: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <View style={[shStyles.container, action && { justifyContent: 'space-between' }]}>
+      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+        <View style={[shStyles.accent, { backgroundColor: primaryColor }]} />
+        <Text style={[shStyles.title, { color: textColor }]}>{title}</Text>
+      </View>
+      {action}
+    </View>
+  );
+}
+const shStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 10,
+  },
+  accent: { width: 4, height: 20, borderRadius: 2 },
+  title: { fontSize: 17, fontWeight: '800', textAlign: 'right', letterSpacing: -0.2 },
+});
+
+// ─────────────────────────────────────────────────────────────
+// CLIENTS LEADERBOARD
+// ─────────────────────────────────────────────────────────────
+
+/** Re-maps a number from one range to another (Processing map()) */
+function mapRange(v: number, lo1: number, hi1: number, lo2: number, hi2: number) {
+  return lo2 + ((hi2 - lo2) * (v - lo1)) / (hi1 - lo1);
+}
+
+interface ClientBarEntry { clientId: string; name: string; revenue: number; initial: string; colorIdx: number }
+
+const _LB_AVATAR    = 32;                     // avatar diameter
+const _LB_SPACING   = 4;
+const _LB_BAR_W     = _LB_AVATAR + 10;        // bar width = avatar + snug padding → 42px
+const _LB_TOP_R     = _LB_BAR_W / 2;          // top radius = half width → perfect semicircle cap
+const _LB_STAGGER   = 55;                     // ms between each bar entering
+const _LB_DELAY     = 300;                    // initial delay before bars start
+const _LB_CONTAINER = 170;                    // fixed container height
+
+function ClientBar({
+  entry, index, minMax, anim, isLast, primaryColor,
+}: {
+  entry: ClientBarEntry;
+  index: number;
+  minMax: [number, number];
+  anim: SharedValue<number>;
+  isLast: boolean;
+  primaryColor: string;
+}) {
+  const isTop = entry.revenue === minMax[1];
+  const accent = isTop ? primaryColor : CHART_COLORS[entry.colorIdx % CHART_COLORS.length];
+
+  // Full bar height = body portion + avatar size + padding
+  const targetBodyH = mapRange(
+    entry.revenue, minMax[0], minMax[1],
+    _LB_SPACING * 4,
+    _LB_CONTAINER - _LB_AVATAR - 20, // 20 = name row below
+  );
+
+  const derived = useDerivedValue(() =>
+    withDelay(_LB_STAGGER * index, withSpring(anim.value, { damping: 13, stiffness: 80 }))
+  );
+
+  // Bar grows from circle → full pill; border-bottom-radius collapses from circle to flat
+  const barStyle = useAnimatedStyle(() => ({
+    height: derived.value * targetBodyH + _LB_AVATAR + _LB_SPACING,
+    borderBottomLeftRadius: interpolate(derived.value, [0, 1], [_LB_TOP_R, 4]),
+    borderBottomRightRadius: interpolate(derived.value, [0, 1], [_LB_TOP_R, 4]),
+    backgroundColor: isTop
+      ? interpolateColor(derived.value, [0, 1], ['rgba(0,0,0,0.06)', primaryColor])
+      : 'rgba(0,0,0,0.06)',
+  }));
+
+  // Amount text fades in after bar is 20% grown
+  const amtFade = useAnimatedStyle(() => ({
+    opacity: interpolate(derived.value, [0, 0.2, 1], [0, 0, 1]),
+  }));
+
+  const firstName = entry.name.split(' ')[0] ?? entry.name;
+  const amtLabel = entry.revenue >= 1000
+    ? `₪${(entry.revenue / 1000).toFixed(1)}k`
+    : `₪${Math.round(entry.revenue)}`;
+
+  return (
+    <Animated.View
+      entering={FadeInRight.delay(_LB_STAGGER * index + _LB_DELAY)
+        .springify()
+        .withCallback((finished) => {
+          'worklet';
+          if (finished && isLast) anim.value = 1;
+        })}
+      style={lbStyles.col}
+    >
+      {/* Bar contains avatar at top + amount text inside */}
+      <Animated.View style={[
+        lbStyles.bar,
+        { backgroundColor: isTop ? `${primaryColor}18` : 'rgba(0,0,0,0.06)' },
+        barStyle,
+      ]}>
+        {/* Avatar circle at top of bar */}
+        <View style={[
+          lbStyles.avatar,
+          {
+            borderColor: isTop ? 'rgba(255,255,255,0.6)' : `${accent}55`,
+            padding: _LB_SPACING / 2,
+          },
+        ]}>
+          <View style={[lbStyles.avatarInner, { backgroundColor: isTop ? 'rgba(255,255,255,0.25)' : `${accent}22` }]}>
+            <Text style={[lbStyles.avatarInitial, { color: isTop ? '#FFFFFF' : accent }]}>
+              {entry.initial}
+            </Text>
+          </View>
+        </View>
+
+        {/* Revenue amount — fades in after bar grows */}
+        <Animated.Text style={[
+          lbStyles.barAmt,
+          { color: isTop ? '#fff' : accent },
+          amtFade,
+        ]}>
+          {amtLabel}
+        </Animated.Text>
+      </Animated.View>
+
+      {/* Client first name below bar */}
+      <Text numberOfLines={1} style={lbStyles.barName}>
+        {firstName}
+      </Text>
+    </Animated.View>
+  );
+}
+
+function ClientsLeaderboard({
+  entries, primaryColor,
+}: {
+  entries: ClientBarEntry[];
+  primaryColor: string;
+}) {
+  const anim = useSharedValue(0);
+  if (entries.length < 2) return null;
+
+  const revenues = entries.map((e) => e.revenue);
+  const maxRev = Math.max(...revenues);
+  const minRev = Math.min(...revenues);
+  const adjustedMin = minRev === maxRev ? 0 : minRev * 0.4;
+
+  return (
+    <View style={lbStyles.container}>
+      {entries.map((entry, i) => (
+        <ClientBar
+          key={entry.clientId}
+          entry={entry}
+          index={i}
+          minMax={[adjustedMin, maxRev]}
+          anim={anim}
+          isLast={i === entries.length - 1}
+          primaryColor={primaryColor}
+        />
+      ))}
+    </View>
+  );
+}
+
+const lbStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    height: _LB_CONTAINER,
+    paddingHorizontal: 4,
+  },
+  col: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 0,
+    flex: 1,
+    paddingHorizontal: 2,
+  },
+  // The animated bar wrapper — starts as a circle, expands upward
+  bar: {
+    width: _LB_BAR_W,
+    borderTopLeftRadius: _LB_TOP_R,
+    borderTopRightRadius: _LB_TOP_R,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: _LB_SPACING / 2,
+    gap: _LB_SPACING / 2,
+    overflow: 'hidden',
+  },
+  // Dashed outer ring
+  avatar: {
+    width: _LB_AVATAR,
+    height: _LB_AVATAR,
+    borderRadius: _LB_AVATAR / 2,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInner: {
+    width: _LB_AVATAR - 8,
+    height: _LB_AVATAR - 8,
+    borderRadius: (_LB_AVATAR - 8) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: { fontSize: 11, fontWeight: '800' },
+  barAmt: { fontSize: 10, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
+  barName: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 6,
+    maxWidth: 56,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────
+// COUNT-UP ANIMATION HOOK
+// ─────────────────────────────────────────────────────────────
+function useCountUp(target: number, trigger: number, duration = 950): number {
+  const [display, setDisplay] = useState(0);
+  const sv = useSharedValue(0);
+
+  useEffect(() => {
+    sv.value = 0;
+    sv.value = withTiming(target, { duration, easing: Easing.out(Easing.cubic) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, trigger]);
+
+  useDerivedValue(() => {
+    runOnJS(setDisplay)(Math.round(sv.value));
+  });
+
+  return display;
+}
+
+// ─────────────────────────────────────────────────────────────
+// COLLAPSIBLE APPOINTMENT DATE GROUP (with Reanimated animation)
+// ─────────────────────────────────────────────────────────────
+function ApptDateGroup({
+  date,
+  appts,
+  primaryColor,
+  theme,
+  formatCurrency,
+  isLast,
+}: {
+  date: string;
+  appts: CompletedAppointmentIncomeRow[];
+  primaryColor: string;
+  theme: ReturnType<typeof import('@/lib/hooks/useBusinessColors').useBusinessColors>['colors'];
+  formatCurrency: (v: number) => string;
+  isLast: boolean;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const progress = useSharedValue(0);
+  const dayTotal = appts.reduce((s, a) => s + a.price, 0);
+
+  const toggle = () => {
+    const next = !isExpanded;
+    setIsExpanded(next);
+    progress.value = withTiming(next ? 1 : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
+  const bodyStyle = useAnimatedStyle(() => ({
+    maxHeight: interpolate(progress.value, [0, 1], [0, appts.length * 90 + 16]),
+    opacity: interpolate(progress.value, [0, 0.35, 1], [0, 0.6, 1]),
+    overflow: 'hidden',
+  }));
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(progress.value, [0, 1], [0, 180])}deg` }],
+  }));
+
+  return (
+    <View style={[!isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.07)' }]}>
+      {/* Header row — always visible */}
+      <TouchableOpacity activeOpacity={0.72} onPress={toggle} style={styles.apptCollapseRow}>
+        {/* LEFT: animated chevron + price pill */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Animated.View style={chevronStyle}>
+            <ChevronDown size={15} color={theme.textSecondary ?? '#9CA3AF'} />
+          </Animated.View>
+          <View style={[styles.apptDayTotalPill, { backgroundColor: `${primaryColor}14` }]}>
+            <Text style={[styles.apptDayTotalText, { color: primaryColor }]}>
+              {formatCurrency(dayTotal)}
+            </Text>
+          </View>
+        </View>
+        {/* RIGHT: date label */}
+        <Text style={[styles.apptDateLabel, { color: theme.text, flex: 1, textAlign: 'right' }]}>
+          {formatDateLabel(date)}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Animated body */}
+      <Animated.View style={bodyStyle}>
+        <View style={{ paddingBottom: 12, gap: 8 }}>
+          {appts.map((row) => {
+            const client = row.client_label.trim() || 'לקוח';
+            const initial = (client.trim().charAt(0) || '?').toUpperCase();
+            const shortTime = (row.slot_time ?? '').slice(0, 5); // "HH:MM"
+            const successColor = theme.success ?? '#10B981';
+            return (
+              <View
+                key={row.id}
+                style={{
+                  marginHorizontal: 2,
+                  backgroundColor: `${primaryColor}08`,
+                  borderRadius: 16,
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                {/* LEFT: price */}
+                <Text style={{ fontSize: 15, fontWeight: '900', color: successColor, letterSpacing: -0.3, minWidth: 48, textAlign: 'left' }}>
+                  {formatCurrency(row.price)}
+                </Text>
+
+                {/* CENTER: name + service + time */}
+                <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text, textAlign: 'right' }} numberOfLines={1}>
+                    {client}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: theme.textSecondary ?? '#6B7280', marginTop: 2, textAlign: 'right' }} numberOfLines={1}>
+                    {row.service_name}
+                  </Text>
+                  <View style={{ backgroundColor: `${primaryColor}14`, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 2, marginTop: 5, alignSelf: 'flex-end' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: primaryColor }}>{shortTime}</Text>
+                  </View>
+                </View>
+
+                {/* RIGHT: avatar */}
+                <View style={{ backgroundColor: `${primaryColor}1C`, width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: primaryColor }}>{initial}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// COLLAPSIBLE EXPENSE DATE GROUP (with Reanimated animation)
+// ─────────────────────────────────────────────────────────────
+function ExpenseDateGroup({
+  date,
+  dayExpenses,
+  errorColor,
+  primaryColor,
+  theme,
+  formatCurrency,
+  isLast,
+  handleDeleteExpense,
+}: {
+  date: string;
+  dayExpenses: BusinessExpense[];
+  errorColor: string;
+  primaryColor: string;
+  theme: ReturnType<typeof import('@/lib/hooks/useBusinessColors').useBusinessColors>['colors'];
+  formatCurrency: (v: number) => string;
+  isLast: boolean;
+  handleDeleteExpense: (e: BusinessExpense) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const progress = useSharedValue(0);
+  const dayTotal = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
+
+  const toggle = () => {
+    const next = !isExpanded;
+    setIsExpanded(next);
+    progress.value = withTiming(next ? 1 : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
+  const bodyStyle = useAnimatedStyle(() => ({
+    maxHeight: interpolate(progress.value, [0, 1], [0, dayExpenses.length * 100 + 16]),
+    opacity: interpolate(progress.value, [0, 0.35, 1], [0, 0.6, 1]),
+    overflow: 'hidden',
+  }));
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${interpolate(progress.value, [0, 1], [0, 180])}deg` }],
+  }));
+
+  return (
+    <View style={[!isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.07)' }]}>
+      {/* Header row */}
+      <TouchableOpacity activeOpacity={0.72} onPress={toggle} style={styles.apptCollapseRow}>
+        {/* LEFT: chevron + total pill */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Animated.View style={chevronStyle}>
+            <ChevronDown size={15} color={theme.textSecondary ?? '#9CA3AF'} />
+          </Animated.View>
+          <View style={[styles.apptDayTotalPill, { backgroundColor: `${errorColor}14` }]}>
+            <Text style={[styles.apptDayTotalText, { color: errorColor }]}>
+              {formatCurrency(dayTotal)}
+            </Text>
+          </View>
+        </View>
+        {/* RIGHT: date label */}
+        <Text style={[styles.apptDateLabel, { color: theme.text, flex: 1, textAlign: 'right' }]}>
+          {formatDateLabel(date)}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Animated body */}
+      <Animated.View style={bodyStyle}>
+        <View style={{ paddingBottom: 12, gap: 8 }}>
+          {dayExpenses.map((expense) => {
+            const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
+            const title = expense.description || cat.label;
+            return (
+              <View
+                key={expense.id}
+                style={{
+                  marginHorizontal: 2,
+                  backgroundColor: `${errorColor}07`,
+                  borderRadius: 16,
+                  padding: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                {/* LEFT: amount */}
+                <Text style={{ fontSize: 15, fontWeight: '900', color: errorColor, letterSpacing: -0.3, minWidth: 52, textAlign: 'left' }}>
+                  {formatCurrency(Number(expense.amount))}
+                </Text>
+
+                {/* CENTER: title + category + receipt */}
+                <View style={{ flex: 1, minWidth: 0, alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text, textAlign: 'right' }} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    {expense.receipt_url && (
+                      <TouchableOpacity
+                        onPress={() => Linking.openURL(expense.receipt_url!)}
+                        activeOpacity={0.75}
+                        style={{ backgroundColor: `${primaryColor}12`, borderRadius: 8, padding: 5 }}
+                      >
+                        <FileImage size={14} color={primaryColor} strokeWidth={2} />
+                      </TouchableOpacity>
+                    )}
+                    <View style={{ backgroundColor: `${cat.color}18`, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: cat.color }}>{cat.label}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* RIGHT: delete button */}
+                <TouchableOpacity
+                  onPress={() => handleDeleteExpense(expense)}
+                  activeOpacity={0.75}
+                  style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: `${errorColor}10`, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Trash2 size={18} color={errorColor} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────
@@ -473,6 +1087,29 @@ export default function FinanceScreen() {
   } = useAdminFinanceMonthReport();
 
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const expenseSheetRef = useRef<BottomSheetModal>(null);
+
+  useEffect(() => {
+    if (showAddExpense) expenseSheetRef.current?.present();
+    else expenseSheetRef.current?.dismiss();
+  }, [showAddExpense]);
+
+  const renderExpenseBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+        pressBehavior="close"
+      />
+    ),
+    [],
+  );
+  const [sparklineW, setSparklineW] = useState(0);
+  const [countTrigger, setCountTrigger] = useState(0);
+  const extraApptSv = useSharedValue(0);
+  const extraExpSv  = useSharedValue(0);
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [newExpenseDescription, setNewExpenseDescription] = useState('');
   const [newExpenseCategory, setNewExpenseCategory] = useState<ExpenseCategory>('other');
@@ -497,18 +1134,23 @@ export default function FinanceScreen() {
   useEffect(() => { insetsTopSV.value = insets.top; }, [insets.top, insetsTopSV]);
 
   const measuredFinanceHeaderHeight = useSharedValue(insets.top + 80);
-  const financeHeaderOffsetY = useSharedValue(0);
+  // Start hidden (-200 covers any header height before first layout)
+  const financeHeaderOffsetY = useSharedValue(-200);
   const financeLastScrollY = useSharedValue(0);
+
+  // Show header only after scrolling past this Y threshold (hero card height ~= 260px)
+  const HEADER_APPEAR_Y = 180;
 
   const financeScrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       const y = e.contentOffset.y;
-      const dy = y - financeLastScrollY.value;
       financeLastScrollY.value = y;
       const h = measuredFinanceHeaderHeight.value;
-      if (y <= 4) { financeHeaderOffsetY.value = withTiming(0, FINANCE_HEADER_SHOW); return; }
-      if (dy > FINANCE_SCROLL_DOWN_THRESHOLD) financeHeaderOffsetY.value = withTiming(-h, FINANCE_HEADER_HIDE);
-      else if (dy < -FINANCE_SCROLL_UP_THRESHOLD) financeHeaderOffsetY.value = withTiming(0, FINANCE_HEADER_SHOW);
+      if (y < HEADER_APPEAR_Y) {
+        financeHeaderOffsetY.value = withTiming(-h, FINANCE_HEADER_HIDE);
+      } else {
+        financeHeaderOffsetY.value = withTiming(0, FINANCE_HEADER_SHOW);
+      }
     },
   });
 
@@ -519,9 +1161,8 @@ export default function FinanceScreen() {
     return { opacity, transform: [{ translateY: t }] };
   });
 
-  const financeScrollTopSpacerStyle = useAnimatedStyle(() => ({
-    height: Math.max(insetsTopSV.value, measuredFinanceHeaderHeight.value + financeHeaderOffsetY.value),
-  }));
+  // No top spacer needed — hero card extends to y=0 with internal paddingTop for insets
+  const financeScrollTopSpacerStyle = useAnimatedStyle(() => ({ height: 0 }));
 
   const onFinanceHeaderLayout = useCallback(
     (e: LayoutChangeEvent) => { measuredFinanceHeaderHeight.value = e.nativeEvent.layout.height; },
@@ -548,13 +1189,16 @@ export default function FinanceScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      try { setStatusBarStyle('dark', true); setStatusBarBackgroundColor(theme.surface, true); } catch { }
+      try { setStatusBarStyle('light', true); setStatusBarBackgroundColor('transparent', true); } catch { }
+      financeHeaderOffsetY.value = -measuredFinanceHeaderHeight.value;
+      financeLastScrollY.value = 0;
+      setCountTrigger((t) => t + 1);
       return () => {
         try { setStatusBarBackgroundColor('transparent', true); } catch { }
-        financeHeaderOffsetY.value = 0;
+        financeHeaderOffsetY.value = -measuredFinanceHeaderHeight.value;
         financeLastScrollY.value = 0;
       };
-    }, [theme.surface, financeHeaderOffsetY, financeLastScrollY]),
+    }, [primaryColor, financeHeaderOffsetY, financeLastScrollY, measuredFinanceHeaderHeight]),
   );
 
   const netProfit = totalIncome - totalExpenses;
@@ -578,6 +1222,37 @@ export default function FinanceScreen() {
       : 0;
     return { totalAppts, avgPrice, bestWeek, maxWeekTotal, weekAvg };
   }, [monthAppointments, totalIncome, weekSlices]);
+
+  // ── Count-up animated values (hero + KPI) ──
+  const animNetProfit   = useCountUp(Math.abs(netProfit), countTrigger);
+  const animIncome      = useCountUp(totalIncome, countTrigger);
+  const animExpenses    = useCountUp(totalExpenses, countTrigger);
+  const animTotalAppts  = useCountUp(quickStats.totalAppts, countTrigger);
+  const animAvgPrice    = useCountUp(quickStats.avgPrice, countTrigger);
+  const animBestWeek    = useCountUp(quickStats.bestWeek?.total ?? 0, countTrigger);
+
+  /** Top clients by revenue — ascending order (tallest bar last = rightmost) */
+  const topClients = useMemo((): ClientBarEntry[] => {
+    const map = new Map<string, { name: string; revenue: number }>();
+    for (const appt of monthAppointments) {
+      const key = appt.user_id || appt.client_label;
+      const name = appt.client_label.trim() || 'לקוח';
+      const existing = map.get(key);
+      if (existing) existing.revenue += appt.price;
+      else map.set(key, { name, revenue: appt.price });
+    }
+    return Array.from(map.entries())
+      .map(([id, { name, revenue }], i) => ({
+        clientId: id,
+        name,
+        revenue,
+        initial: (name.trim().charAt(0) || '?').toUpperCase(),
+        colorIdx: i,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 6)
+      .reverse(); // ascending left→right so tallest is rightmost (like reference)
+  }, [monthAppointments]);
 
   /** Daily totals array: index 0 = day 1 */
   const dailyTotals = useMemo(() => {
@@ -681,9 +1356,13 @@ export default function FinanceScreen() {
 
   if (loading) {
     return (
-      <View style={styles.rtlRoot}>
-        <StatusBar style="dark" backgroundColor={theme.surface} />
-        <View style={{ paddingTop: insets.top, backgroundColor: theme.surface }} />
+      <View style={[styles.rtlRoot, { backgroundColor: theme.background }]}>
+        <StatusBar style="light" backgroundColor="transparent" translucent />
+        <LinearGradient
+          colors={[lightenHex(primaryColor, 0.08), darkenHex(primaryColor, 0.18)]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={{ paddingTop: insets.top + 14, paddingBottom: 14 }}
+        />
         <View style={[styles.loadingWrap, { flex: 1 }]}>
           <ActivityIndicator size="large" color={primaryColor} />
           <RtlText style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</RtlText>
@@ -693,19 +1372,23 @@ export default function FinanceScreen() {
   }
 
   return (
-    <View style={styles.rtlRoot}>
-      <StatusBar style="dark" backgroundColor={theme.surface} />
+    <View style={[styles.rtlRoot, { backgroundColor: theme.background }]}>
+      <StatusBar style="light" backgroundColor="transparent" translucent />
 
       {/* ── Sticky header ── */}
       <Animated.View style={[styles.financeHeaderFixed, financeHeaderSlideStyle]} onLayout={onFinanceHeaderLayout}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 14, backgroundColor: theme.surface, borderBottomColor: `${theme.border}18` }]}>
+        <LinearGradient
+          colors={[lightenHex(primaryColor, 0.06), darkenHex(primaryColor, 0.22)]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={[styles.topBar, { paddingTop: insets.top + 14 }]}
+        >
           <View style={styles.topBarTitleBlock}>
-            <RtlText style={[styles.topBarTitle, { color: theme.text }]}>מעקב פיננסי</RtlText>
-            <RtlText style={[styles.topBarSubtitle, { color: theme.textSecondary }]}>
+            <RtlText style={[styles.topBarTitle, { color: '#FFFFFF' }]}>מעקב פיננסי</RtlText>
+            <RtlText style={[styles.topBarSubtitle, { color: 'rgba(255,255,255,0.82)' }]}>
               {MONTH_NAMES_HE[month - 1]} {year}
             </RtlText>
           </View>
-        </View>
+        </LinearGradient>
       </Animated.View>
 
       <AnimatedKeyboardAwareScrollView
@@ -721,13 +1404,11 @@ export default function FinanceScreen() {
         onScroll={financeScrollHandler}
         scrollEventThrottle={16}
       >
-        <Animated.View style={financeScrollTopSpacerStyle} />
-
-        {/* ── Hero Card ── */}
+        {/* ── Hero Card — starts at y=0, paddingTop pushes content below status bar ── */}
         <View style={styles.heroWrapper}>
           <View style={styles.heroCard} onLayout={onHeroLavaLayout}>
             <LinearGradient
-              colors={[lightenHex(primaryColor, 0.1), darkenHex(primaryColor, 0.42)]}
+              colors={[lightenHex(primaryColor, 0.08), darkenHex(primaryColor, 0.38)]}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
@@ -740,7 +1421,7 @@ export default function FinanceScreen() {
                 count={4} duration={16000} blurIntensity={40}
               />
             ) : null}
-            <View style={styles.heroCardInner}>
+            <View style={[styles.heroCardInner, { paddingTop: insets.top + 18 }]}>
               {/* Month navigator */}
               <View style={styles.monthRow}>
                 <TouchableOpacity onPress={goToPreviousMonth} style={styles.monthArrowBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} disabled={reportRefreshing}>
@@ -761,7 +1442,7 @@ export default function FinanceScreen() {
                   {netProfit >= 0 ? '+' : '−'}
                 </Text>
                 <Text style={[styles.heroNetAmountPart, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
-                  {Math.abs(Math.round(netProfit)).toLocaleString('he-IL')}
+                  {animNetProfit.toLocaleString('he-IL')}
                 </Text>
                 <Text style={[styles.heroNetAmountPart, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>₪</Text>
               </View>
@@ -772,7 +1453,7 @@ export default function FinanceScreen() {
                     <ArrowUpRight size={14} color={theme.success} />
                   </View>
                   <RtlText style={styles.heroMiniLabel}>הכנסות</RtlText>
-                  <RtlText style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</RtlText>
+                  <RtlText style={styles.heroMiniValue}>{formatCurrency(animIncome)}</RtlText>
                 </View>
                 <View style={styles.heroMiniDivider} />
                 <View style={styles.heroMiniCard}>
@@ -780,7 +1461,7 @@ export default function FinanceScreen() {
                     <ArrowDownRight size={14} color={theme.error} />
                   </View>
                   <RtlText style={styles.heroMiniLabel}>הוצאות</RtlText>
-                  <RtlText style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</RtlText>
+                  <RtlText style={styles.heroMiniValue}>{formatCurrency(animExpenses)}</RtlText>
                 </View>
               </View>
 
@@ -796,68 +1477,111 @@ export default function FinanceScreen() {
                 </View>
               ) : null}
             </View>
-            {reportRefreshing ? (
-              <View style={styles.heroLoadingOverlay} pointerEvents="auto">
-                <ActivityIndicator size="large" color="#FFFFFF" />
-                <RtlText style={styles.heroLoadingText}>טוען…</RtlText>
-              </View>
-            ) : null}
           </View>
+          {/* Bottom rounded overlay that creates the "card rising from hero" illusion */}
+          <View style={[styles.heroBottomRound, { backgroundColor: theme.background }]} pointerEvents="none" />
         </View>
 
         {/* ── KPI Stats Strip ── */}
         {!analyticsLoading && quickStats.totalAppts > 0 && (
           <View style={styles.kpiStrip}>
-            <View style={[styles.kpiCard, { backgroundColor: theme.surface, borderColor: `${theme.border}18` }]}>
-              <View style={[styles.kpiIconWrap, { backgroundColor: `${primaryColor}14` }]}>
-                <Users size={16} color={primaryColor} />
+
+            {/* KPI — total appointments */}
+            <View style={[styles.kpiCard, { backgroundColor: `${primaryColor}09` }]}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: `${primaryColor}18` }]}>
+                <Users size={20} color={primaryColor} />
               </View>
-              <RtlText style={[styles.kpiValue, { color: theme.text }]}>{quickStats.totalAppts}</RtlText>
-              <RtlText style={[styles.kpiLabel, { color: theme.textSecondary }]}>תורים</RtlText>
-            </View>
-            <View style={[styles.kpiCard, { backgroundColor: theme.surface, borderColor: `${theme.border}18` }]}>
-              <View style={[styles.kpiIconWrap, { backgroundColor: '#F0FDF4' }]}>
-                <TrendingUp size={16} color="#16A34A" />
+              <View style={styles.kpiTextBlock}>
+                <RtlText style={[styles.kpiValue, { color: theme.text }]}>{animTotalAppts}</RtlText>
+                <RtlText style={[styles.kpiLabel, { color: theme.textSecondary }]}>תורים בחודש</RtlText>
               </View>
-              <RtlText style={[styles.kpiValue, { color: theme.text }]}>{formatCurrency(quickStats.avgPrice)}</RtlText>
-              <RtlText style={[styles.kpiLabel, { color: theme.textSecondary }]}>ממוצע לתור</RtlText>
             </View>
-            {quickStats.bestWeek && quickStats.bestWeek.total > 0 && (
-              <View style={[styles.kpiCard, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
-                <View style={[styles.kpiIconWrap, { backgroundColor: '#FEF3C7' }]}>
-                  <Star size={16} color="#D97706" fill="#D97706" />
+
+            {/* KPI — avg price per appointment */}
+            <View style={[styles.kpiCard, { backgroundColor: '#F0FDF4' }]}>
+              <View style={[styles.kpiIconWrap, { backgroundColor: '#DCFCE7' }]}>
+                <TrendingUp size={20} color="#16A34A" />
+              </View>
+              <View style={styles.kpiTextBlock}>
+                <RtlText style={[styles.kpiValue, { color: theme.text }]}>{formatCurrency(animAvgPrice)}</RtlText>
+                <RtlText style={[styles.kpiLabel, { color: theme.textSecondary }]}>ממוצע לתור</RtlText>
+              </View>
+            </View>
+
+            {/* KPI — best week */}
+            {quickStats.bestWeek && quickStats.bestWeek.total > 0 && (() => {
+              const weekRange = quickStats.bestWeek.label.split(' ב')[0] ?? '';
+              const weekMonth = quickStats.bestWeek.label.split(' ב')[1] ?? '';
+              return (
+                <View style={[styles.kpiCard, { backgroundColor: '#FFFBEB' }]}>
+                  <View style={[styles.kpiIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                    <Star size={20} color="#D97706" fill="#D97706" />
+                  </View>
+                  <View style={styles.kpiTextBlock}>
+                    <RtlText style={[styles.kpiValue, { color: '#92400E' }]} numberOfLines={1}>
+                      {formatCurrency(animBestWeek)}
+                    </RtlText>
+                    <RtlText style={[styles.kpiLabel, { color: '#B45309' }]}>השבוע הטוב</RtlText>
+                    {weekRange ? (
+                      <View style={styles.kpiWeekTag}>
+                        <Text style={styles.kpiWeekTagText}>{weekRange}{weekMonth ? ` ב${weekMonth}` : ''}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
-                <RtlText style={[styles.kpiValue, { color: '#92400E' }]} numberOfLines={1}>
-                  {formatCurrency(quickStats.bestWeek.total)}
-                </RtlText>
-                <RtlText style={[styles.kpiLabel, { color: '#B45309' }]}>שבוע מוביל</RtlText>
-              </View>
-            )}
+              );
+            })()}
+
           </View>
         )}
 
         {/* ── Daily trend sparkline ── */}
         {!analyticsLoading && dailyTotals.some((v) => v > 0) && (
           <>
-            <View style={styles.sectionHeading}>
-              <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>מגמת הכנסות יומית</RtlText>
-            </View>
-            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14`, paddingVertical: 16, paddingHorizontal: 16 }]}>
-              <DailySparkline dailyTotals={dailyTotals} primaryColor={primaryColor} chartWidth={chartWidth - 0} />
+            <SectionHeader title="מגמת הכנסות יומית" primaryColor={primaryColor} textColor={theme.text} />
+            <View style={[styles.card, { backgroundColor: theme.background, paddingVertical: 20, paddingHorizontal: 16 }]}>
+              <View style={styles.sparklineTitleRow}>
+                <RtlText style={[styles.sparklineTitleSub, { color: theme.textSecondary }]}>סה״כ החודש</RtlText>
+                <RtlText style={[styles.sparklineTitleTotal, { color: theme.text }]}>
+                  {formatCurrency(dailyTotals.reduce((s, v) => s + v, 0))}
+                </RtlText>
+              </View>
+              <View
+                onLayout={(e) => setSparklineW(Math.floor(e.nativeEvent.layout.width))}
+                style={{ width: '100%' }}
+              >
+                <DailySparkline
+                  dailyTotals={dailyTotals}
+                  primaryColor={primaryColor}
+                  chartWidth={sparklineW > 10 ? sparklineW : chartWidth}
+                  trigger={countTrigger}
+                />
+              </View>
               <View style={[styles.sparklineLegend, { borderTopColor: `${theme.border}20` }]}>
                 <RtlText style={[styles.sparklineLegendText, { color: theme.textSecondary }]}>
-                  יום 1 · · · · · · · · · · · · · · · יום {dailyTotals.length}
+                  יום {dailyTotals.length} · · · · · · · · · · · · · · · יום 1
                 </RtlText>
               </View>
             </View>
           </>
         )}
 
+        {/* ── Top Clients Leaderboard ── */}
+        {!analyticsLoading && topClients.length >= 2 && (
+          <>
+            <SectionHeader title="לקוחות מובילים החודש" primaryColor={primaryColor} textColor={theme.text} />
+            <View style={[styles.card, { backgroundColor: theme.background, paddingHorizontal: 12, paddingTop: 16, paddingBottom: 10 }]}>
+              <ClientsLeaderboard
+                entries={topClients}
+                primaryColor={primaryColor}
+              />
+            </View>
+          </>
+        )}
+
         {/* ── Income Breakdown (Donut + Legend) ── */}
-        <View style={styles.sectionHeading}>
-          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>פירוט הכנסות לפי שירות</RtlText>
-        </View>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
+        <SectionHeader title="פירוט הכנסות לפי שירות" primaryColor={primaryColor} textColor={theme.text} />
+        <View style={[styles.card, { backgroundColor: theme.background }]}>
           {incomeBreakdown.length === 0 ? (
             <View style={styles.emptyState}>
               <TrendingUp size={36} color="#E5E7EB" />
@@ -866,40 +1590,43 @@ export default function FinanceScreen() {
             </View>
           ) : (
             <>
-              {/* Donut + legend row */}
-              <View style={styles.donutRow}>
+              {/* Donut centered */}
+              <View style={{ alignItems: 'center', marginBottom: 18 }}>
                 <IncomeDonut breakdown={incomeBreakdown} totalIncome={totalIncome} fmtCurrency={formatCurrency} />
-                <View style={styles.donutLegend}>
-                  {incomeBreakdown.map((item, i) => {
-                    const color = CHART_COLORS[i % CHART_COLORS.length];
-                    const pct = totalIncome > 0 ? Math.round((item.total / totalIncome) * 100) : 0;
-                    const isLast = i === incomeBreakdown.length - 1;
-                    return (
-                      <View
-                        key={item.service_id || item.service_name}
-                        style={[
-                          styles.legendItem,
-                          !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EEF0F5' },
-                        ]}
-                      >
-                        <View style={[styles.legendDot, { backgroundColor: color }]} />
-                        <View style={styles.legendBody}>
-                          <RtlText style={[styles.legendName, { color: theme.text }]} numberOfLines={2}>
-                            {item.service_name}
-                          </RtlText>
-                          <View style={styles.legendMeta}>
-                            <RtlText style={[styles.legendAmt, { color: theme.success }]}>{formatCurrency(item.total)}</RtlText>
-                            <View style={[styles.legendPct, { backgroundColor: `${color}18` }]}>
-                              <Text style={[styles.legendPctText, { color }]}>{pct}%</Text>
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
               </View>
-              <View style={[styles.incomeTotalRow, { borderTopColor: `${theme.border}20` }]}>
+
+              {/* 2-column service grid */}
+              <View style={styles.serviceGrid}>
+                {incomeBreakdown.map((item, i) => {
+                  const color = CHART_COLORS[i % CHART_COLORS.length];
+                  const pct = totalIncome > 0 ? Math.round((item.total / totalIncome) * 100) : 0;
+                  return (
+                    <View
+                      key={item.service_id || item.service_name}
+                      style={[styles.serviceGridCard, { backgroundColor: `${color}0C` }]}
+                    >
+                      {/* Top row: dot + pct pill */}
+                      <View style={styles.serviceGridTop}>
+                        <View style={[styles.serviceGridPct, { backgroundColor: `${color}20` }]}>
+                          <Text style={[styles.serviceGridPctText, { color }]}>{pct}%</Text>
+                        </View>
+                        <View style={[styles.serviceGridDot, { backgroundColor: color }]} />
+                      </View>
+                      {/* Service name */}
+                      <RtlText style={[styles.serviceGridName, { color: theme.text }]}>
+                        {item.service_name}
+                      </RtlText>
+                      {/* Amount */}
+                      <RtlText style={[styles.serviceGridAmt, { color }]}>
+                        {formatCurrency(item.total)}
+                      </RtlText>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Total row */}
+              <View style={[styles.incomeTotalRow, { borderTopColor: `${theme.border}20`, backgroundColor: `${theme.success}08`, borderRadius: 12, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: 0 }]}>
                 <RtlText style={[styles.totalLabel, { color: theme.text }]}>סך הכל הכנסות</RtlText>
                 <RtlText style={[styles.totalAmount, { color: theme.success }]}>{formatCurrency(totalIncome)}</RtlText>
               </View>
@@ -908,15 +1635,12 @@ export default function FinanceScreen() {
         </View>
 
         {/* ── Weekly SVG Bar Chart ── */}
-        <View style={styles.sectionHeading}>
-          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>ניתוח שבועי</RtlText>
-        </View>
+        <SectionHeader title="ניתוח שבועי" primaryColor={primaryColor} textColor={theme.text} />
         <View
           style={[
             styles.card,
             {
-              backgroundColor: theme.surface,
-              borderColor: `${theme.border}14`,
+              backgroundColor: theme.background,
               paddingHorizontal: 12,
               paddingTop: 16,
               paddingBottom: 28,
@@ -944,10 +1668,8 @@ export default function FinanceScreen() {
         </View>
 
         {/* ── Appointments by date ── */}
-        <View style={styles.sectionHeading}>
-          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>תורים החודש</RtlText>
-        </View>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
+        <SectionHeader title="תורים החודש" primaryColor={primaryColor} textColor={theme.text} />
+        <View style={[styles.card, { backgroundColor: theme.background }]}>
           {analyticsLoading ? (
             <ActivityIndicator style={{ marginVertical: 24 }} color={primaryColor} />
           ) : appointmentsByDate.length === 0 ? (
@@ -958,90 +1680,92 @@ export default function FinanceScreen() {
             </View>
           ) : (
             <>
-              {visibleDateGroups.map(([date, appts], groupIdx) => {
-                const dayTotal = appts.reduce((s, a) => s + a.price, 0);
-                const isLast = groupIdx === visibleDateGroups.length - 1;
+              {/* First N groups — always visible */}
+              {appointmentsByDate.slice(0, APPT_GROUPS_INITIAL).map(([date, appts], groupIdx) => (
+                <ApptDateGroup
+                  key={date}
+                  date={date}
+                  appts={appts}
+                  primaryColor={primaryColor}
+                  theme={theme}
+                  formatCurrency={formatCurrency}
+                  isLast={groupIdx === APPT_GROUPS_INITIAL - 1 && appointmentsByDate.length <= APPT_GROUPS_INITIAL}
+                />
+              ))}
+
+              {/* Extra groups — animated slide */}
+              {appointmentsByDate.length > APPT_GROUPS_INITIAL && (() => {
+                const extraGroups = appointmentsByDate.slice(APPT_GROUPS_INITIAL);
+                const extraStyle = {
+                  overflow: 'hidden' as const,
+                  maxHeight: extraApptSv,
+                };
                 return (
-                  <View
-                    key={date}
-                    style={[
-                      styles.apptDateGroup,
-                      !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}22` },
-                    ]}
-                  >
-                    <View style={styles.apptDateHeader}>
-                      <View style={[styles.apptDayTotalPill, { backgroundColor: `${primaryColor}12` }]}>
-                        <RtlText style={[styles.apptDayTotalText, { color: primaryColor }]}>
-                          {formatCurrency(dayTotal)}
-                        </RtlText>
-                      </View>
-                      <RtlText style={[styles.apptDateLabel, { color: theme.text }]}>
-                        {formatDateLabel(date)}
-                      </RtlText>
-                    </View>
-
-                    {appts.map((row, rowIdx) => {
-                      const client = row.client_label.trim() || 'לקוח';
-                      const initial = (client.trim().charAt(0) || '?').toUpperCase();
-                      const isLastRow = rowIdx === appts.length - 1;
-                      return (
-                        <View
-                          key={row.id}
-                          style={[
-                            styles.apptCompactRow,
-                            !isLastRow && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}12` },
-                          ]}
-                        >
-                          <View style={[styles.apptCompactAvatar, { backgroundColor: `${primaryColor}18` }]}>
-                            <Text style={[styles.apptCompactAvatarChar, { color: primaryColor }]}>{initial}</Text>
-                          </View>
-                          <View style={styles.apptCompactBody}>
-                            <RtlText style={[styles.apptCompactName, { color: theme.text }]} numberOfLines={1}>{client}</RtlText>
-                            <RtlText style={[styles.apptCompactMeta, { color: theme.textSecondary }]} numberOfLines={1}>
-                              {row.service_name} · {row.slot_time}
-                            </RtlText>
-                          </View>
-                          <RtlText style={[styles.apptCompactPrice, { color: theme.success }]}>
-                            {formatCurrency(row.price)}
-                          </RtlText>
-                        </View>
-                      );
-                    })}
-                  </View>
+                  <>
+                    <Animated.View style={extraStyle}>
+                      {extraGroups.map(([date, appts], i) => (
+                        <ApptDateGroup
+                          key={date}
+                          date={date}
+                          appts={appts}
+                          primaryColor={primaryColor}
+                          theme={theme}
+                          formatCurrency={formatCurrency}
+                          isLast={i === extraGroups.length - 1}
+                        />
+                      ))}
+                    </Animated.View>
+                    <TouchableOpacity
+                      style={[styles.showMoreBtn, { backgroundColor: primaryColor }]}
+                      onPress={() => {
+                        const next = !showAllAppointments;
+                        setShowAllAppointments(next);
+                        extraApptSv.value = withTiming(
+                          next ? extraGroups.length * 300 : 0,
+                          { duration: 380, easing: Easing.out(Easing.cubic) },
+                        );
+                      }}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={[styles.showMoreBtnText, { color: '#fff' }]}>
+                        {showAllAppointments ? 'הצג פחות' : 'הצג את כל הימים'}
+                      </Text>
+                      {showAllAppointments
+                        ? <ChevronUp size={14} color="#fff" />
+                        : <ChevronDown size={14} color="#fff" />}
+                    </TouchableOpacity>
+                  </>
                 );
-              })}
-
-              {appointmentsByDate.length > APPT_GROUPS_INITIAL && (
-                <TouchableOpacity
-                  style={[styles.showMoreBtn, { borderColor: `${primaryColor}28`, backgroundColor: `${primaryColor}07` }]}
-                  onPress={() => setShowAllAppointments((p) => !p)}
-                  activeOpacity={0.7}
-                >
-                  {showAllAppointments ? <ChevronUp size={16} color={primaryColor} /> : <ChevronDown size={16} color={primaryColor} />}
-                  <RtlText style={[styles.showMoreBtnText, { color: primaryColor }]}>
-                    {showAllAppointments ? 'הצג פחות' : `הצג את כל הימים (${appointmentsByDate.length})`}
-                  </RtlText>
-                </TouchableOpacity>
-              )}
+              })()}
             </>
           )}
         </View>
 
-        {/* ── Expenses (same section + card pattern as תורים החודש) ── */}
-        <View style={styles.sectionHeading}>
-          <RtlText style={[styles.sectionHeadingTitle, { color: theme.textSecondary }]}>הוצאות החודש</RtlText>
-        </View>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
-          <View style={styles.financeCardToolbar}>
+        {/* ── Expenses ── */}
+        <SectionHeader
+          title="הוצאות החודש"
+          primaryColor={primaryColor}
+          textColor={theme.text}
+          action={
             <TouchableOpacity
-              style={[styles.expenseSectionAddCircle, { backgroundColor: primaryColor }]}
               onPress={() => setShowAddExpense(true)}
               activeOpacity={0.82}
-              accessibilityLabel="הוסף הוצאה"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: primaryColor,
+                borderRadius: 50,
+                paddingVertical: 6,
+                paddingHorizontal: 12,
+              }}
             >
-              <Plus size={17} color="#fff" strokeWidth={2.5} />
+              <Plus size={13} color="#fff" strokeWidth={2.8} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#fff' }}>הוסף הוצאה</Text>
             </TouchableOpacity>
-          </View>
+          }
+        />
+        <View style={[styles.card, { backgroundColor: theme.background }]}>
           {expenses.length === 0 ? (
             <View style={styles.emptyState}>
               <ArrowDownRight size={36} color="#E5E7EB" />
@@ -1050,104 +1774,65 @@ export default function FinanceScreen() {
             </View>
           ) : (
             <>
-              {visibleExpenseDateGroups.map(([date, dayExpenses], groupIdx) => {
-                const dayTotal = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
-                const isLastGroup = groupIdx === visibleExpenseDateGroups.length - 1;
+              {/* First N expense groups — always visible */}
+              {expensesByDate.slice(0, EXPENSE_GROUPS_INITIAL).map(([date, dayExpenses], groupIdx) => (
+                <ExpenseDateGroup
+                  key={date}
+                  date={date}
+                  dayExpenses={dayExpenses}
+                  errorColor={theme.error ?? '#EF4444'}
+                  primaryColor={primaryColor}
+                  theme={theme}
+                  formatCurrency={formatCurrency}
+                  isLast={groupIdx === EXPENSE_GROUPS_INITIAL - 1 && expensesByDate.length <= EXPENSE_GROUPS_INITIAL}
+                  handleDeleteExpense={handleDeleteExpense}
+                />
+              ))}
+
+              {/* Extra expense groups — animated slide */}
+              {expensesByDate.length > EXPENSE_GROUPS_INITIAL && (() => {
+                const extraExp = expensesByDate.slice(EXPENSE_GROUPS_INITIAL);
                 return (
-                  <View
-                    key={date}
-                    style={[
-                      styles.apptDateGroup,
-                      !isLastGroup && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}22` },
-                    ]}
-                  >
-                    <View style={styles.apptDateHeader}>
-                      <View style={[styles.apptDayTotalPill, { backgroundColor: `${theme.error}12` }]}>
-                        <RtlText style={[styles.apptDayTotalText, { color: theme.error }]}>
-                          {formatCurrency(dayTotal)}
-                        </RtlText>
-                      </View>
-                      <RtlText style={[styles.apptDateLabel, { color: theme.text }]}>
-                        {formatDateLabel(date)}
-                      </RtlText>
-                    </View>
-
-                    {dayExpenses.map((expense, rowIdx) => {
-                      const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
-                      const title = expense.description || cat.label;
-                      const isLastRow = rowIdx === dayExpenses.length - 1;
-                      return (
-                        <View
-                          key={expense.id}
-                          style={[
-                            styles.apptCompactRow,
-                            !isLastRow && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${theme.border}12` },
-                          ]}
-                        >
-                          <View style={styles.apptCompactBody}>
-                            <RtlText style={[styles.apptCompactName, { color: theme.text }]} numberOfLines={1}>
-                              {title}
-                            </RtlText>
-                            <RtlText style={[styles.apptCompactMeta, { color: theme.textSecondary }]} numberOfLines={1}>
-                              {cat.label}
-                            </RtlText>
-                          </View>
-                          <View style={styles.expenseIconActions}>
-                            {expense.receipt_url && (
-                              <TouchableOpacity
-                                onPress={() => Linking.openURL(expense.receipt_url!)}
-                                activeOpacity={0.75}
-                                style={[
-                                  styles.expenseIconBtn,
-                                  {
-                                    backgroundColor: `${primaryColor}10`,
-                                    borderColor: `${primaryColor}22`,
-                                  },
-                                ]}
-                                accessibilityLabel="פתיחת קבלה"
-                              >
-                                <FileImage size={17} color={primaryColor} strokeWidth={2.1} />
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                              onPress={() => handleDeleteExpense(expense)}
-                              activeOpacity={0.75}
-                              style={[
-                                styles.expenseIconBtn,
-                                {
-                                  backgroundColor: `${theme.error}08`,
-                                  borderColor: `${theme.error}22`,
-                                },
-                              ]}
-                              accessibilityLabel="מחיקת הוצאה"
-                            >
-                              <Trash2 size={16} color={theme.error} strokeWidth={2.1} />
-                            </TouchableOpacity>
-                          </View>
-                          <RtlText style={[styles.apptCompactPrice, { color: theme.error }]}>
-                            {formatCurrency(Number(expense.amount))}
-                          </RtlText>
-                        </View>
-                      );
-                    })}
-                  </View>
+                  <>
+                    <Animated.View style={{ overflow: 'hidden', maxHeight: extraExpSv }}>
+                      {extraExp.map(([date, dayExpenses], i) => (
+                        <ExpenseDateGroup
+                          key={date}
+                          date={date}
+                          dayExpenses={dayExpenses}
+                          errorColor={theme.error ?? '#EF4444'}
+                          primaryColor={primaryColor}
+                          theme={theme}
+                          formatCurrency={formatCurrency}
+                          isLast={i === extraExp.length - 1}
+                          handleDeleteExpense={handleDeleteExpense}
+                        />
+                      ))}
+                    </Animated.View>
+                    <TouchableOpacity
+                      style={[styles.showMoreBtn, { backgroundColor: primaryColor }]}
+                      onPress={() => {
+                        const next = !showAllExpenseDays;
+                        setShowAllExpenseDays(next);
+                        extraExpSv.value = withTiming(
+                          next ? extraExp.length * 300 : 0,
+                          { duration: 380, easing: Easing.out(Easing.cubic) },
+                        );
+                      }}
+                      activeOpacity={0.82}
+                    >
+                      <Text style={[styles.showMoreBtnText, { color: '#fff' }]}>
+                        {showAllExpenseDays ? 'הצג פחות' : 'הצג את כל הימים'}
+                      </Text>
+                      {showAllExpenseDays
+                        ? <ChevronUp size={14} color="#fff" />
+                        : <ChevronDown size={14} color="#fff" />}
+                    </TouchableOpacity>
+                  </>
                 );
-              })}
+              })()}
 
-              {expensesByDate.length > EXPENSE_GROUPS_INITIAL && (
-                <TouchableOpacity
-                  style={[styles.showMoreBtn, { borderColor: `${primaryColor}28`, backgroundColor: `${primaryColor}07` }]}
-                  onPress={() => setShowAllExpenseDays((p) => !p)}
-                  activeOpacity={0.7}
-                >
-                  {showAllExpenseDays ? <ChevronUp size={16} color={primaryColor} /> : <ChevronDown size={16} color={primaryColor} />}
-                  <RtlText style={[styles.showMoreBtnText, { color: primaryColor }]}>
-                    {showAllExpenseDays ? 'הצג פחות' : `הצג את כל הימים (${expensesByDate.length})`}
-                  </RtlText>
-                </TouchableOpacity>
-              )}
-
-              <View style={[styles.incomeTotalRow, { borderTopColor: `${theme.border}20` }]}>
+              <View style={[styles.incomeTotalRow, { borderTopColor: `${theme.border}20`, backgroundColor: `${theme.error}08`, borderRadius: 12, marginTop: 10, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: 0 }]}>
                 <RtlText style={[styles.totalLabel, { color: theme.text }]}>סך הכל הוצאות</RtlText>
                 <RtlText style={[styles.totalAmount, { color: theme.error }]}>{formatCurrency(totalExpenses)}</RtlText>
               </View>
@@ -1159,89 +1844,104 @@ export default function FinanceScreen() {
       </AnimatedKeyboardAwareScrollView>
 
       {/* ── Add Expense Modal ── */}
-      <Modal visible={showAddExpense} animationType="slide" transparent statusBarTranslucent>
-        <View style={styles.modalOverlay}>
-          <KeyboardAwareScreenScroll
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-          >
-            <View style={[styles.modalSheet, { backgroundColor: theme.surface }]}>
-              <View style={styles.modalHandle} />
-              <View style={styles.modalTopRow}>
-                <RtlText style={[styles.modalTitle, { color: theme.text }]}>הוספת הוצאה</RtlText>
-                <TouchableOpacity onPress={() => { setShowAddExpense(false); setNewExpenseReceipt(null); }} style={styles.modalCloseBtn}>
-                  <X size={22} color={theme.textSecondary} />
+      <BottomSheetModal
+        ref={expenseSheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onDismiss={() => { setShowAddExpense(false); setNewExpenseReceipt(null); }}
+        backdropComponent={renderExpenseBackdrop}
+        handleIndicatorStyle={{ backgroundColor: 'rgba(0,0,0,0.18)', width: 36, height: 4, borderRadius: 2 }}
+        backgroundStyle={{ backgroundColor: theme.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+        topInset={insets.top + 8}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+      >
+        <BottomSheetScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 24) + 16, direction: 'ltr' }}
+        >
+          {/* Title */}
+          <RtlText style={[styles.modalTitle, { color: theme.text, marginBottom: 24 }]}>הוספת הוצאה</RtlText>
+
+          {/* Amount — ₪ on LEFT, number on RIGHT */}
+          <View style={styles.amountBox}>
+            <Text style={styles.amountCurrency}>₪</Text>
+            <TextInput
+              style={styles.amountInput}
+              value={newExpenseAmount}
+              onChangeText={setNewExpenseAmount}
+              placeholder="0"
+              placeholderTextColor="#D1D5DB"
+              keyboardType="decimal-pad"
+              autoFocus={false}
+              textAlign="center"
+            />
+          </View>
+
+          <RtlTextInput
+            style={styles.descInput}
+            value={newExpenseDescription}
+            onChangeText={setNewExpenseDescription}
+            placeholder="תיאור ההוצאה (אופציונלי)"
+            placeholderTextColor="#9CA3AF"
+            textAlign="right"
+            returnKeyType="done"
+          />
+
+          {/* Category */}
+          <RtlText style={[styles.modalSectionLabel, { color: theme.text }]}>בחר קטגוריה</RtlText>
+          <View style={styles.categoryGrid}>
+            {CATEGORIES.map((cat) => {
+              const cfg = CATEGORY_CONFIG[cat];
+              const selected = newExpenseCategory === cat;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => setNewExpenseCategory(cat)}
+                  activeOpacity={0.75}
+                  style={[styles.categoryGridItem, { backgroundColor: selected ? cfg.color : cfg.bg }]}
+                >
+                  <RtlText style={[styles.categoryGridText, { color: selected ? '#fff' : cfg.color }]}>{cfg.label}</RtlText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Receipt */}
+          <RtlText style={[styles.modalSectionLabel, { color: theme.text }]}>קבלה / אסמכתא</RtlText>
+          {newExpenseReceipt ? (
+            <View style={styles.receiptPreviewRow}>
+              <View style={styles.receiptThumbWrap}>
+                <Image source={{ uri: newExpenseReceipt.uri }} style={styles.receiptThumb} />
+                <TouchableOpacity style={styles.receiptRemoveBtn} onPress={() => setNewExpenseReceipt(null)}>
+                  <X size={16} color="#fff" />
                 </TouchableOpacity>
               </View>
-
-              <View style={styles.amountBox}>
-                <TextInput
-                  style={styles.amountInput}
-                  value={newExpenseAmount}
-                  onChangeText={setNewExpenseAmount}
-                  placeholder="0"
-                  placeholderTextColor="#D1D5DB"
-                  keyboardType="decimal-pad"
-                  autoFocus
-                  textAlign="center"
-                />
-                <Text style={styles.amountCurrency}>₪</Text>
-              </View>
-
-              <RtlTextInput
-                style={styles.descInput}
-                value={newExpenseDescription}
-                onChangeText={setNewExpenseDescription}
-                placeholder="תיאור ההוצאה (אופציונלי)"
-                placeholderTextColor="#9CA3AF"
-                textAlign="right"
-                returnKeyType="done"
-              />
-
-              <RtlText style={[styles.modalSectionLabel, { color: theme.text }]}>בחר קטגוריה</RtlText>
-              <View style={styles.categoryGrid}>
-                {CATEGORIES.map((cat) => {
-                  const cfg = CATEGORY_CONFIG[cat];
-                  const selected = newExpenseCategory === cat;
-                  return (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => setNewExpenseCategory(cat)}
-                      activeOpacity={0.75}
-                      style={[styles.categoryGridItem, { backgroundColor: selected ? cfg.color : cfg.bg, borderColor: selected ? cfg.color : 'transparent', borderWidth: selected ? 0 : 1.5 }]}
-                    >
-                      <RtlText style={[styles.categoryGridText, { color: selected ? '#fff' : cfg.color }]}>{cfg.label}</RtlText>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <RtlText style={[styles.modalSectionLabel, { color: theme.text }]}>קבלה / אסמכתא (אופציונלי)</RtlText>
-              {newExpenseReceipt ? (
-                <View style={styles.receiptPreviewRow}>
-                  <View style={styles.receiptThumbWrap}>
-                    <Image source={{ uri: newExpenseReceipt.uri }} style={styles.receiptThumb} />
-                    <TouchableOpacity style={styles.receiptRemoveBtn} onPress={() => setNewExpenseReceipt(null)}>
-                      <X size={16} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                  <RtlText style={[styles.receiptAddedText, { color: theme.textSecondary }]}>תמונה נוספה</RtlText>
-                </View>
-              ) : (
-                <TouchableOpacity style={[styles.receiptAddBtn, { borderColor: primaryColor }]} onPress={pickReceipt} activeOpacity={0.7}>
-                  <FileImage size={22} color={primaryColor} />
-                  <RtlText style={[styles.receiptAddBtnText, { color: primaryColor }]}>הוסף תמונת קבלה</RtlText>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={[styles.modalAddBtn, { backgroundColor: primaryColor }]} onPress={handleAddExpense} disabled={savingExpense} activeOpacity={0.82}>
-                {savingExpense ? <ActivityIndicator size="small" color="#fff" /> : <RtlText style={styles.modalAddBtnText}>הוסף הוצאה</RtlText>}
-              </TouchableOpacity>
+              <RtlText style={[styles.receiptAddedText, { color: theme.textSecondary }]}>תמונה נוספה</RtlText>
             </View>
-          </KeyboardAwareScreenScroll>
-        </View>
-      </Modal>
+          ) : (
+            <TouchableOpacity
+              style={[styles.receiptAddBtn, { backgroundColor: `${primaryColor}0C` }]}
+              onPress={pickReceipt}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.receiptAddIconWrap, { backgroundColor: `${primaryColor}18` }]}>
+                <FileImage size={20} color={primaryColor} strokeWidth={2} />
+              </View>
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <RtlText style={[styles.receiptAddBtnText, { color: theme.text }]}>הוסף קבלה</RtlText>
+                <RtlText style={{ fontSize: 12, color: theme.textSecondary ?? '#9CA3AF', marginTop: 1 }}>תמונה מהגלריה (אופציונלי)</RtlText>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={[styles.modalAddBtn, { backgroundColor: primaryColor, marginTop: 8 }]} onPress={handleAddExpense} disabled={savingExpense} activeOpacity={0.82}>
+            {savingExpense ? <ActivityIndicator size="small" color="#fff" /> : <RtlText style={styles.modalAddBtnText}>הוסף הוצאה</RtlText>}
+          </TouchableOpacity>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     </View>
   );
 }
@@ -1250,17 +1950,18 @@ export default function FinanceScreen() {
 // STYLES
 // ─────────────────────────────────────────────────────────────
 const cardShadow = Platform.select({
-  ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.055, shadowRadius: 12 },
-  android: { elevation: 3 },
+  ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.11, shadowRadius: 18 },
+  android: { elevation: 5 },
 });
 
 const styles = StyleSheet.create({
-  rtlRoot: { flex: 1, direction: 'ltr', backgroundColor: '#F2F4F8' },
+  rtlRoot: { flex: 1, direction: 'ltr' },
   rtlText: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
   ltrText: { textAlign: 'left', writingDirection: 'ltr', alignSelf: 'stretch' },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
   loadingText: { fontSize: 16, textAlign: 'right' },
 
+  safeAreaTopFill: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 15 },
   financeHeaderFixed: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -1273,17 +1974,21 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 0, direction: 'ltr' },
 
   // ── Hero ──
-  heroWrapper: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 4 },
+  heroWrapper: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
   heroCard: {
-    borderRadius: 28, overflow: 'hidden', position: 'relative',
+    borderRadius: 0, overflow: 'hidden', position: 'relative',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.28, shadowRadius: 28 },
-      android: { elevation: 14 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 24 },
+      android: { elevation: 10 },
     }),
   },
-  heroCardInner: { padding: 24 },
+  heroCardInner: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
   heroLoadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.35)', alignItems: 'center', justifyContent: 'center', gap: 12 },
   heroLoadingText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  heroBottomRound: {
+    position: 'absolute', bottom: -18, left: 0, right: 0, height: 36,
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+  },
   monthRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   monthArrowBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   monthCenter: { alignItems: 'center' },
@@ -1314,50 +2019,90 @@ const styles = StyleSheet.create({
   heroRatioHead: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   heroRatioCaption: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.78)', textAlign: 'right', flex: 1, writingDirection: 'rtl' },
   heroRatioPct: { fontSize: 13, fontWeight: '800', color: '#FFFFFF' },
-  heroRatioTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden' },
+  heroRatioTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)', overflow: 'hidden', flexDirection: 'row-reverse' },
   heroRatioFill: { height: '100%', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.92)' },
 
   // ── KPI strip ──
-  kpiStrip: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 9 },
-  kpiCard: { flex: 1, borderRadius: 16, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 9, alignItems: 'center', gap: 4, ...cardShadow },
-  kpiIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
-  kpiValue: { fontSize: 14, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
-  kpiLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
-
-  // ── Section headings (centered title) ──
-  sectionHeading: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, alignItems: 'center' },
-  sectionHeadingTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    alignSelf: 'stretch',
+  kpiStrip: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingTop: 28, paddingBottom: 4, gap: 10 },
+  kpiCard: {
+    flex: 1,
+    borderRadius: 20,
+    padding: 14,
+    alignItems: 'center',
+    gap: 10,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.09, shadowRadius: 12 },
+      android: { elevation: 4 },
+    }),
   },
+  kpiTopStripe: { width: '100%', height: 3, borderRadius: 0, marginBottom: 8 },
+  kpiIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  kpiTextBlock: { alignItems: 'center', gap: 2, width: '100%' },
+  kpiValue: { fontSize: 15, fontWeight: '900', textAlign: 'center', letterSpacing: -0.4 },
+  kpiLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  kpiWeekTag: {
+    marginTop: 4,
+    backgroundColor: 'rgba(217,119,6,0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  kpiWeekTagText: { fontSize: 9, fontWeight: '700', color: '#B45309', textAlign: 'center' },
+
+  // ── Section headings (kept for possible remnants) ──
+  sectionHeading: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8, alignItems: 'center' },
+  sectionHeadingTitle: { fontSize: 15, fontWeight: '800', letterSpacing: 0.2, textAlign: 'center', alignSelf: 'stretch' },
 
   // ── Card ──
-  card: { borderRadius: 22, borderWidth: 1, marginHorizontal: 16, marginBottom: 4, padding: 18, direction: 'ltr', ...cardShadow },
+  card: { borderRadius: 24, marginHorizontal: 16, marginBottom: 4, padding: 18, direction: 'ltr', ...cardShadow },
 
   // ── Sparkline ──
+  sparklineTitleRow: { flexDirection: 'column', alignItems: 'flex-end', gap: 2, marginBottom: 10 },
+  sparklineTitleTotal: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  sparklineTitleSub: { fontSize: 12, fontWeight: '600' },
   sparklineLegend: { marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6 },
   sparklineLegendText: { fontSize: 10, textAlign: 'center' },
 
   // ── Donut + legend ──
-  donutRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 14 },
+  donutRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginBottom: 14 },
   donutLegend: { flex: 1, gap: 0 },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 10,
-    paddingLeft: 2,
+  // ── Service grid (income breakdown) ──
+  serviceGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
   },
-  legendDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: 3 },
-  legendBody: { flex: 1, gap: 6 },
+  serviceGridCard: {
+    width: '47.5%',
+    borderRadius: 14,
+    padding: 11,
+    gap: 5,
+  },
+  serviceGridTop: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serviceGridDot: { width: 8, height: 8, borderRadius: 4 },
+  serviceGridPct: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 },
+  serviceGridPctText: { fontSize: 10, fontWeight: '700' },
+  serviceGridName: { fontSize: 12, fontWeight: '600', textAlign: 'right', lineHeight: 17, color: '#374151' },
+  serviceGridAmt: { fontSize: 15, fontWeight: '800', letterSpacing: -0.3, textAlign: 'right' },
+  serviceGridBarTrack: { height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.07)', overflow: 'hidden' },
+  serviceGridBarFill: { height: '100%', borderRadius: 2 },
+
+  // kept for backward compat (not used in JSX anymore but avoids TS errors)
+  legendItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 11 },
+  legendDot: { width: 11, height: 11, borderRadius: 6, flexShrink: 0, marginTop: 4 },
+  legendBody: { flex: 1, gap: 5 },
   legendName: { fontSize: 13, fontWeight: '700', textAlign: 'right', lineHeight: 18 },
-  legendMeta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
-  legendAmt: { fontSize: 14, fontWeight: '800' },
-  legendPct: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
+  legendMeta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flex: 1 },
+  legendAmt: { fontSize: 13, fontWeight: '800' },
+  legendPct: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   legendPctText: { fontSize: 10, fontWeight: '700' },
+  legendBarTrack: { height: 5, borderRadius: 3, backgroundColor: '#F0F2F7', overflow: 'hidden', width: '100%' },
+  legendBarFill: { height: '100%', borderRadius: 3 },
 
   // ── Income totals ──
   incomeTotalRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, paddingBottom: 2, borderTopWidth: StyleSheet.hairlineWidth },
@@ -1368,7 +2113,14 @@ const styles = StyleSheet.create({
   // ── Appointments ──
   apptDateGroup: { paddingVertical: 12 },
   apptDateHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  apptDateLabel: { fontSize: 14, fontWeight: '800', textAlign: 'right', flex: 1 },
+  apptDateLabel: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  apptCollapseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    paddingHorizontal: 2,
+  },
   apptDayTotalPill: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, marginLeft: 8 },
   apptDayTotalText: { fontSize: 13, fontWeight: '800', textAlign: 'right' },
   apptCompactRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 10, gap: 10 },
@@ -1378,8 +2130,8 @@ const styles = StyleSheet.create({
   apptCompactName: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
   apptCompactMeta: { fontSize: 12, marginTop: 2, textAlign: 'right' },
   apptCompactPrice: { fontSize: 14, fontWeight: '800', textAlign: 'left', minWidth: 56 },
-  showMoreBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 14, paddingVertical: 12, marginTop: 6 },
-  showMoreBtnText: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  showMoreBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 50, paddingVertical: 9, paddingHorizontal: 20, marginTop: 10, alignSelf: 'center' },
+  showMoreBtnText: { fontSize: 13, fontWeight: '700', textAlign: 'center' },
 
   // ── Empty state ──
   emptyState: { alignItems: 'center', paddingVertical: 24, gap: 8 },
@@ -1412,15 +2164,16 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 22, fontWeight: '800', textAlign: 'right' },
   modalCloseBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F4F6FB', alignItems: 'center', justifyContent: 'center' },
   amountBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F6FB', borderRadius: 20, paddingVertical: 12, marginBottom: 16 },
-  amountCurrency: { fontSize: 36, fontWeight: '800', color: Colors.subtext, marginLeft: 8, writingDirection: 'ltr' },
+  amountCurrency: { fontSize: 36, fontWeight: '800', color: Colors.subtext, marginRight: 8, writingDirection: 'ltr' },
   amountInput: { fontSize: 52, fontWeight: '900', color: Colors.text, minWidth: 100, textAlign: 'center', direction: 'ltr' },
   descInput: { height: 50, borderWidth: 1.5, borderColor: '#E8EAF0', borderRadius: 14, paddingHorizontal: 16, fontSize: 15, color: Colors.text, backgroundColor: '#FAFBFD', marginBottom: 20, textAlign: 'right' },
   modalSectionLabel: { fontSize: 14, fontWeight: '700', textAlign: 'right', marginBottom: 12 },
-  categoryGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, marginBottom: 20, justifyContent: 'flex-end' },
-  categoryGridItem: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24 },
-  categoryGridText: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
-  receiptAddBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 14, borderWidth: 2, borderStyle: 'dashed', marginBottom: 24 },
-  receiptAddBtnText: { fontSize: 15, fontWeight: '700' },
+  categoryGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+  categoryGridItem: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24 },
+  categoryGridText: { fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  receiptAddBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 18, marginBottom: 20 },
+  receiptAddIconWrap: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  receiptAddBtnText: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
   receiptPreviewRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 24 },
   receiptThumbWrap: { position: 'relative' },
   receiptThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: '#F4F6FB' },

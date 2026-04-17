@@ -980,7 +980,7 @@
       "bookingWindowRowTitle": "كم عدد الأيام المقبلة التي يمكن للعملاء الحجز فيها؟",
       "bookingWindowRowSubtitle": "{{count}} يوم قادم",
       "bookingWindowModalTitle": "نطاق الحجز الخاص بك",
-      "bookingWindowModalBody": "يمكن للعملاء اختيار التواريخ فقط خلال هذه الأيام العديدة من اليوم. ينطبق هذا فقط على التقويم الخاص بك، حيث يقوم كل عضو في الفريق بتعيين التقويم الخاص به ضمن إدارة الموظفين.",
+      "bookingWindowModalBody": "يرى العملاء التواريخ المتاحة فقط ضمن هذا النطاق. لكل موظف قيمته الخاصة.",
       "bookingWindowModalDaysLabel": "الأيام مفتوحة للحجز",
       "bookingWindowModalRange": "يمكنك الاختيار بين 0 و60 يومًا.",
       "bookingWindowInvalid": "الرجاء إدخال رقم صحيح بين 0 و60.",

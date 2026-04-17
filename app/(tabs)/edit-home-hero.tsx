@@ -613,24 +613,12 @@ export default function EditHomeHeroScreen() {
             <Ionicons name="arrow-forward" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('settings.profile.homeHeroTitle')}</Text>
-          <TouchableOpacity
-            onPress={pickAndUpload}
-            activeOpacity={0.8}
-            disabled={busy}
-            style={styles.headerAddHit}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.profile.heroAddPhotos')}
-          >
-            {isUploading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Ionicons name="add" size={28} color={busy ? colors.textSecondary : colors.text} />
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerAddHit} />
         </View>
       </SafeAreaView>
 
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.contentSurface}>
+      {/* No bottom edge here — avoids double inset with FlatList padding + floating tab bar */}
+      <SafeAreaView edges={['left', 'right']} style={styles.contentSurface}>
         {isLoading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={colors.primary} size="large" />
@@ -646,7 +634,10 @@ export default function EditHomeHeroScreen() {
             ListFooterComponent={images.length > 0 ? footerHint : null}
             contentContainerStyle={[
               styles.listContentPad,
-              { paddingBottom: insets.bottom + 28 },
+              {
+                // One inset pass: home indicator + clearance above AdminFloatingTabBar (~56pt + gap)
+                paddingBottom: insets.bottom + 72,
+              },
               items.length === 0 && styles.listContentEmpty,
             ]}
             showsVerticalScrollIndicator={false}

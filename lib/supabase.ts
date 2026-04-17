@@ -284,6 +284,11 @@ export interface BusinessProfile {
   tiktok_url?: string;
   // Home page marquee / hero images (public URLs)
   home_hero_images?: string[];
+  /** `marquee` = tiled animation (`home_hero_images`); `single_fullbleed` = one image or video (`home_hero_single_*`). */
+  home_hero_mode?: 'marquee' | 'single_fullbleed';
+  /** Public URL when `home_hero_mode` is `single_fullbleed`. */
+  home_hero_single_url?: string | null;
+  home_hero_single_kind?: 'image' | 'video' | null;
   /** Public URL for home header logo (Storage); unset = bundled client branding logo */
   home_logo_url?: string | null;
   /** When true (default), home header shows logo; when false, shows `display_name` text. */

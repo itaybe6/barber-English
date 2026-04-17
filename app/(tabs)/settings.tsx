@@ -44,6 +44,8 @@ import {
   Camera,
   Megaphone,
   Layers,
+  Headphones,
+  Mail,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -76,6 +78,7 @@ import {
   normalizeHomeHeaderTitleFontId,
   type HomeHeaderTitleFontId,
 } from '@/lib/homeHeaderTitleFont';
+import { normalizeHomeHeroMode, type HomeHeroMode } from '@/lib/utils/homeHeroMode';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -340,13 +343,19 @@ export default function SettingsScreen() {
   /** Bottom sheet: backdrop fades in place; sheet slides separately (avoids RN Modal `slide` moving dimmer with sheet). */
   const editAdminSheetAnim = useRef(new Animated.Value(0)).current;
   const editAdminDragY = useRef(new Animated.Value(0)).current;
+  const editAdminKeyboardShift = useRef(new Animated.Value(0)).current;
+  const editAdminScrollRef = useRef<ScrollView>(null);
+  const editAdminPhoneFieldY = useRef(0);
   const editAdminSheetTranslateY = useMemo(
     () => editAdminSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [WINDOW_HEIGHT, 0] }),
     [editAdminSheetAnim],
   );
   const editAdminCombinedTranslateY = useMemo(
-    () => Animated.add(editAdminSheetTranslateY as any, editAdminDragY as any),
-    [editAdminSheetTranslateY, editAdminDragY],
+    () => Animated.add(
+      Animated.add(editAdminSheetTranslateY as any, editAdminDragY as any),
+      editAdminKeyboardShift as any,
+    ),
+    [editAdminSheetTranslateY, editAdminDragY, editAdminKeyboardShift],
   );
   const editAdminBackdropOpacity = useMemo(
     () => editAdminSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
@@ -1597,6 +1606,7 @@ export default function SettingsScreen() {
     if (!showEditAdminModal) return;
     editAdminDragY.setValue(0);
     editAdminSheetAnim.setValue(0);
+    editAdminKeyboardShift.setValue(0);
     const id = requestAnimationFrame(() => {
       Animated.timing(editAdminSheetAnim, {
         toValue: 1,
@@ -1606,7 +1616,30 @@ export default function SettingsScreen() {
       }).start();
     });
     return () => cancelAnimationFrame(id);
-  }, [showEditAdminModal, editAdminSheetAnim, editAdminDragY]);
+  }, [showEditAdminModal, editAdminSheetAnim, editAdminDragY, editAdminKeyboardShift]);
+
+  useEffect(() => {
+    if (!showEditAdminModal) return;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(editAdminKeyboardShift, {
+        toValue: -e.endCoordinates.height,
+        duration: Platform.OS === 'ios' ? (e.duration || 250) : 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(editAdminKeyboardShift, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? (e.duration || 250) : 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, [showEditAdminModal, editAdminKeyboardShift]);
 
   const editAdminGrabberPanHandlers = useMemo(
     () =>
@@ -1732,6 +1765,27 @@ export default function SettingsScreen() {
         Alert.alert(
           t('error.generic', 'Error'),
           t('settings.profile.homeHeaderTitleFontSaveFailed', 'Could not save font'),
+        );
+        return;
+      }
+      setProfile(updated);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleHomeHeroModeSelect = async (next: HomeHeroMode) => {
+    const current = normalizeHomeHeroMode(profile?.home_hero_mode);
+    if (next === current) return;
+    setIsSavingProfile(true);
+    try {
+      // Dedicated method — only home_hero_mode is written; home_hero_images and
+      // home_hero_single_* are never touched so switching modes preserves all media.
+      const updated = await businessProfileApi.updateHomeHeroMode(next);
+      if (!updated) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.profile.homeHeroModeSaveFailed', 'Could not save home background type'),
         );
         return;
       }
@@ -3169,11 +3223,13 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
                     title={t('settings.profile.instagram', 'Instagram')}
+                    subtitle={t('settings.profile.instagramSubtitle', 'Link to your business page or profile')}
                     value={profileInstagram || ''}
                     placeholder={t('settings.profile.instagramUrlPlaceholder', 'https://instagram.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveInstagramInline}
                     chevronColor={primaryOnSurface}
+                    saveButtonColor={businessColors.primary}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3183,11 +3239,13 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
                     title={t('settings.profile.facebook', 'Facebook')}
+                    subtitle={t('settings.profile.facebookSubtitle', 'Link to your Facebook business page')}
                     value={profileFacebook || ''}
                     placeholder={t('settings.profile.facebookUrlPlaceholder', 'https://facebook.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveFacebookInline}
                     chevronColor={primaryOnSurface}
+                    saveButtonColor={businessColors.primary}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3197,11 +3255,13 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
                     title={t('settings.profile.tiktok', 'TikTok')}
+                    subtitle={t('settings.profile.tiktokSubtitle', 'Link to your @ profile')}
                     value={profileTiktok || ''}
                     placeholder={t('settings.profile.tiktokUrlPlaceholder', 'https://www.tiktok.com/@yourpage')}
                     keyboardType="url"
                     onSave={handleSaveTiktokInline}
                     chevronColor={primaryOnSurface}
+                    saveButtonColor={businessColors.primary}
                     validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
                   />
                 </View>
@@ -3236,50 +3296,215 @@ export default function SettingsScreen() {
                 />
               </View>
               <View style={styles.settingDivider} />
-              {renderSettingItemLTR(
-                <Ionicons name="images-outline" size={20} color={primaryOnSurface} />,
-                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
-                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
-                undefined,
-                () =>
-                  router.push({
-                    pathname: '/(tabs)/edit-home-hero',
-                    params: { returnSettingsTab: 'design' },
-                  }),
-                false,
-                false
-              )}
+              <View style={styles.homeHeroModeBlock}>
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.profile.homeHeroModeTitle', 'Home top background')}
+                </Text>
+                <View style={styles.homeHeroModeCardsRow}>
+                  {([
+                    {
+                      mode: 'marquee',
+                      icon: 'images-outline',
+                      label: t('settings.profile.homeHeroModeMarquee', 'Animated photos'),
+                      sub: t('settings.profile.homeHeroModeMarqueeSub', 'Scrolling grid of photos'),
+                    },
+                    {
+                      mode: 'single_fullbleed',
+                      icon: 'film-outline',
+                      label: t('settings.profile.homeHeroModeSingle', 'Image or video'),
+                      sub: t('settings.profile.homeHeroModeSingleSub', 'One full-screen file'),
+                    },
+                  ] as const).map(({ mode, icon, label, sub }) => {
+                    const selected = normalizeHomeHeroMode(profile?.home_hero_mode) === mode;
+                    return (
+                      <TouchableOpacity
+                        key={mode}
+                        activeOpacity={0.82}
+                        disabled={isSavingProfile}
+                        style={[
+                          styles.homeHeroModeCard,
+                          selected
+                            ? {
+                                backgroundColor: `${businessColors.primary}12`,
+                                borderColor: businessColors.primary,
+                                borderWidth: 2,
+                              }
+                            : {
+                                backgroundColor: '#FFFFFF',
+                                borderColor: 'rgba(60,60,67,0.16)',
+                                borderWidth: StyleSheet.hairlineWidth,
+                              },
+                        ]}
+                        onPress={() => void handleHomeHeroModeSelect(mode)}
+                      >
+                        <View
+                          style={[
+                            styles.homeHeroModeCardIcon,
+                            {
+                              backgroundColor: selected
+                                ? `${businessColors.primary}20`
+                                : 'rgba(60,60,67,0.06)',
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name={icon as any}
+                            size={22}
+                            color={selected ? businessColors.primary : Colors.subtext}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.homeHeroModeCardLabel,
+                            selected && { color: businessColors.primary },
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {label}
+                        </Text>
+                        <Text style={styles.homeHeroModeCardSub} numberOfLines={2}>
+                          {sub}
+                        </Text>
+                        {selected && (
+                          <View
+                            style={[
+                              styles.homeHeroModeCardCheck,
+                              { backgroundColor: businessColors.primary },
+                            ]}
+                          >
+                            <Ionicons name="checkmark" size={11} color="#fff" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.settingDivider} />
+              {normalizeHomeHeroMode(profile?.home_hero_mode) === 'marquee'
+                ? renderSettingItemLTR(
+                    <Ionicons name="images-outline" size={20} color={primaryOnSurface} />,
+                    t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                    t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
+                    undefined,
+                    () =>
+                      router.push({
+                        pathname: '/(tabs)/edit-home-hero',
+                        params: { returnSettingsTab: 'design' },
+                      }),
+                    false,
+                    false,
+                  )
+                : renderSettingItemLTR(
+                    <Ionicons name="image-outline" size={20} color={primaryOnSurface} />,
+                    t('settings.profile.homeHeroSingleRowTitle', 'Single background'),
+                    t(
+                      'settings.profile.homeHeroSingleRowSubtitle',
+                      'Upload one image or one short video for the top of the home screen',
+                    ),
+                    undefined,
+                    () =>
+                      router.push({
+                        pathname: '/(tabs)/edit-home-hero-single',
+                        params: { returnSettingsTab: 'design' },
+                      }),
+                    false,
+                    false,
+                  )}
               <View style={styles.homeLogoDesignBlock}>
-                <View style={styles.homeHeaderLogoToggleRow}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={styles.settingTitleLTR}>
-                      {t('settings.profile.homeHeaderShowLogoTitle', 'Show logo on home')}
-                    </Text>
-                    <Text style={styles.settingSubtitleLTR}>
-                      {t(
-                        'settings.profile.homeHeaderShowLogoSubtitle',
-                        'Off: English text at the top. Empty uses the display name from business details.',
-                      )}
-                    </Text>
-                  </View>
-                  {/* RN Switch keeps LTR thumb semantics in RTL rows — mirror so “on” matches Hebrew expectations */}
-                  <View style={editAdminInputsRtl ? styles.homeHeaderShowLogoSwitchRtl : undefined}>
-                    <Switch
-                      value={profile?.home_header_show_logo !== false}
-                      onValueChange={(v) => {
-                        void handleHomeHeaderShowLogoToggle(v);
-                      }}
-                      disabled={isSavingProfile}
-                      trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                      thumbColor={
-                        profile?.home_header_show_logo !== false
-                          ? primaryOnSurface
-                          : Platform.OS === 'android'
-                            ? '#f4f3f4'
-                            : undefined
-                      }
-                      ios_backgroundColor="#E5E5EA"
-                    />
+                <View style={styles.homeHeroModeBlock}>
+                  <Text style={styles.settingTitleLTR}>
+                    {t('settings.profile.homeHeaderShowLogoTitle', 'Show logo on home')}
+                  </Text>
+                  <View style={styles.homeHeroModeCardsRow}>
+                    {(
+                      [
+                        {
+                          showLogo: true,
+                          icon: 'image-outline' as const,
+                          label: t('settings.profile.homeHeaderModeLogoLabel', 'Logo image'),
+                          sub: t(
+                            'settings.profile.homeHeaderModeLogoSub',
+                            'Your uploaded logo or the app default',
+                          ),
+                        },
+                        {
+                          showLogo: false,
+                          icon: 'document-text-outline' as const,
+                          label: t('settings.profile.homeHeaderModeTextLabel', 'English name only'),
+                          sub: t(
+                            'settings.profile.homeHeaderModeTextSub',
+                            'Text at the top; leave empty to use display name',
+                          ),
+                        },
+                      ] as const
+                    ).map(({ showLogo, icon, label, sub }) => {
+                      const selected = (profile?.home_header_show_logo !== false) === showLogo;
+                      return (
+                        <TouchableOpacity
+                          key={showLogo ? 'logo' : 'text'}
+                          activeOpacity={0.82}
+                          disabled={isSavingProfile}
+                          style={[
+                            styles.homeHeroModeCard,
+                            selected
+                              ? {
+                                  backgroundColor: `${businessColors.primary}12`,
+                                  borderColor: businessColors.primary,
+                                  borderWidth: 2,
+                                }
+                              : {
+                                  backgroundColor: '#FFFFFF',
+                                  borderColor: 'rgba(60,60,67,0.16)',
+                                  borderWidth: StyleSheet.hairlineWidth,
+                                },
+                          ]}
+                          onPress={() => {
+                            if ((profile?.home_header_show_logo !== false) === showLogo) return;
+                            void handleHomeHeaderShowLogoToggle(showLogo);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.homeHeroModeCardIcon,
+                              {
+                                backgroundColor: selected
+                                  ? `${businessColors.primary}20`
+                                  : 'rgba(60,60,67,0.06)',
+                              },
+                            ]}
+                          >
+                            <Ionicons
+                              name={icon}
+                              size={22}
+                              color={selected ? businessColors.primary : Colors.subtext}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.homeHeroModeCardLabel,
+                              selected && { color: businessColors.primary },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {label}
+                          </Text>
+                          <Text style={styles.homeHeroModeCardSub} numberOfLines={2}>
+                            {sub}
+                          </Text>
+                          {selected && (
+                            <View
+                              style={[
+                                styles.homeHeroModeCardCheck,
+                                { backgroundColor: businessColors.primary },
+                              ]}
+                            >
+                              <Ionicons name="checkmark" size={11} color="#fff" />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 </View>
                 {profile?.home_header_show_logo === false ? (
@@ -3528,29 +3753,63 @@ export default function SettingsScreen() {
         <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
           <ScrollView
             style={{ flex: 1 }}
-            contentContainerStyle={[styles.modalContentContainer, { paddingTop: 12, paddingBottom: insets.bottom + 24 }]}
+            contentContainerStyle={[styles.modalContentContainer, { paddingTop: 16, paddingBottom: insets.bottom + 28 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.groupCard}>
-              <Text style={styles.previewNotificationTitle}>{t('settings.support.header', "Need help? Contact Tori's support team")}</Text>
-              <Text style={[styles.previewNotificationContent, { marginTop: 12 }]}>
+            <View style={styles.supportHeroCard}>
+              <LinearGradient
+                colors={[`${businessColors.primary}24`, `${businessColors.primary}06`, 'transparent']}
+                locations={[0, 0.45, 1]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.supportHeroGradient}
+                pointerEvents="none"
+              />
+              <View
+                style={[
+                  styles.supportIconRing,
+                  {
+                    backgroundColor: `${businessColors.primary}12`,
+                    borderColor: `${businessColors.primary}28`,
+                  },
+                ]}
+              >
+                <Headphones size={28} color={businessColors.primary} strokeWidth={2.1} />
+              </View>
+              <Text
+                style={[
+                  styles.supportHeroTitle,
+                  { textAlign: I18nManager.isRTL ? 'right' : 'left' },
+                ]}
+              >
+                {t('settings.support.header', "Need help? Contact Tori's support team")}
+              </Text>
+              <Text
+                style={[
+                  styles.supportHeroBody,
+                  { textAlign: I18nManager.isRTL ? 'right' : 'left' },
+                ]}
+              >
                 {t(
                   'settings.support.description',
                   "Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.",
                 )}
               </Text>
-              <View style={{ marginTop: 20, alignItems: 'center' }}>
-                <TouchableOpacity
-                  style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]}
-                  onPress={handleCallSupport}
-                  activeOpacity={0.88}
-                >
-                  <Text style={[styles.modalSendText, { color: Colors.white }]}>
-                    {t('settings.support.contactNow', 'Contact us now')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[
+                  styles.supportCta,
+                  { backgroundColor: businessColors.primary },
+                  { flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row' },
+                ]}
+                onPress={handleCallSupport}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.support.contactNow', 'Contact us now')}
+              >
+                <Mail size={20} color={Colors.white} strokeWidth={2.2} />
+                <Text style={styles.supportCtaText}>{t('settings.support.contactNow', 'Contact us now')}</Text>
+              </TouchableOpacity>
             </View>
           </ScrollView>
         </View>
@@ -3963,11 +4222,7 @@ export default function SettingsScreen() {
         animationType="none"
         onRequestClose={requestCloseEditAdminSheet}
       >
-        <KeyboardAvoidingView
-          style={styles.editAdminKavRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-        >
+        <View style={styles.editAdminKavRoot}>
           <View style={styles.editAdminOverlayFill}>
             <TouchableWithoutFeedback onPress={requestCloseEditAdminSheet}>
               <Animated.View style={[styles.editAdminBackdrop, { opacity: editAdminBackdropOpacity }]} />
@@ -3975,7 +4230,7 @@ export default function SettingsScreen() {
             <Animated.View
               style={[
                 styles.editAdminSheetWrap,
-                { maxHeight: WINDOW_HEIGHT * 0.92, transform: [{ translateY: editAdminCombinedTranslateY }] },
+                { transform: [{ translateY: editAdminCombinedTranslateY }] },
               ]}
               pointerEvents="box-none"
             >
@@ -3996,78 +4251,73 @@ export default function SettingsScreen() {
               </View>
 
               <ScrollView
+                ref={editAdminScrollRef}
                 style={styles.editAdminScroll}
                 contentContainerStyle={styles.editAdminScrollContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
-                contentInsetAdjustmentBehavior="automatic"
-                automaticallyAdjustKeyboardInsets
               >
+              {/* ── Hero ── */}
               <View style={styles.editAdminHero}>
                 <LinearGradient
-                  colors={[businessColors.primary, `${businessColors.primary}BB`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.editAdminAvatarRing}
+                  colors={[`${businessColors.primary}30`, `${businessColors.primary}00`]}
+                  locations={[0, 1]}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={styles.editAdminHeroBg}
+                  pointerEvents="none"
+                />
+                <TouchableOpacity
+                  onPress={handlePickAdminAvatar}
+                  activeOpacity={0.92}
+                  disabled={isUploadingAdminAvatar}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  style={styles.editAdminAvatarWrap}
                 >
-                  <TouchableOpacity
-                    style={styles.editAdminAvatarInner}
-                    onPress={handlePickAdminAvatar}
-                    activeOpacity={0.92}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  <LinearGradient
+                    colors={[businessColors.primary, `${businessColors.primary}AA`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.editAdminAvatarRing}
                   >
-                    {user?.image_url ? (
-                      <Image
-                        source={{ uri: (user as any).image_url }}
-                        style={styles.editAdminAvatarImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
-                    )}
-                    {isUploadingAdminAvatar && (
-                      <View style={styles.editAdminAvatarLoading}>
-                        <ActivityIndicator size="small" color={primaryOnSurface} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </LinearGradient>
-                <Text style={styles.editAdminHeroName}>
+                    <View style={styles.editAdminAvatarInner}>
+                      {user?.image_url ? (
+                        <Image
+                          source={{ uri: (user as any).image_url }}
+                          style={styles.editAdminAvatarImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <User size={42} color={Colors.subtext} strokeWidth={1.6} />
+                      )}
+                    </View>
+                  </LinearGradient>
+                  {isUploadingAdminAvatar ? (
+                    <View style={styles.editAdminAvatarLoading}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  ) : (
+                    <View style={[styles.editAdminCameraOrb, { backgroundColor: businessColors.primary }]}>
+                      <Camera size={14} color="#FFFFFF" strokeWidth={2.2} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <Text style={[styles.editAdminHeroName, { textAlign: editAdminInputsRtl ? 'right' : 'left' }]}>
                   {adminNameDraft || user?.name || t('settings.admin.admin', 'Admin')}
                 </Text>
                 <Text style={styles.editAdminHeroPhone}>
                   {adminPhoneDraft || (user as any)?.phone || '—'}
                 </Text>
-                <TouchableOpacity
-                  onPress={handlePickAdminAvatar}
-                  style={[
-                    styles.editAdminPhotoBtn,
-                    { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
-                  ]}
-                  activeOpacity={0.88}
-                  disabled={isUploadingAdminAvatar}
-                >
-                  <Camera size={17} color={primaryOnSurface} strokeWidth={2} />
-                  <Text style={[styles.editAdminPhotoBtnText, { color: businessColors.primary }]}>
-                    {isUploadingAdminAvatar
-                      ? t('settings.common.uploading', 'Uploading...')
-                      : t('settings.profile.changeProfilePicture', 'Change profile picture')}
-                  </Text>
-                </TouchableOpacity>
               </View>
 
+              {/* ── Form ── */}
               <View style={styles.editAdminFormCard}>
-                <View style={styles.editAdminField}>
-                  <View
-                    style={[
-                      styles.editAdminLabelWrap,
-                      { justifyContent: editAdminInputsRtl ? 'flex-end' : 'flex-start' },
-                    ]}
-                  >
-                    <Text style={styles.editAdminFieldLabel}>{t('settings.admin.name', 'Admin name')}</Text>
-                  </View>
+                <View style={[styles.editAdminFormRow, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(60,60,67,0.08)' }]}>
+                  <Text style={styles.editAdminFieldLabel}>
+                    {t('settings.admin.name', 'שם מנהל')}
+                  </Text>
                   <TextInput
                     style={[
                       styles.editAdminFieldInput,
@@ -4077,18 +4327,16 @@ export default function SettingsScreen() {
                     value={adminNameDraft}
                     onChangeText={setAdminNameDraft}
                     placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
-                    placeholderTextColor={Colors.subtext}
+                    placeholderTextColor="#B0B0BA"
                   />
                 </View>
-                <View style={styles.editAdminFieldLast}>
-                  <View
-                    style={[
-                      styles.editAdminLabelWrap,
-                      { justifyContent: editAdminInputsRtl ? 'flex-end' : 'flex-start' },
-                    ]}
-                  >
-                    <Text style={styles.editAdminFieldLabel}>{t('profile.phone', 'Phone number')}</Text>
-                  </View>
+                <View
+                  style={styles.editAdminFormRow}
+                  onLayout={(e) => { editAdminPhoneFieldY.current = e.nativeEvent.layout.y; }}
+                >
+                  <Text style={styles.editAdminFieldLabel}>
+                    {t('profile.phone', 'מספר טלפון')}
+                  </Text>
                   <TextInput
                     style={[
                       styles.editAdminFieldInput,
@@ -4097,9 +4345,14 @@ export default function SettingsScreen() {
                     textAlign={editAdminInputsRtl ? 'right' : 'left'}
                     value={adminPhoneDraft}
                     onChangeText={setAdminPhoneDraft}
-                    placeholder={t('settings.admin.phonePlaceholder', '(555) 123-4567')}
-                    placeholderTextColor={Colors.subtext}
+                    placeholder={t('settings.admin.phonePlaceholder', '050-0000000')}
+                    placeholderTextColor="#B0B0BA"
                     keyboardType="phone-pad"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        editAdminScrollRef.current?.scrollToEnd({ animated: true });
+                      }, 80);
+                    }}
                     {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const } : {})}
                   />
                 </View>
@@ -4113,17 +4366,17 @@ export default function SettingsScreen() {
                           { backgroundColor: businessColors.primary },
                           isSavingAdmin && styles.editAdminFooterSaveDisabled,
                         ]}
-                        onPress={() => {
-                          void saveEditAdminModal();
-                        }}
+                        onPress={() => { void saveEditAdminModal(); }}
                         disabled={isSavingAdmin}
                         activeOpacity={0.88}
                         accessibilityRole="button"
                         accessibilityLabel={t('save', 'Save')}
                       >
-                        <Text style={styles.editAdminFooterSaveText}>
-                          {isSavingAdmin ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                        </Text>
+                        {isSavingAdmin ? (
+                          <ActivityIndicator size="small" color={Colors.white} />
+                        ) : (
+                          <Text style={styles.editAdminFooterSaveText}>{t('save', 'שמור')}</Text>
+                        )}
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -4131,7 +4384,7 @@ export default function SettingsScreen() {
               </View>
             </Animated.View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Address bottom sheet (2/3 screen) */}
@@ -4221,7 +4474,7 @@ export default function SettingsScreen() {
                         {hasGooglePlacesAutocomplete ? (
                           <GooglePlacesAutocomplete
                             keyboardShouldPersistTaps="always"
-                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
+                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'הקלד כתובת עסק...')}
                             fetchDetails
                             debounce={220}
                             enablePoweredByContainer={false}
@@ -4319,7 +4572,7 @@ export default function SettingsScreen() {
                             style={styles.addressSearchInput}
                             value={addressDraft}
                             onChangeText={setAddressDraft}
-                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
+                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'הקלד כתובת עסק...')}
                             placeholderTextColor="#9CA3AF"
                             autoCorrect={false}
                             autoCapitalize="none"
@@ -4355,16 +4608,16 @@ export default function SettingsScreen() {
                       )}
                     </TouchableOpacity>
 
-                    {!!placesPlaceId && (
+                    {!!placesPlaceId && placesLat != null && placesLng != null && (
                       <View style={styles.addressMapSection}>
                         <View style={styles.addressMapSectionHeader}>
                           <MapPin size={15} color={primaryOnSurface} strokeWidth={2.2} />
-                          <Text style={styles.addressMapSectionLabel}>{t('map.preview', 'Map preview')}</Text>
+                          <Text style={styles.addressMapSectionLabel}>{t('map.preview', 'תצוגת מפה')}</Text>
                         </View>
                         <View style={[styles.addressMapFrame, { borderColor: `${businessColors.primary}28` }]}>
                           <Image
                             source={{
-                              uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=800x400&scale=2&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${googlePlacesKey}`,
+                              uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${placesLat},${placesLng}&zoom=15&size=700x350&markers=${placesLat},${placesLng},red-pushpin`,
                             }}
                             style={styles.addressMapImage}
                             resizeMode="cover"
@@ -5715,16 +5968,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  homeHeaderLogoToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
-  },
-  homeHeaderShowLogoSwitchRtl: {
-    transform: [{ scaleX: -1 }],
-  },
   homeHeaderNoLogoCard: {
     marginHorizontal: 16,
     marginBottom: 14,
@@ -5786,6 +6029,67 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
+  },
+  homeHeroModeBlock: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  homeHeroModeCardsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  homeHeroModeCard: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 5,
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  homeHeroModeCardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 1,
+  },
+  homeHeroModeCardLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  homeHeroModeCardSub: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'center',
+    lineHeight: 14,
+    opacity: 0.8,
+  },
+  homeHeroModeCardCheck: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   homeLogoBrandingPreviewSection: {
     paddingHorizontal: 16,
@@ -7152,144 +7456,185 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 2,
+    maxHeight: WINDOW_HEIGHT * 0.92,
   },
   editAdminSheetSurface: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: '#F2F3F7',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.14,
+        shadowRadius: 18,
       },
-      android: { elevation: 12 },
+      android: { elevation: 16 },
     }),
   },
   editAdminSheetSafe: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#F2F3F7',
+    flex: 1,
   },
   editAdminModalColumn: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#F2F3F7',
+    flex: 1,
   },
   editAdminTopChrome: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 2,
-    paddingBottom: 10,
+    paddingTop: 4,
+    paddingBottom: 14,
+    backgroundColor: '#F2F3F7',
   },
   editAdminGrabberTrack: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
+    width: '100%',
   },
   editAdminGrabberBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(60,60,67,0.22)',
+    width: 40,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(60,60,67,0.18)',
   },
   editAdminHeaderTitle: {
-    marginTop: 2,
-    fontSize: 17,
-    fontWeight: '700',
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: '800',
     color: Colors.text,
     textAlign: 'center',
-    letterSpacing: -0.28,
+    letterSpacing: -0.4,
   },
   editAdminFooter: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: Colors.white,
+    paddingTop: 14,
+    paddingBottom: 28,
+    backgroundColor: '#F2F3F7',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(60,60,67,0.06)',
+    borderTopColor: 'rgba(60,60,67,0.08)',
   },
   editAdminFooterSave: {
-    borderRadius: 14,
-    paddingVertical: 15,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
       },
-      android: { elevation: 4 },
+      android: { elevation: 5 },
     }),
   },
   editAdminFooterSaveDisabled: {
-    opacity: 0.55,
+    opacity: 0.5,
   },
   editAdminFooterSaveText: {
     color: Colors.white,
     fontSize: 17,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   editAdminScroll: {
-    flexGrow: 0,
-    flexShrink: 1,
-    backgroundColor: Colors.white,
+    flex: 1,
+    backgroundColor: '#F2F3F7',
   },
   editAdminScrollContent: {
-    flexGrow: 0,
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 0,
+    paddingBottom: 20,
   },
   editAdminHero: {
     alignItems: 'center',
-    marginBottom: 18,
-  },
-  editAdminAvatarRing: {
-    padding: 3,
-    borderRadius: 48,
+    paddingTop: 20,
+    paddingBottom: 24,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 20,
+    marginBottom: 16,
+    backgroundColor: Colors.white,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
       },
-      android: { elevation: 5 },
+      android: { elevation: 2 },
+    }),
+  },
+  editAdminHeroBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 110,
+  },
+  editAdminAvatarWrap: {
+    position: 'relative',
+    marginBottom: 14,
+  },
+  editAdminAvatarRing: {
+    padding: 3,
+    borderRadius: 56,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 18,
+      },
+      android: { elevation: 8 },
     }),
   },
   editAdminAvatarInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FFFFFF',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#F2F3F7',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   editAdminAvatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   editAdminAvatarLoading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.12)',
-    borderRadius: 40,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 48,
+  },
+  editAdminCameraOrb: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: Colors.white,
   },
   editAdminHeroName: {
-    marginTop: 12,
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: Colors.text,
     textAlign: 'center',
-    letterSpacing: -0.35,
+    letterSpacing: -0.45,
   },
   editAdminHeroPhone: {
-    marginTop: 3,
-    fontSize: 14,
+    marginTop: 4,
+    fontSize: 15,
     fontWeight: '500',
     color: Colors.subtext,
     textAlign: 'center',
@@ -7311,23 +7656,24 @@ const styles = StyleSheet.create({
   },
   editAdminFormCard: {
     alignSelf: 'stretch',
-    alignItems: 'stretch',
-    backgroundColor: '#EFEFF4',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.06)',
+    borderColor: 'rgba(60,60,67,0.08)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
+        shadowOpacity: 0.06,
         shadowRadius: 8,
       },
-      android: { elevation: 1 },
+      android: { elevation: 2 },
     }),
+  },
+  editAdminFormRow: {
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
   editAdminField: {
     alignSelf: 'stretch',
@@ -7344,22 +7690,27 @@ const styles = StyleSheet.create({
     direction: 'ltr',
   },
   editAdminFieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#636366',
-    letterSpacing: -0.08,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    letterSpacing: 0.3,
+    marginTop: 10,
+    marginBottom: 2,
+    textAlign: 'left',
+    alignSelf: 'stretch',
   },
   editAdminFieldInput: {
+    alignSelf: 'stretch',
     minHeight: 48,
-    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-    fontSize: 16,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 17,
     fontWeight: '600',
     color: Colors.text,
-    backgroundColor: Colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.07)',
+    backgroundColor: '#F7F8FA',
+    borderRadius: 12,
+    borderWidth: 0,
+    marginBottom: 6,
   },
   editAdminFieldInputRtl: {
     textAlign: 'right',
@@ -8074,6 +8425,81 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  supportHeroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.12)',
+    paddingHorizontal: 22,
+    paddingTop: 28,
+    paddingBottom: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1a2744',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 24,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  supportHeroGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 120,
+  },
+  supportIconRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  supportHeroTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.35,
+    lineHeight: 27,
+    marginBottom: 12,
+  },
+  supportHeroBody: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: '#64748B',
+  },
+  supportCta: {
+    marginTop: 26,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  supportCtaText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+    letterSpacing: 0.2,
   },
   sectionHeaderRow: {
     flexDirection: 'row-reverse',

@@ -9,24 +9,30 @@ type KeyboardTypeOption = 'default' | 'url';
 
 interface InlineEditableRowProps {
   title: string;
+  /** Optional one-line hint under the title (collapsed row). */
+  subtitle?: string;
   value: string;
   placeholder?: string;
   keyboardType?: KeyboardTypeOption;
   onSave: (next: string) => Promise<void> | void;
   validate?: (v: string) => boolean;
   chevronColor?: string;
+  /** Active save button background (defaults to `Colors.primary`). */
+  saveButtonColor?: string;
   /** When false, shows value only (no expand / save). */
   editable?: boolean;
 }
 
 export default function InlineEditableRow({
   title,
+  subtitle,
   value,
   placeholder = 'https://...',
   keyboardType = 'url',
   onSave,
   validate,
   chevronColor,
+  saveButtonColor,
   editable = true,
 }: InlineEditableRowProps) {
   const { t } = useTranslation();
@@ -138,6 +144,9 @@ export default function InlineEditableRow({
         <View style={[styles.row, { flexDirection: rowDirection }]}>
           <View style={styles.rowContent}>
             <Text style={styles.title}>{title}</Text>
+            {subtitle ? (
+              <Text style={[styles.subtitle, { textAlign: I18nManager.isRTL ? 'right' : 'left' }]}>{subtitle}</Text>
+            ) : null}
             <Text style={styles.readOnlyValue}>{display}</Text>
           </View>
         </View>
@@ -151,6 +160,9 @@ export default function InlineEditableRow({
       <TouchableOpacity style={[styles.row, { flexDirection: rowDirection }]} onPress={onRowPress} activeOpacity={0.8}>
         <View style={styles.rowContent}>
           <Text style={styles.title}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { textAlign: I18nManager.isRTL ? 'right' : 'left' }]}>{subtitle}</Text>
+          ) : null}
         </View>
         <Animated.View style={[styles.chevronWrap, { transform: [{ rotate: chevronRotate }] }]}>
           <ChevronLeft size={20} color={chevronColor || Colors.primary} />
@@ -171,7 +183,11 @@ export default function InlineEditableRow({
                 autoCorrect={false}
               />
               <TouchableOpacity
-                style={[styles.saveButton, (!isValid || isUnchanged || isSaving) && styles.saveButtonDisabled]}
+                style={[
+                  styles.saveButton,
+                  { backgroundColor: saveButtonColor ?? Colors.primary },
+                  (!isValid || isUnchanged || isSaving) && styles.saveButtonDisabled,
+                ]}
                 onPress={onSavePress}
                 disabled={!isValid || isUnchanged || isSaving}
                 activeOpacity={0.8}
@@ -211,6 +227,13 @@ const styles = StyleSheet.create({
     color: Colors.text,
     textAlign: 'left',
   },
+  subtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.subtext,
+    marginTop: 3,
+    maxWidth: '100%',
+  },
   readOnlyValue: {
     fontSize: 15,
     color: Colors.subtext,
@@ -237,7 +260,6 @@ const styles = StyleSheet.create({
   saveButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: Colors.primary,
     borderRadius: 12,
     marginStart: 12,
   },

@@ -48,6 +48,12 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
+import { HomeHeroSingleBackdrop } from '@/components/home/HomeHeroSingleBackdrop';
+import {
+  normalizeHomeHeroMode,
+  normalizeHomeHeroSingleKind,
+  inferHomeHeroSingleKindFromUrl,
+} from '@/lib/utils/homeHeroMode';
 import { ClientWeekAvailabilityStrip } from '@/components/home/ClientWeekAvailabilityStrip';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
 import { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
@@ -335,6 +341,15 @@ export default function ClientHomeScreen() {
     () => resolveAdminHeroMarqueeImages(sanitizeUrlArray((businessProfile as any)?.home_hero_images)),
     [businessProfile],
   );
+
+  const clientHeroBackdrop = useMemo(() => {
+    const mode = normalizeHomeHeroMode((businessProfile as any)?.home_hero_mode);
+    const singleUrl = String((businessProfile as any)?.home_hero_single_url ?? '').trim();
+    const storedKind = normalizeHomeHeroSingleKind((businessProfile as any)?.home_hero_single_kind);
+    const singleKind = storedKind ?? (singleUrl ? inferHomeHeroSingleKindFromUrl(singleUrl) : 'image');
+    const useSingle = mode === 'single_fullbleed' && /^https?:\/\//i.test(singleUrl);
+    return { useSingle, singleUrl, singleKind };
+  }, [businessProfile]);
 
   /** Full display name (including family name) for the empty-state book card greeting. */
   const bookCardGreetingDisplayName = useMemo(() => {
@@ -930,7 +945,15 @@ export default function ClientHomeScreen() {
 
       {Platform.OS !== 'android' && (
         <View style={styles.clientHeroMarqueeHost} pointerEvents="none" collapsable={false}>
-          <ManicureMarqueeHero images={heroImages} />
+          {clientHeroBackdrop.useSingle ? (
+            <HomeHeroSingleBackdrop
+              uri={clientHeroBackdrop.singleUrl}
+              kind={clientHeroBackdrop.singleKind}
+              fadeToColor={HERO_BG}
+            />
+          ) : (
+            <ManicureMarqueeHero images={heroImages} />
+          )}
         </View>
       )}
 
@@ -962,7 +985,15 @@ export default function ClientHomeScreen() {
             style={{ height: HERO_HEIGHT - HERO_OVERLAP, overflow: 'hidden' }}
             pointerEvents="none"
           >
-            <ManicureMarqueeHero images={heroImages} />
+            {clientHeroBackdrop.useSingle ? (
+              <HomeHeroSingleBackdrop
+                uri={clientHeroBackdrop.singleUrl}
+                kind={clientHeroBackdrop.singleKind}
+                fadeToColor={HERO_BG}
+              />
+            ) : (
+              <ManicureMarqueeHero images={heroImages} />
+            )}
           </View>
         )}
         <View

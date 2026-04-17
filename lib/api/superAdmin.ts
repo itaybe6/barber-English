@@ -1317,13 +1317,14 @@ export const superAdminApi = {
     try {
       const { data: profilePeek } = await client
         .from('business_profile')
-        .select('branding_client_name, home_hero_images')
+        .select('branding_client_name, home_hero_images, home_hero_single_url')
         .eq('id', businessId)
         .maybeSingle();
       const brandingFolder = ((profilePeek as any)?.branding_client_name as string | undefined)?.trim() || null;
 
       const storagePathsByBucket = new Map<string, Set<string>>();
       addStorageUrlsFromList(storagePathsByBucket, (profilePeek as any)?.home_hero_images);
+      addStorageUrlToMap(storagePathsByBucket, (profilePeek as any)?.home_hero_single_url);
 
       const [designsRes, usersRes, productsRes] = await Promise.all([
         client.from('designs').select('image_url, image_urls').eq('business_id', businessId),

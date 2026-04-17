@@ -75,6 +75,9 @@ export const businessProfileApi = {
         facebook_url: null,
         tiktok_url: null,
         home_hero_images: [],
+        home_hero_mode: 'marquee',
+        home_hero_single_url: null,
+        home_hero_single_kind: null,
         break_by_user: {},
         booking_open_days_by_user: {},
         reminder_minutes_by_user: {},
@@ -121,8 +124,11 @@ export const businessProfileApi = {
             instagram_url: updates.instagram_url,
             facebook_url: updates.facebook_url,
             tiktok_url: (updates as any).tiktok_url,
-        home_hero_images: (updates as any).home_hero_images,
-        break_by_user: (updates as any).break_by_user,
+            home_hero_images: (updates as any).home_hero_images,
+            home_hero_mode: (updates as any).home_hero_mode,
+            home_hero_single_url: (updates as any).home_hero_single_url,
+            home_hero_single_kind: (updates as any).home_hero_single_kind,
+            break_by_user: (updates as any).break_by_user,
         booking_open_days_by_user: (updates as any).booking_open_days_by_user,
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
         client_reminder_minutes: (updates as any).client_reminder_minutes,
@@ -160,6 +166,9 @@ export const businessProfileApi = {
           facebook_url: updates.facebook_url,
           tiktok_url: (updates as any).tiktok_url,
           home_hero_images: (updates as any).home_hero_images,
+          home_hero_mode: (updates as any).home_hero_mode ?? 'marquee',
+          home_hero_single_url: (updates as any).home_hero_single_url ?? null,
+          home_hero_single_kind: (updates as any).home_hero_single_kind ?? null,
           break_by_user: (updates as any).break_by_user,
           booking_open_days_by_user: (updates as any).booking_open_days_by_user ?? {},
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
@@ -210,6 +219,30 @@ export const businessProfileApi = {
       return (data as BusinessProfile) || null;
     } catch (e) {
       console.error('Error in updateHomeLogoUrl:', e);
+      return null;
+    }
+  },
+
+  /**
+   * Updates only `home_hero_mode`.
+   * Never touches `home_hero_images` or `home_hero_single_*` — switching modes preserves all media.
+   */
+  async updateHomeHeroMode(home_hero_mode: 'marquee' | 'single_fullbleed'): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ home_hero_mode })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Error updating home_hero_mode:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeHeroMode:', e);
       return null;
     }
   },

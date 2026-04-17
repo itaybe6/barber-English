@@ -78,6 +78,13 @@ import { useProductsStore } from '@/stores/productsStore';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { AdminHomeHeroMarquee } from '@/components/home/AdminHomeHeroMarquee';
+import { HomeHeroSingleBackdrop } from '@/components/home/HomeHeroSingleBackdrop';
+import {
+  normalizeHomeHeroMode,
+  normalizeHomeHeroSingleKind,
+  inferHomeHeroSingleKindFromUrl,
+  type HomeHeroSingleKind,
+} from '@/lib/utils/homeHeroMode';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
@@ -204,6 +211,9 @@ export default function HomeScreen() {
     isRTL || clientsSearchLangRtl ? styles.searchInputRtl : styles.searchInputLtr;
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
+  const [homeHeroMode, setHomeHeroMode] = useState<'marquee' | 'single_fullbleed'>('marquee');
+  const [homeHeroSingleUrl, setHomeHeroSingleUrl] = useState<string | null>(null);
+  const [homeHeroSingleKind, setHomeHeroSingleKind] = useState<HomeHeroSingleKind>('image');
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
   /** False until we know `home_logo_url` from DB (avoids flashing bundled branding before Supabase loads). */
   const [isHomeLogoProfileLoaded, setIsHomeLogoProfileLoaded] = useState(false);
@@ -233,6 +243,11 @@ export default function HomeScreen() {
       setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
       setHomeHeaderDisplayName(getHomeHeaderTitleWhenLogoHidden(p));
       setHomeHeaderTitleFontId(normalizeHomeHeaderTitleFontId((p as any)?.home_header_title_font));
+      setHomeHeroMode(normalizeHomeHeroMode((p as any)?.home_hero_mode));
+      const su = String((p as any)?.home_hero_single_url ?? '').trim();
+      setHomeHeroSingleUrl(/^https?:\/\//i.test(su) ? su : null);
+      const sk = normalizeHomeHeroSingleKind((p as any)?.home_hero_single_kind);
+      setHomeHeroSingleKind(sk ?? (su ? inferHomeHeroSingleKindFromUrl(su) : 'image'));
     };
 
     if (!homeLogoInitialFetchDoneRef.current) {
@@ -253,6 +268,9 @@ export default function HomeScreen() {
           setHomeHeaderShowLogo(true);
           setHomeHeaderDisplayName('');
           setHomeHeaderTitleFontId('system');
+          setHomeHeroMode('marquee');
+          setHomeHeroSingleUrl(null);
+          setHomeHeroSingleKind('image');
           homeLogoInitialFetchDoneRef.current = true;
           setIsHomeLogoProfileLoaded(true);
           return;
@@ -276,6 +294,9 @@ export default function HomeScreen() {
       setHomeHeaderShowLogo(true);
       setHomeHeaderDisplayName('');
       setHomeHeaderTitleFontId('system');
+      setHomeHeroMode('marquee');
+      setHomeHeroSingleUrl(null);
+      setHomeHeroSingleKind('image');
     }
   }, []);
 
@@ -1201,6 +1222,8 @@ export default function HomeScreen() {
             ? t('clients.unblock.message', { name: cd.client?.name || t('clients.thisClient', 'this client') })
             : '';
 
+  const adminHeroUsesSingleBackdrop = homeHeroMode === 'single_fullbleed' && !!homeHeroSingleUrl;
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
@@ -1222,12 +1245,20 @@ export default function HomeScreen() {
           pointerEvents="box-none"
           collapsable={false}
         >
-          <AdminHomeHeroMarquee
-            customImageUrls={heroImages ?? []}
-            layoutWidth={SCREEN_WIDTH}
-            layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
-            keyPrefix="admin-home"
-          />
+          {adminHeroUsesSingleBackdrop && homeHeroSingleUrl ? (
+            <HomeHeroSingleBackdrop
+              uri={homeHeroSingleUrl}
+              kind={homeHeroSingleKind}
+              fadeToColor="#FFFFFF"
+            />
+          ) : (
+            <AdminHomeHeroMarquee
+              customImageUrls={heroImages ?? []}
+              layoutWidth={SCREEN_WIDTH}
+              layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
+              keyPrefix="admin-home"
+            />
+          )}
         </Animated.View>
       )}
 
@@ -1254,12 +1285,20 @@ export default function HomeScreen() {
             style={{ height: HERO_HEIGHT - HERO_OVERLAP, overflow: 'hidden' }}
             pointerEvents="none"
           >
-            <AdminHomeHeroMarquee
-              customImageUrls={heroImages ?? []}
-              layoutWidth={SCREEN_WIDTH}
-              layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
-              keyPrefix="admin-home"
-            />
+            {adminHeroUsesSingleBackdrop && homeHeroSingleUrl ? (
+              <HomeHeroSingleBackdrop
+                uri={homeHeroSingleUrl}
+                kind={homeHeroSingleKind}
+                fadeToColor="#FFFFFF"
+              />
+            ) : (
+              <AdminHomeHeroMarquee
+                customImageUrls={heroImages ?? []}
+                layoutWidth={SCREEN_WIDTH}
+                layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
+                keyPrefix="admin-home"
+              />
+            )}
           </View>
         )}
         {/* Content wrapper — minHeight like client home so the sheet fills the viewport and scrolls as one surface */}

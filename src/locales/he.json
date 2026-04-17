@@ -821,7 +821,7 @@
     
     "profile": {
       "businessAddressTitle": "כתובת העסק",
-      "businessAddressSheetSubtitle": "לקוחות רואים את הכתובת בזמן ההזמנה. בחרו הצעה או הקלידו בחופשיות.",
+      "businessAddressSheetSubtitle": "הקלידו כתובת למטה ובחרו אותה מהרשימה",
       "addressLabel": "כתובת",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "כתובת העסק",

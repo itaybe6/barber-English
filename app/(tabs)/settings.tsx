@@ -4151,8 +4151,8 @@ export default function SettingsScreen() {
           ]}
         >
           <LinearGradient
-            colors={['#F5F7FF', '#FFFFFF', '#FFFFFF']}
-            locations={[0, 0.3, 1]}
+            colors={['#F2F3F7', '#F2F3F7', '#F2F3F7']}
+            locations={[0, 0.5, 1]}
             style={StyleSheet.absoluteFillObject}
             pointerEvents="none"
           />
@@ -4194,7 +4194,7 @@ export default function SettingsScreen() {
                     </View>
                     <Text style={styles.addressSheetHeroTitle}>{t('settings.profile.businessAddressTitle', 'כתובת העסק')}</Text>
                     <Text style={styles.addressSheetHeroSubtitle}>
-                      {t('settings.profile.businessAddressSheetSubtitle', 'לקוחות רואים את הכתובת בזמן ההזמנה. בחרו הצעה או הקלידו בחופשיות.')}
+                      {t('settings.profile.businessAddressSheetSubtitle', 'הקלידו כתובת למטה ובחרו אותה מהרשימה')}
                     </Text>
                   </View>
                 </View>
@@ -4213,15 +4213,7 @@ export default function SettingsScreen() {
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.addressFieldSectionLabel,
-                        { textAlign: I18nManager.isRTL ? 'right' : 'left' },
-                      ]}
-                    >
-                      {t('settings.profile.addressLabel', 'כתובת')}
-                    </Text>
-                    <View style={[styles.addressSearchShell, { borderColor: `${businessColors.primary}33` }]}>
+                    <View style={styles.addressSearchShell}>
                       <View style={[styles.addressSearchPin, { backgroundColor: pinTint }]}>
                         <MapPin size={20} color={primaryOnSurface} strokeWidth={2.2} />
                       </View>
@@ -5476,7 +5468,7 @@ const styles = StyleSheet.create({
     }),
   },
   dragHandleArea: {
-    backgroundColor: Colors.white,
+    backgroundColor: '#F2F3F7',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
@@ -5824,7 +5816,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: Colors.white,
+    backgroundColor: '#F2F3F7',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     height: '75%',
@@ -5951,20 +5943,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 58,
     borderRadius: 16,
-    borderWidth: 1.5,
-    backgroundColor: '#FAFBFF',
+    borderWidth: 0,
+    backgroundColor: '#FFFFFF',
     paddingLeft: 6,
     paddingRight: 4,
     overflow: 'visible',
     zIndex: 50,
     ...Platform.select({
       ios: {
-        shadowColor: '#1a2744',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
       },
-      android: { elevation: 3 },
+      android: { elevation: 4 },
     }),
   },
   addressSearchPin: {

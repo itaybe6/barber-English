@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,24 +11,35 @@ import {
   Platform,
   Pressable,
   Keyboard,
+  PanResponder,
   Dimensions,
   I18nManager,
+  InputAccessoryView,
 } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { X, User, Phone, Lock } from 'lucide-react-native';
-import { StatusBar } from 'expo-status-bar';
+import { User, Phone, Lock } from 'lucide-react-native';
 import { usersApi } from '@/lib/api/users';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { parseIsraeliMobileNational10 } from '@/lib/login/israeliMobilePhone';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
-import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
-import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 const { height: SH } = Dimensions.get('window');
+const SHEET_ANIM_MS = 320;
+const SWIPE_CLOSE_THRESHOLD = 80;
+/** iOS: empty accessory replaces RN default toolbar above phone-pad / numeric keyboards */
+const IOS_HIDDEN_KEYBOARD_ACCESSORY = 'addAdminModalIosHiddenAcc';
+/** Minimum sheet body height — keep in sync with AddServiceModal `SHEET_SCROLL_MIN_HEIGHT` */
+const SHEET_SCROLL_MIN_HEIGHT = SH * 0.54;
 
 function darkenHex(hex: string, ratio: number): string {
   const h = hex.replace('#', '');
@@ -52,27 +63,35 @@ function lightenHex(hex: string, ratio: number): string {
   return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
 }
 
+export interface AddAdminModalEditingUser {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 interface AddAdminModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** When set, modal is in edit mode for this admin (password optional — leave blank to keep). */
+  editingUser?: AddAdminModalEditingUser | null;
 }
 
-export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminModalProps) {
+export default function AddAdminModal({ visible, onClose, onSuccess, editingUser = null }: AddAdminModalProps) {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 24);
+  const bottomPad = Math.max(insets.bottom, 20);
   const { colors: businessColors } = useBusinessColors();
   const { t, i18n } = useTranslation();
-  const [isLoading, setIsLoading] = useState(false);
 
   const activeLang = String(i18n.resolvedLanguage || i18n.language || '').toLowerCase();
   const isRtl = I18nManager.isRTL || activeLang.startsWith('he');
 
+  const [isMounted, setIsMounted] = useState(visible);
+  const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
   const [nameFocused, setNameFocused] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -87,23 +106,52 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
   const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  /** Brighter copy on gradient so subtitles, hints, and placeholders read clearly */
-  const heroMuted = useLightFg ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.72)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.45)';
-  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.22)';
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.7)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.4)';
+  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.2)';
   const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
   const ctaElevatedBg = useLightFg ? '#FFFFFF' : 'rgba(0,0,0,0.1)';
   const ctaElevatedLabel = useLightFg ? '#141414' : '#111111';
   const ctaElevatedBorder = useLightFg ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.18)';
 
-  const btnScale = useSharedValue(1);
-  const btnScaleStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: btnScale.value }],
+  const sheetTranslateY = useSharedValue(SH);
+  const backdropOpacity = useSharedValue(0);
+  const dragY = useSharedValue(0);
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.get(),
+  }));
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.get() + dragY.get() }],
   }));
 
-  const canonicalPhone = useMemo(() => parseIsraeliMobileNational10(phone), [phone]);
+  useEffect(() => {
+    if (visible) setIsMounted(true);
+  }, [visible]);
 
-  const resetForm = () => {
+  useEffect(() => {
+    if (!isMounted) return;
+    if (visible) {
+      sheetTranslateY.set(SH);
+      backdropOpacity.set(0);
+      dragY.set(0);
+      const frame = requestAnimationFrame(() => {
+        sheetTranslateY.set(withTiming(0, { duration: SHEET_ANIM_MS, easing: Easing.out(Easing.cubic) }));
+        backdropOpacity.set(withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    sheetTranslateY.set(withTiming(SH, { duration: SHEET_ANIM_MS, easing: Easing.in(Easing.cubic) }));
+    backdropOpacity.set(withTiming(0, { duration: SHEET_ANIM_MS, easing: Easing.in(Easing.cubic) }));
+    const timer = setTimeout(() => setIsMounted(false), SHEET_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [backdropOpacity, dragY, isMounted, sheetTranslateY, visible]);
+
+  const canonicalPhone = useMemo(() => parseIsraeliMobileNational10(phone), [phone]);
+  const inputAlign = isRtl ? 'right' : 'left';
+  const isEditMode = Boolean(editingUser?.id);
+
+  const resetForm = useCallback(() => {
     setName('');
     setPhone('');
     setPassword('');
@@ -112,12 +160,51 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
     setPhoneFocused(false);
     setPasswordFocused(false);
     setConfirmFocused(false);
-  };
+    setIsLoading(false);
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
+    Keyboard.dismiss();
     resetForm();
     onClose();
-  };
+  }, [onClose, resetForm]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (editingUser?.id) {
+      setName(String(editingUser.name || ''));
+      setPhone(String(editingUser.phone || ''));
+      setPassword('');
+      setConfirmPassword('');
+      setNameFocused(false);
+      setPhoneFocused(false);
+      setPasswordFocused(false);
+      setConfirmFocused(false);
+    } else {
+      resetForm();
+    }
+  }, [visible, editingUser?.id, editingUser?.name, editingUser?.phone, resetForm]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 4,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) dragY.set(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > SWIPE_CLOSE_THRESHOLD || gs.vy > 0.8) {
+          dragY.set(withTiming(SH, { duration: 280, easing: Easing.in(Easing.cubic) }));
+          setTimeout(() => {
+            resetForm();
+            onClose();
+          }, 260);
+        } else {
+          dragY.set(withSpring(0, { damping: 18, stiffness: 260 }));
+        }
+      },
+    })
+  ).current;
 
   const validateForm = () => {
     if (!name.trim()) {
@@ -131,6 +218,20 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
     if (!canonicalPhone) {
       Alert.alert(t('error.generic', 'Error'), t('settings.admin.phoneInvalid', 'Please enter a valid phone number'));
       return false;
+    }
+    if (isEditMode) {
+      const pwEmpty = password.length === 0 && confirmPassword.length === 0;
+      if (!pwEmpty) {
+        if (password.length < 6) {
+          Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordTooShort', 'Password must be at least 6 characters'));
+          return false;
+        }
+        if (password !== confirmPassword) {
+          Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordsMismatch', 'Passwords do not match'));
+          return false;
+        }
+      }
+      return true;
     }
     if (!password.trim()) {
       Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordRequired', 'Please enter a password'));
@@ -148,19 +249,37 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
   };
 
   const formComplete = useMemo(() => {
-    return (
-      name.trim().length > 0 &&
-      canonicalPhone !== null &&
-      password.length >= 6 &&
-      password === confirmPassword
-    );
-  }, [name, canonicalPhone, password, confirmPassword]);
+    if (!name.trim() || canonicalPhone === null) return false;
+    if (isEditMode) {
+      const pwEmpty = password.length === 0 && confirmPassword.length === 0;
+      if (pwEmpty) return true;
+      return password.length >= 6 && password === confirmPassword;
+    }
+    return password.length >= 6 && password === confirmPassword;
+  }, [name, canonicalPhone, password, confirmPassword, isEditMode]);
 
   const handleSubmit = async () => {
     if (!validateForm() || !canonicalPhone) return;
-
     setIsLoading(true);
     try {
+      if (isEditMode && editingUser?.id) {
+        const payload: { name: string; phone: string; password?: string } = {
+          name: name.trim(),
+          phone: canonicalPhone,
+        };
+        if (password.trim().length > 0) {
+          payload.password = password.trim();
+        }
+        const updated = await usersApi.updateUser(editingUser.id, payload);
+        if (updated) {
+          handleClose();
+          onSuccess();
+        } else {
+          Alert.alert(t('error.generic', 'Error'), t('settings.admin.updateEmployeeFailed', 'Failed to update employee'));
+        }
+        return;
+      }
+
       const result = await usersApi.createUserWithPassword(
         {
           name: name.trim(),
@@ -170,7 +289,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
         },
         password
       );
-
       if (result.ok) {
         handleClose();
         onSuccess();
@@ -183,313 +301,299 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
         );
       }
     } catch (error) {
-      console.error('Error creating admin user:', error);
-      Alert.alert(t('error.generic', 'Error'), t('settings.admin.createFailed', 'Error creating user'));
+      console.error('Error saving admin user:', error);
+      Alert.alert(
+        t('error.generic', 'Error'),
+        isEditMode ? t('settings.admin.updateEmployeeFailed', 'Failed to update employee') : t('settings.admin.createFailed', 'Error creating user')
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const inputAlign = isRtl ? 'right' : 'left';
+  if (!isMounted) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <View style={[styles.root, { backgroundColor: gradientEnd }]}>
-        <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFill} />
-        {Platform.OS !== 'web' ? (
-          <BrandLavaLampBackground
-            primaryColor={primary}
-            baseColor={gradientEnd}
-            count={4}
-            duration={16000}
-            blurIntensity={48}
-          />
-        ) : null}
-        <StatusBar style={useLightFg ? 'light' : 'dark'} />
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
+      <View style={styles.modalRoot} pointerEvents="box-none">
+        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} accessible={false} />
+        </Animated.View>
 
-        <TouchableOpacity
-          style={[
-            styles.closeBtn,
-            {
-              top: insets.top + 8,
-              ...(isRtl ? { right: 16 } : { left: 16 }),
-              borderColor: useLightFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
-              backgroundColor: useLightFg ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)',
-            },
-          ]}
-          onPress={handleClose}
-          accessibilityRole="button"
-          accessibilityLabel={t('close', 'Close')}
-        >
-          <X size={22} color={heroText} strokeWidth={2.2} />
-        </TouchableOpacity>
+        <Animated.View style={[styles.sheetOuter, sheetAnimatedStyle]}>
+            <LinearGradient
+              colors={[...loginGradient]}
+              style={[StyleSheet.absoluteFill, { borderTopLeftRadius: 24, borderTopRightRadius: 24 }]}
+            />
 
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-          <KeyboardAwareScreenScroll
-            style={[styles.keyboardAvoid, { backgroundColor: 'transparent' }]}
-            contentContainerStyle={[
-              styles.scrollContainer,
-              {
-                backgroundColor: 'transparent',
-                paddingVertical: 16,
-                paddingBottom: bottomPad + 24,
-              },
-            ]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            bounces={false}
-          >
-            <View style={[styles.rtlRoot, { direction: isRtl ? 'rtl' : 'ltr' }]}>
-              <Pressable
-                accessible={false}
-                style={[styles.dismissKeyboardArea, { minHeight: Math.max(SH - insets.top - insets.bottom, 420) }]}
-                onPress={Keyboard.dismiss}
-              >
-                <View style={[styles.formZone, { paddingBottom: bottomPad }]}>
-                  <LoginEntranceSection delayMs={0} style={styles.stepBody}>
-                    <Text style={[styles.heroTitle, { color: heroText }]}>{t('settings.admin.addEmployee', 'Add employee')}</Text>
-                    <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
-                      {t('settings.admin.addEmployeeSubtitle', 'Add another employee to the system')}
-                    </Text>
-                    <Text style={[styles.heroHintLine, { color: heroMuted }]}>
-                      {t('settings.admin.addEmployeeFormHint', 'They will sign in with the phone number and password you set.')}
-                    </Text>
-
-                    <View
-                      style={[
-                        styles.phoneOpenRow,
-                        styles.profileNameRow,
-                        { flexDirection: 'row' },
-                        {
-                          borderBottomColor: nameFocused ? phoneBorderFocus : phoneBorderUnfocus,
-                          borderBottomWidth: nameFocused ? 2.5 : 1.5,
-                        },
-                      ]}
-                    >
-                      <View style={styles.phoneOpenIconSlot} accessible={false}>
-                        <User size={18} color={nameFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
-                      </View>
-                      <TextInput
-                        style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
-                        placeholder={t('register.profile.namePlaceholder', 'Full name')}
-                        placeholderTextColor={heroFaint}
-                        value={name}
-                        onChangeText={setName}
-                        autoCorrect={false}
-                        onFocus={() => setNameFocused(true)}
-                        onBlur={() => setNameFocused(false)}
-                        returnKeyType="next"
-                        accessibilityLabel={t('settings.admin.fullNameLabel', 'Full name')}
-                      />
-                    </View>
-
-                    <View
-                      style={[
-                        styles.phoneOpenRow,
-                        { flexDirection: 'row', marginTop: 14 },
-                        {
-                          borderBottomColor: phoneFocused ? phoneBorderFocus : phoneBorderUnfocus,
-                          borderBottomWidth: phoneFocused ? 2.5 : 1.5,
-                        },
-                      ]}
-                    >
-                      <View style={styles.phoneOpenIconSlot} accessible={false}>
-                        <Phone size={18} color={phoneFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.5} />
-                      </View>
-                      <TextInput
-                        style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText, writingDirection: 'ltr' }]}
-                        placeholder={t('settings.admin.phonePlaceholder', '050-1234567')}
-                        placeholderTextColor={heroFaint}
-                        value={phone}
-                        onChangeText={setPhone}
-                        keyboardType="phone-pad"
-                        autoCorrect={false}
-                        onFocus={() => setPhoneFocused(true)}
-                        onBlur={() => setPhoneFocused(false)}
-                        returnKeyType="next"
-                      />
-                    </View>
-                    {phone.trim().length > 0 && !canonicalPhone ? (
-                      <Text style={[styles.errorOnHero, styles.errorOnHeroPhoneInvalid, { textAlign: inputAlign }]}>
-                        {t('settings.admin.phoneInvalid', 'Invalid phone number')}
-                      </Text>
-                    ) : null}
-
-                    <View
-                      style={[
-                        styles.phoneOpenRow,
-                        { flexDirection: 'row', marginTop: 14 },
-                        {
-                          borderBottomColor: passwordFocused ? phoneBorderFocus : phoneBorderUnfocus,
-                          borderBottomWidth: passwordFocused ? 2.5 : 1.5,
-                        },
-                      ]}
-                    >
-                      <View style={styles.phoneOpenIconSlot} accessible={false}>
-                        <Lock size={18} color={passwordFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
-                      </View>
-                      <TextInput
-                        style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
-                        placeholder={t('settings.admin.passwordPlaceholder', 'Password')}
-                        placeholderTextColor={heroFaint}
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                        onFocus={() => setPasswordFocused(true)}
-                        onBlur={() => setPasswordFocused(false)}
-                        returnKeyType="next"
-                        autoComplete="off"
-                        textContentType="password"
-                      />
-                    </View>
-                    <Text style={[styles.softHint, { color: heroMuted }]}>{t('settings.admin.passwordHint', 'At least 6 characters')}</Text>
-
-                    <View
-                      style={[
-                        styles.phoneOpenRow,
-                        { flexDirection: 'row', marginTop: 6 },
-                        {
-                          borderBottomColor: confirmFocused ? phoneBorderFocus : phoneBorderUnfocus,
-                          borderBottomWidth: confirmFocused ? 2.5 : 1.5,
-                        },
-                      ]}
-                    >
-                      <View style={styles.phoneOpenIconSlot} accessible={false}>
-                        <Lock size={18} color={confirmFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
-                      </View>
-                      <TextInput
-                        style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
-                        placeholder={t('settings.admin.confirmPasswordPlaceholder', 'Confirm password')}
-                        placeholderTextColor={heroFaint}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        secureTextEntry
-                        onFocus={() => setConfirmFocused(true)}
-                        onBlur={() => setConfirmFocused(false)}
-                        returnKeyType="done"
-                        onSubmitEditing={handleSubmit}
-                        autoComplete="off"
-                        textContentType="password"
-                      />
-                    </View>
-                    {confirmPassword.length > 0 && password !== confirmPassword ? (
-                      <Text style={[styles.errorOnHero, { color: businessColors.error, textAlign: inputAlign }]}>
-                        {t('settings.admin.passwordsMismatch', 'Passwords do not match')}
-                      </Text>
-                    ) : null}
-                  </LoginEntranceSection>
-
-                  <LoginEntranceSection delayMs={420} style={[styles.btnWrap, styles.profileBtnWrap]}>
-                    <Animated.View style={btnScaleStyle}>
-                      <TouchableOpacity
-                        onPressIn={() => {
-                          btnScale.value = withTiming(0.97, { duration: 90 });
-                        }}
-                        onPressOut={() => {
-                          btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
-                        }}
-                        onPress={handleSubmit}
-                        disabled={!formComplete || isLoading}
-                        activeOpacity={1}
-                        accessibilityRole="button"
-                      >
-                        <View
-                          style={[
-                            styles.btnOuter,
-                            useLightFg ? styles.btnOuterElevated : null,
-                            (!formComplete || isLoading) && styles.btnOuterDisabled,
-                            {
-                              backgroundColor: ctaElevatedBg,
-                              borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
-                              borderColor: ctaElevatedBorder,
-                            },
-                          ]}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color={ctaElevatedLabel} size="small" />
-                          ) : (
-                            <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
-                              {t('settings.admin.addEmployeeCta', 'Add employee')}
-                            </Text>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    </Animated.View>
-                  </LoginEntranceSection>
-
-                  <LoginEntranceSection delayMs={560} style={styles.linksWrap}>
-                    <Text style={[styles.footerNote, { color: heroMuted }]}>
-                      {t('settings.admin.reviewPasswordNote', 'Password is stored securely.')}
-                    </Text>
-                  </LoginEntranceSection>
-                </View>
-              </Pressable>
+            <View style={styles.handleArea} {...panResponder.panHandlers}>
+              <View style={styles.dragHandle} />
             </View>
-          </KeyboardAwareScreenScroll>
-        </SafeAreaView>
+
+            <KeyboardAwareScreenScroll
+              style={styles.sheetScroll}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              enableOnAndroid
+              extraScrollHeight={22}
+              extraHeight={8}
+              enableAutomaticScroll
+              enableResetScrollToCoords={false}
+              contentContainerStyle={[
+                styles.sheetContent,
+                { direction: isRtl ? 'rtl' : 'ltr', paddingBottom: bottomPad + 8 },
+              ]}
+            >
+              <Text style={[styles.heroTitle, { color: heroText }]}>
+                {isEditMode
+                  ? t('settings.admin.editEmployee', 'עריכת עובד')
+                  : t('settings.admin.addEmployee', 'הוספת עובד')}
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
+                {isEditMode
+                  ? t('settings.admin.editEmployeeSubtitle', 'עדכון שם, טלפון או סיסמה.')
+                  : t('settings.admin.addEmployeeSubtitle', 'הוספת עובד נוסף למערכת.')}
+              </Text>
+
+              <View
+                style={[
+                  styles.phoneOpenRow,
+                  styles.profileNameRow,
+                  { flexDirection: 'row' },
+                  {
+                    borderBottomColor: nameFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                    borderBottomWidth: nameFocused ? 2.5 : 1.5,
+                  },
+                ]}
+              >
+                <View style={styles.phoneOpenIconSlot} accessible={false}>
+                  <User size={18} color={nameFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
+                </View>
+                <TextInput
+                  style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
+                  placeholder={t('register.profile.namePlaceholder', 'שם מלא')}
+                  placeholderTextColor={heroFaint}
+                  value={name}
+                  onChangeText={setName}
+                  autoCorrect={false}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                  returnKeyType="next"
+                  accessibilityLabel={t('settings.admin.fullNameLabel', 'שם מלא')}
+                />
+              </View>
+
+              <View
+                style={[
+                  styles.phoneOpenRow,
+                  { flexDirection: 'row', marginTop: 12 },
+                  {
+                    borderBottomColor: phoneFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                    borderBottomWidth: phoneFocused ? 2.5 : 1.5,
+                  },
+                ]}
+              >
+                <View style={styles.phoneOpenIconSlot} accessible={false}>
+                  <Phone size={18} color={phoneFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.5} />
+                </View>
+                <TextInput
+                  style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText, writingDirection: 'ltr' }]}
+                  placeholder={t('settings.admin.phonePlaceholder', '050-1234567')}
+                  placeholderTextColor={heroFaint}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  autoCorrect={false}
+                  onFocus={() => setPhoneFocused(true)}
+                  onBlur={() => setPhoneFocused(false)}
+                  returnKeyType="done"
+                  enterKeyHint="done"
+                  inputAccessoryViewID={Platform.OS === 'ios' ? IOS_HIDDEN_KEYBOARD_ACCESSORY : undefined}
+                />
+              </View>
+              {phone.trim().length > 0 && !canonicalPhone ? (
+                <Text style={[styles.errorOnHero, styles.errorOnHeroPhoneInvalid, { textAlign: inputAlign }]}>
+                  {t('settings.admin.phoneInvalid', 'מספר טלפון לא תקין')}
+                </Text>
+              ) : null}
+
+              <View
+                style={[
+                  styles.phoneOpenRow,
+                  { flexDirection: 'row', marginTop: 12 },
+                  {
+                    borderBottomColor: passwordFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                    borderBottomWidth: passwordFocused ? 2.5 : 1.5,
+                  },
+                ]}
+              >
+                <View style={styles.phoneOpenIconSlot} accessible={false}>
+                  <Lock size={18} color={passwordFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
+                </View>
+                <TextInput
+                  style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
+                  placeholder={
+                    isEditMode
+                      ? t('settings.admin.passwordPlaceholderOptional', 'סיסמה חדשה (אופציונלי)')
+                      : t('settings.admin.passwordPlaceholder', 'סיסמה')
+                  }
+                  placeholderTextColor={heroFaint}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                  returnKeyType="next"
+                  autoComplete="off"
+                  textContentType="password"
+                />
+              </View>
+              <Text style={[styles.softHint, { color: heroMuted }]}>
+                {isEditMode
+                  ? t('settings.admin.editEmployeePasswordHint', 'השאר ריק לשמירת הסיסמה הקיימת.')
+                  : t('settings.admin.passwordHint', 'לפחות 6 תווים')}
+              </Text>
+
+              <View
+                style={[
+                  styles.phoneOpenRow,
+                  { flexDirection: 'row', marginTop: 8 },
+                  {
+                    borderBottomColor: confirmFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                    borderBottomWidth: confirmFocused ? 2.5 : 1.5,
+                  },
+                ]}
+              >
+                <View style={styles.phoneOpenIconSlot} accessible={false}>
+                  <Lock size={18} color={confirmFocused ? phoneBorderFocus : heroFaint} strokeWidth={1.6} />
+                </View>
+                <TextInput
+                  style={[styles.phoneOpenInput, { textAlign: inputAlign, color: heroText }]}
+                  placeholder={
+                    isEditMode
+                      ? t('settings.admin.confirmPasswordPlaceholderOptional', 'אימות סיסמה חדשה')
+                      : t('settings.admin.confirmPasswordPlaceholder', 'אימות סיסמה')
+                  }
+                  placeholderTextColor={heroFaint}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  onFocus={() => setConfirmFocused(true)}
+                  onBlur={() => setConfirmFocused(false)}
+                  returnKeyType="done"
+                  onSubmitEditing={() => void handleSubmit()}
+                  autoComplete="off"
+                  textContentType="password"
+                />
+              </View>
+              {confirmPassword.length > 0 && password !== confirmPassword ? (
+                <Text style={[styles.errorOnHero, { color: businessColors.error, textAlign: inputAlign }]}>
+                  {t('settings.admin.passwordsMismatch', 'הסיסמאות אינן תואמות')}
+                </Text>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => void handleSubmit()}
+                disabled={!formComplete || isLoading}
+                activeOpacity={0.85}
+                style={styles.btnWrap}
+              >
+                <View
+                  style={[
+                    styles.btnOuter,
+                    (!formComplete || isLoading) && styles.btnOuterDisabled,
+                    {
+                      backgroundColor: ctaElevatedBg,
+                      borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
+                      borderColor: ctaElevatedBorder,
+                    },
+                  ]}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={ctaElevatedLabel} size="small" />
+                  ) : (
+                    <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
+                      {isEditMode
+                        ? t('settings.admin.saveEmployeeChanges', 'שמירת שינויים')
+                        : t('settings.admin.addEmployeeCta', 'הוספת עובד')}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <Text style={[styles.footerNote, { color: heroMuted }]}>
+                {isEditMode
+                  ? t('settings.admin.editEmployeePasswordHint', 'השאר את שדות הסיסמה ריקים כדי לשמור על הסיסמה הקיימת.')
+                  : t('settings.admin.reviewPasswordNote', 'הסיסמה נשמרת בצורה מאובטחת.')}
+              </Text>
+            </KeyboardAwareScreenScroll>
+          </Animated.View>
+
+        {Platform.OS === 'ios' ? (
+          <InputAccessoryView nativeID={IOS_HIDDEN_KEYBOARD_ACCESSORY}>
+            <View style={styles.iosKeyboardAccEmpty} />
+          </InputAccessoryView>
+        ) : null}
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  modalRoot: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
-  safeArea: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  iosKeyboardAccEmpty: {
+    height: 0,
+    width: '100%',
   },
-  closeBtn: {
-    position: 'absolute',
-    zIndex: 40,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheetScroll: {
+    minHeight: SHEET_SCROLL_MIN_HEIGHT,
+    maxHeight: SH * 0.88,
+    width: '100%',
+  },
+  sheetOuter: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+  },
+  handleArea: {
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
-  keyboardAvoid: { flex: 1 },
-  scrollContainer: { flexGrow: 1 },
-  rtlRoot: { flex: 1 },
-  dismissKeyboardArea: {
-    flexGrow: 1,
-    width: '100%',
-    alignSelf: 'stretch',
-    justifyContent: 'center',
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
-  formZone: {
-    backgroundColor: 'transparent',
+  sheetContent: {
     paddingHorizontal: 26,
-    width: '100%',
-  },
-  stepBody: {
-    marginBottom: 6,
+    paddingTop: 4,
   },
   heroTitle: {
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     lineHeight: 28,
+    marginTop: 4,
   },
   heroSubtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 23,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-    fontWeight: '700',
-  },
-  heroHintLine: {
     fontSize: 15,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-    paddingHorizontal: 6,
-    fontWeight: '700',
+    lineHeight: 21,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+    fontWeight: '600',
   },
   phoneOpenRow: {
     alignSelf: 'stretch',
@@ -500,7 +604,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileNameRow: {
-    marginTop: 6,
+    marginTop: 0,
   },
   phoneOpenIconSlot: {
     paddingBottom: 1,
@@ -516,29 +620,26 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   softHint: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
-    marginTop: 10,
-    fontWeight: '700',
+    marginTop: 8,
+    fontWeight: '600',
   },
   errorOnHero: {
     fontSize: 13,
     marginTop: 8,
     width: '100%',
   },
-  /** Softer on dark purple gradient than `businessColors.error` */
   errorOnHeroPhoneInvalid: {
     color: '#fecaca',
     fontWeight: '600',
   },
   btnWrap: {
-    marginTop: 10,
-  },
-  profileBtnWrap: {
-    marginTop: 36,
+    marginTop: 22,
+    marginBottom: 4,
   },
   btnOuter: {
-    minHeight: 54,
+    minHeight: 52,
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
@@ -548,12 +649,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
-  btnOuterElevated: {
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
   btnOuterDisabled: {
     opacity: 0.46,
   },
@@ -562,15 +657,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  linksWrap: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingHorizontal: 8,
-  },
   footerNote: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
     textAlign: 'center',
     fontWeight: '600',
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 8,
   },
 });

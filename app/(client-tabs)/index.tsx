@@ -50,6 +50,7 @@ import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
 import { ClientWeekAvailabilityStrip } from '@/components/home/ClientWeekAvailabilityStrip';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
+import { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
 import HomeFixedMessageSheet from '@/components/HomeFixedMessageSheet';
 import InterestedSwapModal from '@/components/InterestedSwapModal';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
@@ -2240,12 +2241,16 @@ const styles = StyleSheet.create<any>({
   },
   loadingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     padding: 24,
     borderWidth: 1,
     borderColor: '#E5E5EA',
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({
+      ios: { borderCurve: 'continuous' as const },
+      default: {},
+    }),
   },
   loadingText: {
     fontSize: 16,
@@ -2310,10 +2315,11 @@ const styles = StyleSheet.create<any>({
   // ── Next Appointment Card (clean, like admin DailySchedule) ──
   clientNextCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     marginHorizontal: 4,
     ...Platform.select({
       ios: {
+        borderCurve: 'continuous' as const,
         shadowColor: '#1e253b',
         shadowOpacity: 0.16,
         shadowRadius: 18,

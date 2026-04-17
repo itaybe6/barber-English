@@ -28,7 +28,6 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
-  X,
   Trash2,
   Check,
   Instagram,
@@ -45,18 +44,16 @@ import {
   Camera,
   Megaphone,
   Layers,
-  FileText,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
 import InlineEditableRow from '@/components/InlineEditableRow';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import AddAdminModal from '@/components/AddAdminModal';
+import AddAdminModal, { type AddAdminModalEditingUser } from '@/components/AddAdminModal';
 import AddServiceModal from '@/components/AddServiceModal';
 import { SettingsServiceSwipeRow } from '@/components/SettingsServiceSwipeRow';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
@@ -95,6 +92,8 @@ const shadowStyle = Platform.select({
 
 /** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
 const SETTINGS_GROUPED_BG = '#F2F2F7';
+/** Ruler + manual row in policy bottom sheets (booking days, client hours, admin minutes) */
+const SHEET_RULER_SETTINGS_CARD_BG = '#FAFAFC';
 
 const BOOKING_WINDOW_MIN = 0;
 const BOOKING_WINDOW_MAX = 60;
@@ -164,6 +163,7 @@ export default function SettingsScreen() {
   // Notification modal states
   // Add admin modal state
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [editingAdminUser, setEditingAdminUser] = useState<AddAdminModalEditingUser | null>(null);
   const [removeEmployeeDialog, setRemoveEmployeeDialog] = useState<{ id: string; name: string } | null>(null);
   const [removeEmployeeLoading, setRemoveEmployeeLoading] = useState(false);
   const [deleteServiceDialog, setDeleteServiceDialog] = useState<{ id: string } | null>(null);
@@ -310,7 +310,9 @@ export default function SettingsScreen() {
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const bookingWindowSheetRef = useRef<BottomSheetModal>(null);
+  const cancellationPolicySheetRef = useRef<BottomSheetModal>(null);
   const clientReminderSheetRef = useRef<BottomSheetModal>(null);
+  const adminReminderSheetRef = useRef<BottomSheetModal>(null);
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
   const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
   const homeFixedMessageInputRef = useRef<TextInput>(null);
@@ -329,10 +331,6 @@ export default function SettingsScreen() {
   const [tiktokDraft, setTiktokDraft] = useState('');
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
-  const [showReceiptLegalModal, setShowReceiptLegalModal] = useState(false);
-  const [receiptLegalDisplayName, setReceiptLegalDisplayName] = useState('');
-  const [receiptLegalBusinessNumber, setReceiptLegalBusinessNumber] = useState('');
-  const [receiptLegalBusinessPhone, setReceiptLegalBusinessPhone] = useState('');
   const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
@@ -519,6 +517,14 @@ export default function SettingsScreen() {
   }, [showEditCancellationModal]);
 
   useEffect(() => {
+    if (showEditCancellationModal) {
+      cancellationPolicySheetRef.current?.present();
+    } else {
+      cancellationPolicySheetRef.current?.dismiss();
+    }
+  }, [showEditCancellationModal]);
+
+  useEffect(() => {
     if (showBookingWindowModal) {
       setBookingWindowDraft(String(profileBookingOpenDays ?? 7));
       bookingWindowSheetRef.current?.present();
@@ -557,6 +563,14 @@ export default function SettingsScreen() {
     }
   }, [showClientReminderModal]);
 
+  useEffect(() => {
+    if (showAdminReminderModal) {
+      adminReminderSheetRef.current?.present();
+    } else {
+      adminReminderSheetRef.current?.dismiss();
+    }
+  }, [showAdminReminderModal]);
+
   useLayoutEffect(() => {
     if (!showAdminReminderModal) return;
     const raw = adminReminderMinutes;
@@ -590,38 +604,6 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       Alert.alert(t('success.generic','Success'), t('settings.profile.saveSuccess','Business details saved successfully'));
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
-  const openReceiptLegalModal = useCallback(() => {
-    setReceiptLegalDisplayName((profileDisplayName || '').trim());
-    setReceiptLegalBusinessNumber(String(profile?.business_number ?? '').trim());
-    setReceiptLegalBusinessPhone(String(profile?.phone ?? '').trim());
-    setShowReceiptLegalModal(true);
-  }, [profileDisplayName, profile?.business_number, profile?.phone]);
-
-  const handleSaveReceiptLegalDetails = async () => {
-    setIsSavingProfile(true);
-    try {
-      const updated = await businessProfileApi.upsertProfile({
-        display_name: receiptLegalDisplayName.trim() || null as any,
-        business_number: receiptLegalBusinessNumber.trim() || null as any,
-        phone: receiptLegalBusinessPhone.trim() || null as any,
-        address: (profileAddress || '').trim() || null as any,
-        instagram_url: (profileInstagram || '').trim() || null as any,
-        facebook_url: (profileFacebook || '').trim() || null as any,
-        tiktok_url: (profileTiktok || '').trim() || null as any,
-      });
-      if (!updated) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.receiptLegalSaveFailed', 'Could not save receipt details'));
-        return;
-      }
-      setProfile(updated);
-      setProfileDisplayName(updated.display_name || '');
-      setShowReceiptLegalModal(false);
-      Alert.alert(t('success.generic', 'Success'), t('settings.profile.saveSuccess', 'Business details saved successfully'));
     } finally {
       setIsSavingProfile(false);
     }
@@ -1816,6 +1798,20 @@ export default function SettingsScreen() {
         return;
       }
       setEditableServices(prev => prev.map(s => (s.id === service.id ? updated : s)));
+      if (svcChevronRefs.current[service.id]) {
+        Animated.timing(svcChevronRefs.current[service.id], {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      }
+      LayoutAnimation.configureNext({
+        duration: 220,
+        create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+        delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      });
       setExpandedServiceId(null);
       setSavedServiceId(service.id);
       setTimeout(() => setSavedServiceId(null), 2000);
@@ -1923,9 +1919,12 @@ export default function SettingsScreen() {
   }, [activeSettingsTab]);
 
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
+  /** When true, navigate to add-recurring only after the hub sheet has fully dismissed (avoids sheet stuck on top). */
+  const pendingNavigateToAddRecurringRef = useRef(false);
   const manageRecurringSheetRef = useRef<BottomSheetModal>(null);
   const [expandedRecurringIds, setExpandedRecurringIds] = useState<Record<string, boolean>>({});
   const recurringChevronRefs = useRef<Record<string, Animated.Value>>({});
+  const svcChevronRefs = useRef<Record<string, Animated.Value>>({});
 
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
@@ -1939,6 +1938,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (showManageRecurringModal) {
+      pendingNavigateToAddRecurringRef.current = false;
       manageRecurringSheetRef.current?.present();
     } else {
       manageRecurringSheetRef.current?.dismiss();
@@ -1951,27 +1951,44 @@ export default function SettingsScreen() {
     }
     const isExpanded = !!expandedRecurringIds[id];
     LayoutAnimation.configureNext({
-      duration: 230,
+      duration: 240,
       create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
       update: { type: LayoutAnimation.Types.easeInEaseOut },
       delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
     });
     Animated.timing(recurringChevronRefs.current[id], {
       toValue: isExpanded ? 0 : 1,
-      duration: 230,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
     setExpandedRecurringIds(prev => ({ ...prev, [id]: !prev[id] }));
   }, [expandedRecurringIds]);
 
-  /** Dismiss instantly (no animation) to avoid flash when navigating to add screen */
-  const dismissRecurringHubAndGoToAdd = useCallback(() => {
-    manageRecurringSheetRef.current?.dismiss();
-    setShowManageRecurringModal(false);
-    requestAnimationFrame(() => {
-      router.push('/(tabs)/add-recurring-appointment');
+  const toggleServiceCard = useCallback((id: string) => {
+    if (!svcChevronRefs.current[id]) {
+      svcChevronRefs.current[id] = new Animated.Value(0);
+    }
+    const isExpanded = expandedServiceId === id;
+    LayoutAnimation.configureNext({
+      duration: 260,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
     });
-  }, [router]);
+    Animated.timing(svcChevronRefs.current[id], {
+      toValue: isExpanded ? 0 : 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    setExpandedServiceId(prev => (prev === id ? null : id));
+  }, [expandedServiceId]);
+
+  const dismissRecurringHubAndGoToAdd = useCallback(() => {
+    pendingNavigateToAddRecurringRef.current = true;
+    setShowManageRecurringModal(false);
+  }, []);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(ADMIN_RECURRING_APPOINTMENTS_CHANGED, () => {
@@ -1979,11 +1996,15 @@ export default function SettingsScreen() {
         try {
           const items = await recurringAppointmentsApi.listAll();
           setRecurringList(items);
+          setShowManageRecurringModal(true);
+          animateOpenSheet();
+          requestAnimationFrame(() => {
+            manageRecurringSheetRef.current?.snapToIndex(items.length > 0 ? 1 : 0);
+          });
         } catch {
-          /* ignore */
+          setShowManageRecurringModal(true);
+          animateOpenSheet();
         }
-        setShowManageRecurringModal(true);
-        animateOpenSheet();
       })();
     });
     return () => sub.remove();
@@ -2651,6 +2672,7 @@ export default function SettingsScreen() {
                     try {
                       const items = await recurringAppointmentsApi.listAll();
                       setRecurringList(items);
+                      manageRecurringSheetRef.current?.snapToIndex(items.length > 0 ? 1 : 0);
                     } finally {
                       setIsLoadingRecurring(false);
                     }
@@ -2843,7 +2865,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingSubtitleLTR}>
                       {t(
                         'settings.policies.allowMultiServiceBookingSubtitle',
-                        'Off: one service per booking. On: clients can pick multiple services as one continuous slot.',
+                        'Off: one service per visit.\nOn: several services in one booking.',
                       )}
                     </Text>
                   </View>
@@ -2954,6 +2976,18 @@ export default function SettingsScreen() {
                   const isExpanded = expandedServiceId === svc.id;
                   const isSaving = savingServiceId === svc.id;
                   const justSaved = savedServiceId === svc.id;
+
+                  if (!svcChevronRefs.current[svc.id]) {
+                    svcChevronRefs.current[svc.id] = new Animated.Value(isExpanded ? 1 : 0);
+                  }
+                  const expandAnim = svcChevronRefs.current[svc.id];
+                  const chevronRotate = expandAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '180deg'],
+                  });
+
+                  const firstLetter = (svc.name || '?').charAt(0).toUpperCase();
+
                   return (
                     <ScaleDecorator activeScale={1.03}>
                     <View style={styles.svcListCell}>
@@ -2967,81 +3001,85 @@ export default function SettingsScreen() {
                       enabled={!isExpanded && !isActive}
                       onDeletePress={() => handleDeleteService(svc.id)}
                     >
-                      <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
-                        <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
-                        {!isExpanded ? (
-                          <View style={styles.svcListCollapsedRow}>
-                            <TouchableOpacity
-                              style={styles.svcListChevronHit}
-                              activeOpacity={0.85}
-                              onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                            >
-                              {justSaved ? (
-                                <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
-                                  <Check size={14} color={primaryOnSurface} />
-                                  <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
-                                    {t('saved','Saved')}
+                      <View style={[
+                        styles.svcCard,
+                        styles.svcListCard,
+                        justSaved && styles.svcCardSaved,
+                        isActive && styles.svcListCardDragging,
+                        isExpanded && styles.svcCardExpanded,
+                      ]}>
+                        {/* Collapsed header row — always visible */}
+                        <View style={[styles.svcListCollapsedRow, isExpanded && styles.svcListCollapsedRowExpanded]}>
+                          {/* Animated chevron (left side) */}
+                          <TouchableOpacity
+                            onPress={() => toggleServiceCard(svc.id)}
+                            style={styles.svcListChevronHit}
+                            activeOpacity={0.75}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+                              <ChevronDown size={18} color={Colors.subtext} strokeWidth={2.2} />
+                            </Animated.View>
+                          </TouchableOpacity>
+
+                          {/* Name + chips (tappable area) */}
+                          <TouchableOpacity
+                            style={styles.svcListCollapsedMain}
+                            activeOpacity={0.82}
+                            onPress={() => toggleServiceCard(svc.id)}
+                          >
+                            <Text style={styles.svcCardName} numberOfLines={1}>
+                              {svc.name || t('common.noName','No name')}
+                            </Text>
+                            <View style={styles.svcMetaRow}>
+                              {svc.duration_minutes ? (
+                                <View style={styles.svcMetaChipDuration}>
+                                  <Clock size={10} color="#6C6C70" strokeWidth={2.2} />
+                                  <Text style={styles.svcMetaChipDurationText}>
+                                    {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
                                   </Text>
                                 </View>
-                              ) : (
-                                <ChevronDown size={18} color={Colors.subtext} />
+                              ) : null}
+                              {typeof svc.price === 'number' && (
+                                <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}14` }]}>
+                                  <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
+                                    ₪{svc.price}
+                                  </Text>
+                                </View>
                               )}
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.svcListCollapsedMain}
-                              activeOpacity={0.85}
-                              onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                            >
-                              <View style={styles.svcListCollapsedTextCol}>
-                                <View style={styles.svcCardInfo}>
-                                  <Text style={styles.svcCardName} numberOfLines={1}>
-                                    {svc.name || t('common.noName','No name')}
-                                  </Text>
-                                  <View style={styles.svcMetaRow}>
-                                    {svc.duration_minutes ? (
-                                      <View style={styles.svcMetaChipDuration}>
-                                        <Text style={styles.svcMetaChipDurationText}>
-                                          {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
-                                        </Text>
-                                      </View>
-                                    ) : null}
-                                    {typeof svc.price === 'number' && (
-                                      <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}14` }]}>
-                                        <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
-                                          ₪{svc.price}
-                                        </Text>
-                                      </View>
-                                    )}
-                                  </View>
-                                </View>
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <>
-                            <View style={[styles.svcAddCardHeaderBand, { backgroundColor: `${businessColors.primary}12` }]}>
-                              <TouchableOpacity
-                                style={styles.svcListChevronHit}
-                                onPress={() => setExpandedServiceId(null)}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              >
-                                {justSaved ? (
-                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}20` }]}>
-                                    <Check size={13} color={primaryOnSurface} />
-                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>{t('saved','נשמר')}</Text>
-                                  </View>
-                                ) : (
-                                  <ChevronUp size={18} color={Colors.subtext} />
-                                )}
-                              </TouchableOpacity>
-                              <Text style={[styles.svcAddCardTitle, { flex: 1, textAlign: 'right' }]} numberOfLines={1}>
-                                {svc.name || t('common.noName','No name')}
-                              </Text>
                             </View>
+                          </TouchableOpacity>
+
+                          {/* Trash / saved badge (right side) */}
+                          <View style={styles.svcListChevronHit}>
+                            {justSaved ? (
+                              <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
+                                <Check size={13} color={primaryOnSurface} />
+                                <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
+                                  {t('saved','נשמר')}
+                                </Text>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                onPress={() => handleDeleteService(svc.id)}
+                                activeOpacity={0.75}
+                                style={styles.svcTrashBtn}
+                              >
+                                <Trash2 size={15} color="#fff" strokeWidth={2.2} />
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+
+                        {/* Expanded edit form */}
+                        {isExpanded && (
+                          <>
+                            <View style={styles.svcExpandedDivider} />
 
                             <View style={styles.svcAddFieldsArea}>
-                              <View style={[styles.formGroup, { marginBottom: 10 }]}>
-                                <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.name','שם השירות')}</Text>
+                              {/* Service name */}
+                              <View style={styles.svcFieldGroup}>
+                                <Text style={styles.svcFieldLabel}>{t('settings.services.name','שם השירות')}</Text>
                                 <TextInput
                                   style={[styles.formInput, styles.svcAddNameInput]}
                                   value={svc.name}
@@ -3050,22 +3088,10 @@ export default function SettingsScreen() {
                                 />
                               </View>
 
-                              <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
-                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.price','מחיר (₪)')}</Text>
-                                  <TextInput
-                                    style={styles.formInput}
-                                    value={String(svc.price ?? '')}
-                                    onChangeText={(v) => {
-                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                      updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
-                                    }}
-                                    keyboardType="numeric"
-                                    textAlign="right"
-                                  />
-                                </View>
-                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.duration','משך')}</Text>
+                              {/* Price + Duration row */}
+                              <View style={styles.svcTwoColRow}>
+                                <View style={[styles.svcFieldGroup, { flex: 1 }]}>
+                                  <Text style={styles.svcFieldLabel}>{t('settings.services.duration','משך (דקות)')}</Text>
                                   <TouchableOpacity
                                     style={[styles.svcDurationPickerBtn, { flexDirection: 'row-reverse' }]}
                                     onPress={() => { setEditingServiceDurationId(svc.id); setShowDurationPicker(true); }}
@@ -3079,26 +3105,36 @@ export default function SettingsScreen() {
                                     <ChevronDown size={16} color={Colors.subtext} />
                                   </TouchableOpacity>
                                 </View>
+                                <View style={[styles.svcFieldGroup, { flex: 1 }]}>
+                                  <Text style={styles.svcFieldLabel}>{t('settings.services.price','מחיר (₪)')}</Text>
+                                  <TextInput
+                                    style={styles.formInput}
+                                    value={String(svc.price ?? '')}
+                                    onChangeText={(v) => {
+                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                      updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
+                                    }}
+                                    keyboardType="numeric"
+                                    textAlign="right"
+                                  />
+                                </View>
                               </View>
 
-                              <View style={[styles.svcAddActions, { marginTop: 14 }]}>
-                                <TouchableOpacity
-                                  style={styles.svcDeleteButton}
-                                  onPress={() => handleDeleteService(svc.id)}
-                                  activeOpacity={0.85}
-                                >
-                                  <Trash2 size={16} color="#FF3B30" />
-                                  <Text style={styles.svcDeleteButtonText}>{t('settings.services.delete','מחק')}</Text>
-                                </TouchableOpacity>
+                              {/* Actions */}
+                              <View style={styles.svcExpandedActions}>
                                 <TouchableOpacity
                                   style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: isSaving ? 0.7 : 1, flex: 1 }]}
                                   onPress={() => handleSaveService(svc)}
                                   disabled={isSaving}
                                   activeOpacity={0.85}
                                 >
-                                  <Text style={styles.svcSaveButtonText}>
-                                    {isSaving ? t('settings.common.saving','שומר...') : t('settings.services.saveChanges','שמירת שינויים')}
-                                  </Text>
+                                  {isSaving ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                  ) : (
+                                    <Text style={styles.svcSaveButtonText}>
+                                      {t('settings.services.saveChanges','שמירת שינויים')}
+                                    </Text>
+                                  )}
                                 </TouchableOpacity>
                               </View>
                             </View>
@@ -3121,16 +3157,6 @@ export default function SettingsScreen() {
         {canSeeAddEmployee && activeSettingsTab === 'business' && (
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
-              {renderSettingItemLTR(
-                <FileText size={20} color={primaryOnSurface} />,
-                t('settings.profile.receiptLegalRowTitle', 'Receipt & tax details'),
-                t(
-                  'settings.profile.receiptLegalRowSubtitle',
-                  'Name, VAT ID, phone, VAT-exempt — used on receipts (320)',
-                ),
-                undefined,
-                openReceiptLegalModal,
-              )}
               {renderSettingItemLTR(
                 <MapPin size={20} color="#FF3B30" />,
                 t('settings.profile.businessAddressTitle', 'Business address'),
@@ -3376,7 +3402,10 @@ export default function SettingsScreen() {
               <View style={styles.settingsListScreenHeader}>
                 <TouchableOpacity
                   style={[styles.settingsListScreenHeaderAdd, { backgroundColor: businessColors.primary }]}
-                  onPress={() => setShowAddAdminModal(true)}
+                  onPress={() => {
+                    setEditingAdminUser(null);
+                    setShowAddAdminModal(true);
+                  }}
                   activeOpacity={0.88}
                   accessibilityRole="button"
                   accessibilityLabel={t('settings.admin.addEmployee', 'Add employee user')}
@@ -3424,22 +3453,47 @@ export default function SettingsScreen() {
                           <View key={adm.id} style={{ marginBottom: 10 }}>
                             <View style={styles.iosCard}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', direction: 'ltr' }}>
-                                <TouchableOpacity
-                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                  style={{
-                                    width: 34,
-                                    height: 34,
-                                    borderRadius: 17,
-                                    backgroundColor: Colors.error,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}
-                                  onPress={() => openRemoveEmployeeDialog(adm)}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
-                                >
-                                  <Trash2 size={16} color={Colors.white} strokeWidth={1.65} />
-                                </TouchableOpacity>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  <TouchableOpacity
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    style={{
+                                      width: 34,
+                                      height: 34,
+                                      borderRadius: 17,
+                                      backgroundColor: Colors.error,
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                    onPress={() => openRemoveEmployeeDialog(adm)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
+                                  >
+                                    <Trash2 size={16} color={Colors.white} strokeWidth={1.65} />
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    style={{
+                                      width: 34,
+                                      height: 34,
+                                      borderRadius: 17,
+                                      backgroundColor: businessColors.primary,
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                    onPress={() => {
+                                      setEditingAdminUser({
+                                        id: String(adm.id),
+                                        name: String(adm.name || ''),
+                                        phone: String(adm.phone || ''),
+                                      });
+                                      setShowAddAdminModal(true);
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('settings.admin.editEmployeeA11y', 'Edit employee')}
+                                  >
+                                    <Pencil size={16} color={onPrimary} strokeWidth={2} />
+                                  </TouchableOpacity>
+                                </View>
                                 <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
                                   <View style={{ alignItems: 'flex-end', maxWidth: '100%', flexShrink: 1 }}>
                                     <Text style={[styles.previewNotificationTitle, { textAlign: 'right', marginBottom: adm.phone ? 4 : 8 }]}>
@@ -3704,90 +3758,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Receipt / VAT legal fields (local kabala 320 + compliance) */}
-      <Modal
-        visible={showReceiptLegalModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => !isSavingProfile && setShowReceiptLegalModal(false)}
-      >
-        <View style={styles.smallModalOverlay}>
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => !isSavingProfile && setShowReceiptLegalModal(false)}
-                disabled={isSavingProfile}
-              >
-                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitleLTR} numberOfLines={2}>
-                {t('settings.profile.receiptLegalModalTitle', 'Receipt & tax details')}
-              </Text>
-              <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
-                onPress={() => void handleSaveReceiptLegalDetails()}
-                disabled={isSavingProfile}
-              >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>{t('settings.profile.businessName', 'Business name')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={receiptLegalDisplayName}
-                  onChangeText={setReceiptLegalDisplayName}
-                  placeholder={t('settings.profile.businessNamePlaceholder', 'For example: The Studio of Hadas')}
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="left"
-                  editable={!isSavingProfile}
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>
-                  {t('settings.profile.receiptLegalOsekLabel', 'Authorized dealer / company ID (ח.פ.)')}
-                </Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={receiptLegalBusinessNumber}
-                  onChangeText={setReceiptLegalBusinessNumber}
-                  placeholder={t('settings.profile.receiptLegalOsekPlaceholder', 'e.g. 515000000')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="number-pad"
-                  textAlign="left"
-                  editable={!isSavingProfile}
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>
-                  {t('settings.profile.receiptLegalPhoneLabel', 'Business phone (on receipts)')}
-                </Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={receiptLegalBusinessPhone}
-                  onChangeText={setReceiptLegalBusinessPhone}
-                  placeholder={t('settings.profile.receiptLegalPhonePlaceholder', 'e.g. 050-1234567')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="phone-pad"
-                  textAlign="left"
-                  editable={!isSavingProfile}
-                />
-              </View>
-              <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 4, paddingBottom: 16, opacity: 0.85 }]}>
-                {t(
-                  'settings.profile.receiptLegalHint',
-                  'Edit the address below under «Business address». Receipt accent color is under Design.',
-                )}
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       {/* Client reminder — compact bottom sheet, drag-to-close */}
       <BottomSheetModal
         ref={clientReminderSheetRef}
@@ -3834,35 +3804,37 @@ export default function SettingsScreen() {
             <Text style={styles.bwExplainerText}>{t('settings.reminder.clientAutomatedHint')}</Text>
           </LinearGradient>
 
-          <Text style={styles.bwFieldLabel}>
-            {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
-          </Text>
-          <View style={styles.bwRulerLtr}>
-            <BookingDaysRuler
-              ref={clientReminderHoursRulerRef}
-              minDay={CLIENT_REMINDER_HOURS_MIN}
-              maxDay={CLIENT_REMINDER_HOURS_MAX}
-              fadeColor={Colors.white}
-              tickColor={Colors.text}
-              indicatorColor={businessColors.primary}
-              unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
-              onDayChange={onClientReminderHoursRulerChange}
+          <View style={styles.sheetRulerSettingsCard}>
+            <Text style={[styles.bwFieldLabel, styles.sheetRulerSettingsCardFieldLabel]}>
+              {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
+            </Text>
+            <View style={styles.bwRulerLtr}>
+              <BookingDaysRuler
+                ref={clientReminderHoursRulerRef}
+                minDay={CLIENT_REMINDER_HOURS_MIN}
+                maxDay={CLIENT_REMINDER_HOURS_MAX}
+                fadeColor={SHEET_RULER_SETTINGS_CARD_BG}
+                tickColor={Colors.text}
+                indicatorColor={businessColors.primary}
+                unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
+                onDayChange={onClientReminderHoursRulerChange}
+              />
+            </View>
+
+            <Text style={[styles.bwManualLabel, styles.sheetRulerSettingsCardManualLabel]}>
+              {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
+            </Text>
+            <BottomSheetTextInput
+              style={[styles.bwManualInput, styles.sheetRulerSettingsManualInput]}
+              value={clientReminderModalHoursDraft}
+              onChangeText={onClientReminderHoursTextChange}
+              placeholder="0"
+              placeholderTextColor={Colors.subtext}
+              keyboardType="number-pad"
+              maxLength={2}
+              selectTextOnFocus
             />
           </View>
-
-          <Text style={styles.bwManualLabel}>
-            {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
-          </Text>
-          <BottomSheetTextInput
-            style={styles.bwManualInput}
-            value={clientReminderModalHoursDraft}
-            onChangeText={onClientReminderHoursTextChange}
-            placeholder="0"
-            placeholderTextColor={Colors.subtext}
-            keyboardType="number-pad"
-            maxLength={2}
-            selectTextOnFocus
-          />
           <Text style={styles.bwRangeFoot}>
             {t('settings.reminder.clientDialogHoursRange', '0–24 hours. 0 turns the reminder off.')}
           </Text>
@@ -3884,114 +3856,105 @@ export default function SettingsScreen() {
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Admin self-reminder — minutes 5–60, ruler + bottom sheet */}
-      <Modal
-        visible={showAdminReminderModal}
-        animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-        onRequestClose={dismissAdminReminderModal}
+      {/* Admin self-reminder — same bottom sheet UX as client reminder (minutes 5–60) */}
+      <BottomSheetModal
+        ref={adminReminderSheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onDismiss={dismissAdminReminderModal}
+        backdropComponent={(props: BottomSheetBackdropProps) => (
+          <BottomSheetBackdrop
+            {...props}
+            disappearsOnIndex={-1}
+            appearsOnIndex={0}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.bwSheetHandle}
+        backgroundStyle={styles.bwSheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.bwSheetContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.bwSheetTitle}>
+            {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
+          </Text>
+
+          <LinearGradient
+            colors={[`${businessColors.primary}15`, `${businessColors.primary}06`, 'transparent']}
+            locations={[0, 0.6, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.bwExplainerStrip}
           >
-            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
-              <TouchableOpacity
-                style={styles.cancellationModalCloseButton}
-                onPress={dismissAdminReminderModal}
-                accessibilityRole="button"
-                accessibilityLabel={t('cancel', 'Cancel')}
-              >
-                <X size={22} color={Colors.text} strokeWidth={2} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
-                {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
-              </Text>
-              <View style={styles.bookingWindowHeaderSpacer} />
+            <View style={[styles.bwExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+              <Clock size={18} color={primaryOnSurface} strokeWidth={2} />
+            </View>
+            <Text style={styles.bwExplainerText}>{t('settings.reminder.adminAutomatedHint')}</Text>
+          </LinearGradient>
+
+          <View style={styles.sheetRulerSettingsCard}>
+            <Text style={[styles.bwFieldLabel, styles.sheetRulerSettingsCardFieldLabel]}>
+              {t('settings.reminder.adminDialogMinutesLabel', 'Minutes before appointment')}
+            </Text>
+            <View style={styles.bwRulerLtr}>
+              <BookingDaysRuler
+                ref={adminReminderMinutesRulerRef}
+                minDay={ADMIN_SELF_REMINDER_MIN_MINUTES}
+                maxDay={ADMIN_SELF_REMINDER_MAX_MINUTES}
+                fadeColor={SHEET_RULER_SETTINGS_CARD_BG}
+                tickColor={Colors.text}
+                indicatorColor={businessColors.primary}
+                unitLabel={t('settings.reminder.adminDialogMinutesUnit', 'minutes')}
+                onDayChange={onAdminReminderMinutesRulerChange}
+              />
             </View>
 
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 8,
-                paddingBottom: insets.bottom + 120,
-              }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-            >
-              <LinearGradient
-                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
-                locations={[0, 0.55, 1]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.bookingWindowExplainer}
-              >
-                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
-                  <Clock size={22} color={primaryOnSurface} strokeWidth={2} />
-                </View>
-                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.adminAutomatedHint')}</Text>
-              </LinearGradient>
+            <Text style={[styles.bwManualLabel, styles.sheetRulerSettingsCardManualLabel]}>
+              {t('settings.reminder.adminDialogManualMinutes', 'Or enter a number')}
+            </Text>
+            <BottomSheetTextInput
+              style={[styles.bwManualInput, styles.sheetRulerSettingsManualInput]}
+              value={adminReminderModalMinutesDraft}
+              onChangeText={onAdminReminderMinutesTextChange}
+              placeholder="15"
+              placeholderTextColor={Colors.subtext}
+              keyboardType="number-pad"
+              maxLength={2}
+              selectTextOnFocus
+            />
+          </View>
+          <Text style={styles.bwRangeFoot}>
+            {t('settings.reminder.adminDialogMinutesRange', '5–60 minutes. Turn off the reminder from settings.')}
+          </Text>
 
-              <View style={styles.bookingWindowHeroCard}>
-                <Text style={styles.bookingWindowFieldLabel}>
-                  {t('settings.reminder.adminDialogMinutesLabel', 'Minutes before appointment')}
-                </Text>
-                <View style={styles.bookingWindowRulerLtr}>
-                  <BookingDaysRuler
-                    ref={adminReminderMinutesRulerRef}
-                    minDay={ADMIN_SELF_REMINDER_MIN_MINUTES}
-                    maxDay={ADMIN_SELF_REMINDER_MAX_MINUTES}
-                    fadeColor={Colors.white}
-                    tickColor={Colors.text}
-                    indicatorColor={businessColors.primary}
-                    unitLabel={t('settings.reminder.adminDialogMinutesUnit', 'minutes')}
-                    onDayChange={onAdminReminderMinutesRulerChange}
-                  />
-                </View>
-                <Text style={styles.bookingWindowManualLabel}>
-                  {t('settings.reminder.adminDialogManualMinutes', 'Or enter a number')}
-                </Text>
-                <TextInput
-                  style={styles.bookingWindowManualInput}
-                  value={adminReminderModalMinutesDraft}
-                  onChangeText={onAdminReminderMinutesTextChange}
-                  placeholder="15"
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="number-pad"
-                  maxLength={2}
-                  selectTextOnFocus
-                />
-                <Text style={styles.bookingWindowRangeFoot}>
-                  {t('settings.reminder.adminDialogMinutesRange', '5–60 minutes. Turn off the reminder from settings.')}
-                </Text>
-              </View>
-            </ScrollView>
-
-            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-              <TouchableOpacity
-                style={[
-                  styles.bookingWindowFooterBtn,
-                  { backgroundColor: businessColors.primary },
-                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
-                ]}
-                onPress={() => {
-                  void saveAdminReminderFromModal();
-                }}
-                disabled={isSavingProfile}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+          <TouchableOpacity
+            style={[
+              styles.bwSaveBtn,
+              { backgroundColor: businessColors.primary },
+              isSavingProfile && styles.bwSaveBtnDisabled,
+            ]}
+            onPress={() => {
+              void saveAdminReminderFromModal();
+            }}
+            disabled={isSavingProfile}
+            activeOpacity={0.88}
+          >
+            <Text style={[styles.bwSaveBtnText, isSavingProfile && { opacity: 0.85 }]}>
+              {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+            </Text>
+          </TouchableOpacity>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       {/* Edit Admin (name & phone) — compact bottom sheet; backdrop fades in place, sheet slides + drag-to-dismiss */}
       <Modal
@@ -4188,8 +4151,8 @@ export default function SettingsScreen() {
           ]}
         >
           <LinearGradient
-            colors={['#F8FAFF', '#FFFFFF', '#FFFFFF']}
-            locations={[0, 0.35, 1]}
+            colors={['#F5F7FF', '#FFFFFF', '#FFFFFF']}
+            locations={[0, 0.3, 1]}
             style={StyleSheet.absoluteFillObject}
             pointerEvents="none"
           />
@@ -4225,53 +4188,13 @@ export default function SettingsScreen() {
             return (
               <>
                 <View style={styles.addressSheetHeaderBlock}>
-                  <View style={styles.addressSheetTopRow}>
-                    <TouchableOpacity
-                      style={styles.addressSheetCloseOrb}
-                      onPress={() => {
-                        Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-                          addressDragY.setValue(0);
-                          setShowAddressSheet(false);
-                        });
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('cancel', 'Cancel')}
-                    >
-                      <X size={18} color={Colors.text} strokeWidth={2.2} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.addressSheetSavePill,
-                        { backgroundColor: businessColors.primary },
-                        !hasAddressText && styles.addressSheetSavePillDisabled,
-                      ]}
-                      disabled={!hasAddressText || isSavingProfile}
-                      onPress={async () => {
-                        const selected = (placesFormattedAddress || addressDraft || '').trim();
-                        if (!selected || isSavingProfile) return;
-                        setAddressDraft(selected);
-                        await saveAddress();
-                        Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() =>
-                          setShowAddressSheet(false),
-                        );
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('save', 'Save')}
-                    >
-                      {isSavingProfile ? (
-                        <ActivityIndicator size="small" color={Colors.white} />
-                      ) : (
-                        <Text style={styles.addressSheetSavePillText}>{t('save', 'Save')}</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
                   <View style={styles.addressSheetTitleBlock}>
-                    <View style={[styles.addressSheetTitleIconRing, { borderColor: `${businessColors.primary}33` }]}>
+                    <View style={[styles.addressSheetTitleIconRing, { borderColor: `${businessColors.primary}33`, backgroundColor: `${businessColors.primary}10` }]}>
                       <MapPin size={22} color={primaryOnSurface} strokeWidth={2.2} />
                     </View>
-                    <Text style={styles.addressSheetHeroTitle}>{t('settings.profile.businessAddressTitle', 'Business address')}</Text>
+                    <Text style={styles.addressSheetHeroTitle}>{t('settings.profile.businessAddressTitle', 'כתובת העסק')}</Text>
                     <Text style={styles.addressSheetHeroSubtitle}>
-                      {t('settings.profile.businessAddressSheetSubtitle', 'Clients see this when booking. Pick a suggestion or type freely.')}
+                      {t('settings.profile.businessAddressSheetSubtitle', 'לקוחות רואים את הכתובת בזמן ההזמנה. בחרו הצעה או הקלידו בחופשיות.')}
                     </Text>
                   </View>
                 </View>
@@ -4296,9 +4219,9 @@ export default function SettingsScreen() {
                         { textAlign: I18nManager.isRTL ? 'right' : 'left' },
                       ]}
                     >
-                      {t('settings.profile.addressLabel', 'Address')}
+                      {t('settings.profile.addressLabel', 'כתובת')}
                     </Text>
-                    <View style={[styles.addressSearchShell, { borderColor: `${businessColors.primary}22` }]}>
+                    <View style={[styles.addressSearchShell, { borderColor: `${businessColors.primary}33` }]}>
                       <View style={[styles.addressSearchPin, { backgroundColor: pinTint }]}>
                         <MapPin size={20} color={primaryOnSurface} strokeWidth={2.2} />
                       </View>
@@ -4413,6 +4336,32 @@ export default function SettingsScreen() {
                         )}
                       </View>
                     </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.addressSheetSaveBlock,
+                        { backgroundColor: businessColors.primary },
+                        !hasAddressText && styles.addressSheetSavePillDisabled,
+                      ]}
+                      disabled={!hasAddressText || isSavingProfile}
+                      onPress={async () => {
+                        const selected = (placesFormattedAddress || addressDraft || '').trim();
+                        if (!selected || isSavingProfile) return;
+                        setAddressDraft(selected);
+                        await saveAddress();
+                        Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() =>
+                          setShowAddressSheet(false),
+                        );
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('save', 'שמור')}
+                    >
+                      {isSavingProfile ? (
+                        <ActivityIndicator size="small" color={Colors.white} />
+                      ) : (
+                        <Text style={styles.addressSheetSavePillText}>{t('save', 'שמור')}</Text>
+                      )}
+                    </TouchableOpacity>
 
                     {!!placesPlaceId && (
                       <View style={styles.addressMapSection}>
@@ -4555,274 +4504,252 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Edit Cancellation Policy Modal */}
-      <Modal
-        visible={showEditCancellationModal}
-        animationType="fade"
-        transparent
-        onRequestClose={dismissCancellationModal}
+      {/* Edit cancellation policy — bottom sheet (drag handle + pan down), same pattern as booking window */}
+      <BottomSheetModal
+        ref={cancellationPolicySheetRef}
+        enableDynamicSizing
+        enablePanDownToClose
+        onDismiss={dismissCancellationModal}
+        backdropComponent={(props: BottomSheetBackdropProps) => (
+          <BottomSheetBackdrop
+            {...props}
+            disappearsOnIndex={-1}
+            appearsOnIndex={0}
+            opacity={0.45}
+            pressBehavior="close"
+          />
+        )}
+        handleIndicatorStyle={styles.bwSheetHandle}
+        backgroundStyle={styles.bwSheetBackground}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        <TouchableWithoutFeedback onPress={dismissCancellationModal}>
-          <View style={styles.cancellationModalOverlay}>
-            {Platform.OS === 'ios' ? (
-              <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-            ) : null}
-            <View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor:
-                    Platform.OS === 'ios' ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.52)',
-                },
-              ]}
-            />
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.cancellationModalCard}>
-                <View style={styles.cancellationModalInner}>
-                <View style={styles.cancellationModalHeader}>
-                  <TouchableOpacity
-                    style={[styles.cancellationModalCloseButton, styles.cancellationModalCloseOnEnd]}
-                    onPress={dismissCancellationModal}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('cancel', 'Cancel')}
-                  >
-                    <X size={22} color={Colors.text} strokeWidth={2} />
-                  </TouchableOpacity>
-                  <Text style={styles.cancellationModalTitle} numberOfLines={2}>
-                    {t('settings.policies.minCancellationTitle', 'Appointment cancellation time')}
-                  </Text>
-                  <View style={styles.cancellationModalHeaderSpacer} />
-                </View>
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.bwSheetContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+        >
+          <View style={styles.cancellationModalInner}>
+            <Text style={styles.bwSheetTitle}>
+              {t('settings.policies.minCancellationTitle', 'Appointment cancellation time')}
+            </Text>
 
-                <ScrollView
-                  style={styles.cancellationModalScroll}
-                  contentContainerStyle={styles.cancellationModalScrollContent}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
+            <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
+              <View>
+                <LinearGradient
+                  colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                  locations={[0, 0.55, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.cancellationModalExplainer}
                 >
-                  <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
-                    <View>
-                      <LinearGradient
-                        colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
-                        locations={[0, 0.55, 1]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.cancellationModalExplainer}
+                  <View
+                    style={[
+                      styles.cancellationModalExplainerIcon,
+                      { backgroundColor: `${businessColors.primary}22` },
+                    ]}
+                  >
+                    <Clock size={22} color={primaryOnSurface} strokeWidth={2} />
+                  </View>
+                  <Text style={styles.cancellationModalExplainerText}>
+                    {t(
+                      'settings.policies.cancellationModalHint',
+                      'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
+                    )}
+                  </Text>
+                </LinearGradient>
+
+                <View style={styles.cancellationModalHero}>
+                  <Text style={styles.cancellationModalFieldLabel}>
+                    {t('settings.policies.hoursBefore', 'Hours before appointment')}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.cancellationModalPicker,
+                      showCancellationDropdown && {
+                        borderColor: businessColors.primary,
+                        backgroundColor: `${businessColors.primary}0D`,
+                      },
+                    ]}
+                    onPress={() => setShowCancellationDropdown(!showCancellationDropdown)}
+                    activeOpacity={0.92}
+                  >
+                    {showCancellationDropdown ? (
+                      <Ionicons name="chevron-up" size={22} color={primaryOnSurface} />
+                    ) : (
+                      <Ionicons name="chevron-down" size={22} color={primaryOnSurface} />
+                    )}
+                    <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
+                      {cancellationHoursDraft === '0'
+                        ? t('settings.policies.noRestriction', '0 hours (No restriction)')
+                        : `${cancellationHoursDraft} ${
+                            cancellationHoursDraft === '1'
+                              ? t('settings.policies.hour', 'hour')
+                              : t('settings.policies.hours', 'hours')
+                          }${
+                            parseInt(cancellationHoursDraft, 10) >= 24
+                              ? ` (${Math.floor(parseInt(cancellationHoursDraft, 10) / 24)} ${
+                                  Math.floor(parseInt(cancellationHoursDraft, 10) / 24) === 1
+                                    ? t('settings.policies.day', 'day')
+                                    : t('settings.policies.days', 'days')
+                                }${
+                                  parseInt(cancellationHoursDraft, 10) % 24 > 0
+                                    ? ` ${parseInt(cancellationHoursDraft, 10) % 24} ${t('settings.policies.hours', 'hours')}`
+                                    : ''
+                                })`
+                              : ''
+                          }`}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showCancellationDropdown ? (
+                    <View style={styles.cancellationModalDropdownPanel}>
+                      <ScrollView
+                        style={styles.cancellationModalDropdownScroll}
+                        showsVerticalScrollIndicator={false}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
                       >
-                        <View
-                          style={[
-                            styles.cancellationModalExplainerIcon,
-                            { backgroundColor: `${businessColors.primary}22` },
-                          ]}
-                        >
-                          <Clock size={22} color={primaryOnSurface} strokeWidth={2} />
-                        </View>
-                        <Text style={styles.cancellationModalExplainerText}>
-                          {t(
-                            'settings.policies.cancellationModalHint',
-                            'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
-                          )}
-                        </Text>
-                      </LinearGradient>
-
-                      <View style={styles.cancellationModalHero}>
-                        <Text style={styles.cancellationModalFieldLabel}>
-                          {t('settings.policies.hoursBefore', 'Hours before appointment')}
-                        </Text>
-
                         <TouchableOpacity
                           style={[
-                            styles.cancellationModalPicker,
-                            showCancellationDropdown && {
-                              borderColor: businessColors.primary,
-                              backgroundColor: `${businessColors.primary}0D`,
+                            styles.cancellationModalDropdownRow,
+                            cancellationHoursDraft === '0' && {
+                              backgroundColor: `${businessColors.primary}12`,
                             },
                           ]}
-                          onPress={() => setShowCancellationDropdown(!showCancellationDropdown)}
-                          activeOpacity={0.92}
+                          onPress={() => {
+                            setCancellationHoursDraft('0');
+                            setShowCancellationDropdown(false);
+                          }}
                         >
-                          {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={22} color={primaryOnSurface} />
-                          ) : (
-                            <Ionicons name="chevron-down" size={22} color={primaryOnSurface} />
-                          )}
-                          <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
-                            {cancellationHoursDraft === '0'
-                              ? t('settings.policies.noRestriction', '0 hours (No restriction)')
-                              : `${cancellationHoursDraft} ${
-                                  cancellationHoursDraft === '1'
-                                    ? t('settings.policies.hour', 'hour')
-                                    : t('settings.policies.hours', 'hours')
-                                }${
-                                  parseInt(cancellationHoursDraft, 10) >= 24
-                                    ? ` (${Math.floor(parseInt(cancellationHoursDraft, 10) / 24)} ${
-                                        Math.floor(parseInt(cancellationHoursDraft, 10) / 24) === 1
-                                          ? t('settings.policies.day', 'day')
-                                          : t('settings.policies.days', 'days')
-                                      }${
-                                        parseInt(cancellationHoursDraft, 10) % 24 > 0
-                                          ? ` ${parseInt(cancellationHoursDraft, 10) % 24} ${t('settings.policies.hours', 'hours')}`
-                                          : ''
-                                      })`
-                                    : ''
-                                }`}
+                          <Text
+                            style={[
+                              styles.cancellationModalDropdownRowText,
+                              cancellationHoursDraft === '0' && {
+                                color: businessColors.primary,
+                                fontWeight: '700',
+                              },
+                            ]}
+                          >
+                            {t('settings.policies.noRestriction', '0 hours (No restriction)')}
                           </Text>
                         </TouchableOpacity>
 
-                        {showCancellationDropdown ? (
-                          <View style={styles.cancellationModalDropdownPanel}>
-                            <ScrollView
-                              style={styles.cancellationModalDropdownScroll}
-                              showsVerticalScrollIndicator={false}
-                              nestedScrollEnabled
-                              keyboardShouldPersistTaps="handled"
+                        {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
+                          <TouchableOpacity
+                            key={hour}
+                            style={[
+                              styles.cancellationModalDropdownRow,
+                              cancellationHoursDraft === hour.toString() && {
+                                backgroundColor: `${businessColors.primary}12`,
+                              },
+                            ]}
+                            onPress={() => {
+                              setCancellationHoursDraft(hour.toString());
+                              setShowCancellationDropdown(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.cancellationModalDropdownRowText,
+                                cancellationHoursDraft === hour.toString() && {
+                                  color: businessColors.primary,
+                                  fontWeight: '700',
+                                },
+                              ]}
                             >
-                              <TouchableOpacity
-                                style={[
-                                  styles.cancellationModalDropdownRow,
-                                  cancellationHoursDraft === '0' && {
-                                    backgroundColor: `${businessColors.primary}12`,
+                              {hour}{' '}
+                              {hour === 1
+                                ? t('settings.policies.hour', 'hour')
+                                : t('settings.policies.hours', 'hours')}
+                              {hour >= 24 ? (
+                                <Text style={styles.cancellationModalDropdownSubtext}>
+                                  {' '}
+                                  ({Math.floor(hour / 24)}{' '}
+                                  {Math.floor(hour / 24) === 1
+                                    ? t('settings.policies.day', 'day')
+                                    : t('settings.policies.days', 'days')}
+                                  {hour % 24 > 0
+                                    ? ` ${hour % 24} ${t('settings.policies.hours', 'hours')}`
+                                    : ''}
+                                  )
+                                </Text>
+                              ) : null}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+
+                        <TouchableOpacity
+                          style={[
+                            styles.cancellationModalDropdownRow,
+                            styles.cancellationModalDropdownRowLast,
+                          ]}
+                          onPress={() => {
+                            setShowCancellationDropdown(false);
+                            Alert.prompt(
+                              t('settings.policies.customHoursTitle', 'Custom Hours'),
+                              t('settings.policies.customHoursMessage', 'Enter number of hours (0-168):'),
+                              [
+                                { text: t('cancel', 'Cancel'), style: 'cancel' },
+                                {
+                                  text: t('ok', 'OK'),
+                                  onPress: (text) => {
+                                    const hours = parseInt(text || '0', 10);
+                                    if (hours >= 0 && hours <= 168) {
+                                      setCancellationHoursDraft(hours.toString());
+                                    } else {
+                                      Alert.alert(
+                                        t('error.generic', 'Error'),
+                                        t(
+                                          'settings.profile.cancellationInvalid',
+                                          'Please enter a valid number between 0 and 168 hours',
+                                        ),
+                                      );
+                                    }
                                   },
-                                ]}
-                                onPress={() => {
-                                  setCancellationHoursDraft('0');
-                                  setShowCancellationDropdown(false);
-                                }}
-                              >
-                                <Text
-                                  style={[
-                                    styles.cancellationModalDropdownRowText,
-                                    cancellationHoursDraft === '0' && {
-                                      color: businessColors.primary,
-                                      fontWeight: '700',
-                                    },
-                                  ]}
-                                >
-                                  {t('settings.policies.noRestriction', '0 hours (No restriction)')}
-                                </Text>
-                              </TouchableOpacity>
-
-                              {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
-                                <TouchableOpacity
-                                  key={hour}
-                                  style={[
-                                    styles.cancellationModalDropdownRow,
-                                    cancellationHoursDraft === hour.toString() && {
-                                      backgroundColor: `${businessColors.primary}12`,
-                                    },
-                                  ]}
-                                  onPress={() => {
-                                    setCancellationHoursDraft(hour.toString());
-                                    setShowCancellationDropdown(false);
-                                  }}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.cancellationModalDropdownRowText,
-                                      cancellationHoursDraft === hour.toString() && {
-                                        color: businessColors.primary,
-                                        fontWeight: '700',
-                                      },
-                                    ]}
-                                  >
-                                    {hour}{' '}
-                                    {hour === 1
-                                      ? t('settings.policies.hour', 'hour')
-                                      : t('settings.policies.hours', 'hours')}
-                                    {hour >= 24 ? (
-                                      <Text style={styles.cancellationModalDropdownSubtext}>
-                                        {' '}
-                                        ({Math.floor(hour / 24)}{' '}
-                                        {Math.floor(hour / 24) === 1
-                                          ? t('settings.policies.day', 'day')
-                                          : t('settings.policies.days', 'days')}
-                                        {hour % 24 > 0
-                                          ? ` ${hour % 24} ${t('settings.policies.hours', 'hours')}`
-                                          : ''}
-                                        )
-                                      </Text>
-                                    ) : null}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-
-                              <TouchableOpacity
-                                style={[
-                                  styles.cancellationModalDropdownRow,
-                                  styles.cancellationModalDropdownRowLast,
-                                ]}
-                                onPress={() => {
-                                  setShowCancellationDropdown(false);
-                                  Alert.prompt(
-                                    t('settings.policies.customHoursTitle', 'Custom Hours'),
-                                    t('settings.policies.customHoursMessage', 'Enter number of hours (0-168):'),
-                                    [
-                                      { text: t('cancel', 'Cancel'), style: 'cancel' },
-                                      {
-                                        text: t('ok', 'OK'),
-                                        onPress: (text) => {
-                                          const hours = parseInt(text || '0', 10);
-                                          if (hours >= 0 && hours <= 168) {
-                                            setCancellationHoursDraft(hours.toString());
-                                          } else {
-                                            Alert.alert(
-                                              t('error.generic', 'Error'),
-                                              t(
-                                                'settings.profile.cancellationInvalid',
-                                                'Please enter a valid number between 0 and 168 hours',
-                                              ),
-                                            );
-                                          }
-                                        },
-                                      },
-                                    ],
-                                    'plain-text',
-                                    cancellationHoursDraft,
-                                    'numeric',
-                                  );
-                                }}
-                              >
-                                <Text style={styles.cancellationModalDropdownRowText}>
-                                  {t('settings.policies.customHoursLabel', 'Custom hours...')}
-                                </Text>
-                              </TouchableOpacity>
-                            </ScrollView>
-                          </View>
-                        ) : null}
-                      </View>
+                                },
+                              ],
+                              'plain-text',
+                              cancellationHoursDraft,
+                              'numeric',
+                            );
+                          }}
+                        >
+                          <Text style={styles.cancellationModalDropdownRowText}>
+                            {t('settings.policies.customHoursLabel', 'Custom hours...')}
+                          </Text>
+                        </TouchableOpacity>
+                      </ScrollView>
                     </View>
-                  </TouchableWithoutFeedback>
-                </ScrollView>
-
-                <View
-                  style={[
-                    styles.cancellationModalFooter,
-                    { paddingBottom: Math.max(insets.bottom, 12) },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.cancellationModalSaveBtn,
-                      { backgroundColor: businessColors.primary },
-                      isSavingProfile && styles.cancellationModalSaveBtnDisabled,
-                    ]}
-                    onPress={saveCancellationHours}
-                    disabled={isSavingProfile}
-                    activeOpacity={0.88}
-                  >
-                    <Text style={[styles.cancellationModalSaveBtnText, isSavingProfile && { opacity: 0.88 }]}>
-                      {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                  ) : null}
                 </View>
               </View>
             </TouchableWithoutFeedback>
+
+            <TouchableOpacity
+              style={[
+                styles.cancellationModalSaveBtn,
+                styles.cancellationSheetSaveBtnSpacing,
+                { backgroundColor: businessColors.primary },
+                isSavingProfile && styles.cancellationModalSaveBtnDisabled,
+              ]}
+              onPress={saveCancellationHours}
+              disabled={isSavingProfile}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.cancellationModalSaveBtnText, isSavingProfile && { opacity: 0.88 }]}>
+                {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       {/* Booking horizon — compact bottom sheet with drag-to-close */}
       <BottomSheetModal
@@ -4872,37 +4799,38 @@ export default function SettingsScreen() {
             <Text style={styles.bwExplainerText}>{t('settings.profile.bookingWindowModalBody')}</Text>
           </LinearGradient>
 
-          {/* ruler section */}
-          <Text style={styles.bwFieldLabel}>
-            {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
-          </Text>
-          <View style={styles.bwRulerLtr}>
-            <BookingDaysRuler
-              ref={bookingDaysRulerRef}
-              minDay={BOOKING_RULER_MIN_DISPLAY}
-              maxDay={BOOKING_WINDOW_MAX}
-              fadeColor={Colors.white}
-              tickColor={Colors.text}
-              indicatorColor={businessColors.primary}
-              unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
-              onDayChange={onBookingWindowRulerDay}
+          {/* ruler + manual — same compact card as client / admin reminder sheets */}
+          <View style={styles.sheetRulerSettingsCard}>
+            <Text style={[styles.bwFieldLabel, styles.sheetRulerSettingsCardFieldLabel]}>
+              {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
+            </Text>
+            <View style={styles.bwRulerLtr}>
+              <BookingDaysRuler
+                ref={bookingDaysRulerRef}
+                minDay={BOOKING_RULER_MIN_DISPLAY}
+                maxDay={BOOKING_WINDOW_MAX}
+                fadeColor={SHEET_RULER_SETTINGS_CARD_BG}
+                tickColor={Colors.text}
+                indicatorColor={businessColors.primary}
+                unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
+                onDayChange={onBookingWindowRulerDay}
+              />
+            </View>
+
+            <Text style={[styles.bwManualLabel, styles.sheetRulerSettingsCardManualLabel]}>
+              {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
+            </Text>
+            <BottomSheetTextInput
+              style={[styles.bwManualInput, styles.sheetRulerSettingsManualInput]}
+              value={bookingWindowDraft}
+              onChangeText={onBookingWindowTextChange}
+              placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
+              placeholderTextColor={Colors.subtext}
+              keyboardType="number-pad"
+              maxLength={2}
+              selectTextOnFocus
             />
           </View>
-
-          {/* manual input */}
-          <Text style={styles.bwManualLabel}>
-            {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
-          </Text>
-          <BottomSheetTextInput
-            style={styles.bwManualInput}
-            value={bookingWindowDraft}
-            onChangeText={onBookingWindowTextChange}
-            placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
-            placeholderTextColor={Colors.subtext}
-            keyboardType="number-pad"
-            maxLength={2}
-            selectTextOnFocus
-          />
           <Text style={styles.bwRangeFoot}>
             {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
           </Text>
@@ -4925,12 +4853,22 @@ export default function SettingsScreen() {
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Manage Recurring Appointments — fixed 75% height with internal scroll */}
+      {/* Manage Recurring Appointments — two snap points; opens at top when items exist */}
       <BottomSheetModal
         ref={manageRecurringSheetRef}
-        snapPoints={['75%']}
+        index={recurringList.length > 0 ? 1 : 0}
+        snapPoints={['45%', '75%']}
+        enableDynamicSizing={false}
         enablePanDownToClose
-        onDismiss={() => setShowManageRecurringModal(false)}
+        onDismiss={() => {
+          setShowManageRecurringModal(false);
+          if (pendingNavigateToAddRecurringRef.current) {
+            pendingNavigateToAddRecurringRef.current = false;
+            requestAnimationFrame(() => {
+              router.push('/(tabs)/add-recurring-appointment');
+            });
+          }
+        }}
         backdropComponent={(props: BottomSheetBackdropProps) => (
           <BottomSheetBackdrop
             {...props}
@@ -5006,38 +4944,63 @@ export default function SettingsScreen() {
               if (!recurringChevronRefs.current[item.id]) {
                 recurringChevronRefs.current[item.id] = new Animated.Value(isExpanded ? 1 : 0);
               }
-              const chevronRotate = recurringChevronRefs.current[item.id].interpolate({
+              const expandAnim = recurringChevronRefs.current[item.id];
+              const chevronRotate = expandAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: ['0deg', '180deg'],
               });
+              const recurringSublineOpacity = expandAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 0],
+              });
+              const recurringSublineTranslate = expandAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, -4],
+              });
+              const repeatN = Math.max(1, Math.min(52, Number(item.repeat_interval) || 1));
+              const recurringSublineText =
+                repeatN === 1
+                  ? t('settings.recurring.everyWeek', 'every week')
+                  : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', { count: repeatN });
               return (
                 <View key={item.id} style={idx > 0 ? styles.recurringCardSpacing : undefined}>
                   <View style={styles.recurringCard}>
-                    {/* header row: [🗑][▼] ← name */}
+                    {/* LTR row: chevron left, trash pinned right, name hugs trash (RTL text via textAlign) */}
                     <TouchableOpacity
-                      style={styles.recurringCardHeader}
+                      style={[styles.recurringCardHeader, { direction: 'ltr' }]}
                       onPress={() => toggleRecurringCard(item.id)}
                       activeOpacity={0.75}
                     >
-                      <Text style={styles.recurringCardName} numberOfLines={1}>
-                        {item.client_name}
-                      </Text>
-                      <View style={styles.recurringCardActions}>
-                        <TouchableOpacity
-                          style={styles.recurringCardDeleteBtn}
-                          onPress={async () => {
-                            const ok = await recurringAppointmentsApi.delete(item.id);
-                            if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                            else Alert.alert(t('error.generic', 'Error'), t('settings.recurring.deleteFailed', 'Failed to delete appointment'));
+                      <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+                        <ChevronDown size={18} color={Colors.subtext} strokeWidth={2.2} />
+                      </Animated.View>
+                      <View style={styles.recurringCardHeaderSpacer} />
+                      <View style={styles.recurringCardNameCol}>
+                        <Text style={styles.recurringCardName} numberOfLines={1}>
+                          {item.client_name}
+                        </Text>
+                        <Animated.View
+                          style={{
+                            opacity: recurringSublineOpacity,
+                            transform: [{ translateY: recurringSublineTranslate }],
                           }}
-                          hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
                         >
-                          <Trash2 size={15} color="#FF3B30" strokeWidth={2.2} />
-                        </TouchableOpacity>
-                        <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
-                          <ChevronDown size={18} color={Colors.subtext} strokeWidth={2.2} />
+                          <Text style={styles.recurringCardSubline} numberOfLines={1}>
+                            {recurringSublineText}
+                          </Text>
                         </Animated.View>
                       </View>
+                      <TouchableOpacity
+                        style={styles.recurringCardDeleteBtn}
+                        onPress={async () => {
+                          const ok = await recurringAppointmentsApi.delete(item.id);
+                          if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
+                          else Alert.alert(t('error.generic', 'Error'), t('settings.recurring.deleteFailed', 'Failed to delete appointment'));
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                      >
+                        <Trash2 size={15} color="#FF3B30" strokeWidth={2.2} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
 
                     {/* expandable details */}
@@ -5151,9 +5114,14 @@ export default function SettingsScreen() {
       {/* Add Admin Modal */}
       <AddAdminModal
         visible={showAddAdminModal}
-        onClose={() => setShowAddAdminModal(false)}
+        editingUser={editingAdminUser}
+        onClose={() => {
+          setShowAddAdminModal(false);
+          setEditingAdminUser(null);
+        }}
         onSuccess={() => {
           setActiveSettingsTab('employees');
+          setEditingAdminUser(null);
           void loadAdminEmployeesForTab();
         }}
       />
@@ -5874,8 +5842,8 @@ const styles = StyleSheet.create({
     }),
   },
   addressSheetHeaderBlock: {
-    paddingHorizontal: 18,
-    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
   },
   addressSheetTopRow: {
     flexDirection: 'row',
@@ -5908,66 +5876,83 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
+  addressSheetSaveBlock: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+    }),
+  },
   addressSheetSavePillDisabled: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
   addressSheetSavePillText: {
     color: Colors.white,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   addressSheetTitleBlock: {
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
     paddingHorizontal: 8,
+    paddingBottom: 4,
   },
   addressSheetTitleIconRing: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   addressSheetHeroTitle: {
     fontSize: 22,
     fontWeight: '800',
     color: '#111827',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   addressSheetHeroSubtitle: {
     marginTop: 8,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     color: '#6B7280',
     textAlign: 'center',
-    maxWidth: 340,
+    maxWidth: 320,
   },
   addressSheetContentPad: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingTop: 8,
     zIndex: 1,
   },
   addressFieldSectionLabel: {
     fontSize: 12,
     fontWeight: '700',
     color: '#9CA3AF',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
     marginBottom: 10,
-    textAlign: 'left',
+    textAlign: 'right',
   },
   addressSearchShell: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
-    borderRadius: 18,
+    minHeight: 58,
+    borderRadius: 16,
     borderWidth: 1.5,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFBFF',
     paddingLeft: 6,
     paddingRight: 4,
     overflow: 'visible',
@@ -5975,9 +5960,9 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#1a2744',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.08,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
       },
       android: { elevation: 3 },
     }),
@@ -6586,6 +6571,10 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
+  /** Space above save when footer bar is merged into bottom-sheet scroll content */
+  cancellationSheetSaveBtnSpacing: {
+    marginTop: 14,
+  },
   cancellationModalSaveBtnDisabled: {
     opacity: 0.55,
   },
@@ -6965,6 +6954,37 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
     textAlign: 'center',
     fontWeight: '500',
+  },
+  /** Booking window, client reminder, admin self-reminder — ruler + manual input block */
+  sheetRulerSettingsCard: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 300,
+    backgroundColor: SHEET_RULER_SETTINGS_CARD_BG,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
+    marginBottom: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  sheetRulerSettingsCardFieldLabel: {
+    marginBottom: 2,
+  },
+  sheetRulerSettingsCardManualLabel: {
+    marginTop: 12,
+  },
+  sheetRulerSettingsManualInput: {
+    borderWidth: 0,
+    backgroundColor: Colors.white,
   },
   bwSaveBtn: {
     marginTop: 18,
@@ -7522,10 +7542,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     direction: 'ltr',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingLeft: 28,
-    paddingRight: 12,
-    gap: 10,
+    paddingVertical: 13,
+    paddingLeft: 14,
+    paddingRight: 8,
+    gap: 12,
+  },
+  svcListCollapsedRowExpanded: {
+    paddingBottom: 13,
   },
   svcListCollapsedMain: {
     flex: 1,
@@ -7540,9 +7563,51 @@ const styles = StyleSheet.create({
   svcListChevronHit: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 40,
+    minWidth: 36,
     minHeight: 44,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
+  },
+  svcTrashBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  svcIconLetter: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  svcExpandedDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E5EA',
+    marginHorizontal: 14,
+  },
+  svcFieldGroup: {
+    marginBottom: 12,
+  },
+  svcFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 6,
+    textAlign: 'right',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  svcTwoColRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
   },
   inputContainer: {
     marginBottom: 24,
@@ -7691,18 +7756,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  recurringCardName: {
+  recurringCardHeaderSpacer: {
     flex: 1,
+    minWidth: 0,
+  },
+  recurringCardNameCol: {
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'stretch',
+  },
+  recurringCardName: {
     fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
-    textAlign: 'left',
+    textAlign: 'right',
+    alignSelf: 'stretch',
   },
-  recurringCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
+  recurringCardSubline: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+    color: Colors.subtext,
+    textAlign: 'right',
+    alignSelf: 'stretch',
   },
   recurringCardDeleteBtn: {
     width: 28,
@@ -8237,8 +8314,9 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   svcAddFieldsArea: {
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
   },
   svcAddNameInput: {
     textAlign: 'right',
@@ -8249,15 +8327,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#E5E5EA',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: Colors.white,
   },
   svcDurationPickerBtnText: {
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.text,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   durationPickerOverlay: {
     position: 'absolute',
@@ -8337,27 +8415,37 @@ const styles = StyleSheet.create({
   },
   svcSaveButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 46,
   },
   svcSaveButtonText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#fff',
   },
 
   // Service card (list item)
   svcCard: {
     backgroundColor: Colors.white,
-    borderRadius: 18,
+    borderRadius: 16,
     marginHorizontal: 2,
-    marginVertical: 5,
+    marginVertical: 4,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F0F0F5',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
-      android: { elevation: 3 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  svcCardExpanded: {
+    borderColor: '#E0E0E8',
+    ...Platform.select({
+      ios: { shadowOpacity: 0.10, shadowRadius: 10 },
+      android: { elevation: 4 },
     }),
   },
   svcCardAccent: {
@@ -8408,10 +8496,10 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   svcCardName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 6,
+    marginBottom: 5,
     textAlign: 'right',
   },
   svcCardMeta: {
@@ -8421,24 +8509,27 @@ const styles = StyleSheet.create({
   svcMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
   svcMetaChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   svcMetaChipText: {
     fontSize: 12,
     fontWeight: '700',
   },
   svcMetaChipDuration: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: '#E8E8EE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#EBEBF0',
   },
   svcMetaChipDurationText: {
     fontSize: 12,
@@ -8502,16 +8593,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 10,
+    marginTop: 6,
   },
   svcDeleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 12,
     backgroundColor: 'rgba(255,59,48,0.08)',
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: 'rgba(255,59,48,0.12)',
   },
   svcDeleteButtonText: {
     fontSize: 14,

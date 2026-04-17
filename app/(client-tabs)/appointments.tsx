@@ -1012,6 +1012,8 @@ export default function ClientAppointmentsScreen() {
         appointment={swapAppointment}
         userPhone={user?.phone || ''}
         userName={user?.name}
+        barberName={swapAppointment?.barber_id ? getBarberName(swapAppointment.barber_id) : undefined}
+        barberImage={swapAppointment?.barber_id ? (barberImages[swapAppointment.barber_id] ?? null) : null}
         onClose={() => {
           setShowSwapModal(false);
           setSwapAppointment(null);
@@ -1328,7 +1330,7 @@ const styles = StyleSheet.create<any>({
     marginBottom: 12,
     marginTop: 4,
     borderRadius: 20,
-    backgroundColor: '#F4F5F7',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,

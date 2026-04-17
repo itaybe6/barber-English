@@ -30,6 +30,7 @@ import * as Haptics from 'expo-haptics';
 
 import type { WaitlistEntry } from '@/lib/supabase';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
+import { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
 
 export interface WaitlistHomeFabPanelProps {
   entries: WaitlistEntry[];
@@ -920,13 +921,19 @@ export function WaitlistHomeFabPanel({
 }
 
 const styles = StyleSheet.create({
-  // ── Card variant — mirrors clientNextCard in app/(client-tabs)/index.tsx ──
+  // ── Card variant — mirrors clientNextCard + admin DailySchedule radius ──
   cardTrigger: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     marginHorizontal: 4,
     ...Platform.select({
-      ios: { shadowColor: '#1e253b', shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+      ios: {
+        borderCurve: 'continuous' as const,
+        shadowColor: '#1e253b',
+        shadowOpacity: 0.16,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 8 },
+      },
       android: { elevation: 9 },
     }),
   },
@@ -1158,12 +1165,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   entryCardShadowWrap: {
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     marginBottom: 14,
   },
   entryCard: {
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: { borderCurve: 'continuous' as const },
+      default: {},
+    }),
   },
   entryCardHeader: {
     alignItems: 'center',

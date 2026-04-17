@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -9,20 +9,32 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Pressable,
+  I18nManager,
+  useWindowDimensions,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Image } from 'expo-image';
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { formatDateToYMDLocal } from '@/lib/utils/localDate';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import type { Appointment } from '@/lib/supabase';
 
-const PRIMARY = '#534AB7';
-const INFO_BG   = '#EEEDFE';
-const INFO_TEXT    = '#3C3489';
+const SHEET_ANIM_MS = 320;
+const DRAG_DISMISS_THRESHOLD = 80;
+const DRAG_VELOCITY_THRESHOLD = 0.5;
 
-// ── ימי השבוע ללא שבת (RTL: א מופיע ראשון = ימין) ──────────────────────
 const DAYS = [
   { label: 'א', dayIndex: 0 },
   { label: 'ב', dayIndex: 1 },
@@ -32,7 +44,6 @@ const DAYS = [
   { label: 'ו', dayIndex: 5 },
 ] as const;
 
-/** Same period emojis + windows as `book-appointment/TimeSelection` + `time_period.range.*` */
 const TIME_SLOTS = [
   { id: 'morning',   emoji: '☀️',  labelKey: 'time_period.morning',   rangeKey: 'time_period.range.morning',   from: '08:00', to: '12:00' },
   { id: 'afternoon', emoji: '🌤', labelKey: 'time_period.afternoon', rangeKey: 'time_period.range.afternoon', from: '12:00', to: '16:00' },
@@ -44,6 +55,8 @@ interface SwapRequestModalProps {
   appointment: Appointment | null;
   userPhone: string;
   userName?: string;
+  barberName?: string;
+  barberImage?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -60,7 +73,6 @@ function datesForDayIndices(dayIndices: number[], horizonDays = 28): string[] {
   return result;
 }
 
-/** First upcoming calendar date (from tomorrow) matching `dayIndex` (same as Date.getDay()), or null */
 function nextOccurrenceForWeekday(dayIndex: number, horizonDays = 28): Date | null {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -82,14 +94,26 @@ export default function SwapRequestModal({
   appointment,
   userPhone,
   userName,
+  barberName,
+  barberImage,
   onClose,
   onSuccess,
 }: SwapRequestModalProps) {
   const { t, i18n } = useTranslation();
+  const { colors } = useBusinessColors();
+  const { height: winH } = useWindowDimensions();
+  const rtl = I18nManager.isRTL;
+
   const [selectedDays,  setSelectedDays]  = useState<number[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [isSaving,      setIsSaving]      = useState(false);
+  const [isMounted,     setIsMounted]     = useState(visible);
 
+  const sheetTranslateY = useSharedValue(winH);
+  const backdropOpacity = useSharedValue(0);
+  const panY            = useSharedValue(0);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const toggleDay  = useCallback((idx: number) =>
     setSelectedDays(p  => p.includes(idx) ? p.filter(d => d !== idx) : [...p, idx]), []);
   const toggleSlot = useCallback((id: string) =>
@@ -97,6 +121,61 @@ export default function SwapRequestModal({
 
   const resetState  = useCallback(() => { setSelectedDays([]); setSelectedSlots([]); }, []);
   const handleClose = useCallback(() => { resetState(); onClose(); }, [onClose, resetState]);
+
+  // ── Drag-to-dismiss via Gesture.Pan (native gesture system, not PanResponder) ──
+  // runOnJS(true) keeps callbacks on JS thread — no worklet complexity needed.
+  const panGesture = useMemo(() => Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetY([0, 5])          // only activates on downward movement
+    .failOffsetY([-5, 9999])        // cancel if user swipes up
+    .onUpdate((e) => {
+      if (e.translationY > 0) panY.set(e.translationY);
+    })
+    .onEnd((e) => {
+      if (e.translationY > DRAG_DISMISS_THRESHOLD || e.velocityY > 500) {
+        panY.set(withTiming(0, { duration: 80 }));
+        handleClose();
+      } else {
+        panY.set(withSpring(0, { damping: 20, stiffness: 300 }));
+      }
+    })
+    .onFinalize(() => {
+      panY.set(withSpring(0, { damping: 20, stiffness: 300 }));
+    }),
+  [panY, handleClose]);
+
+  // ── Mount / unmount with animation ──────────────────────────────────────
+  useEffect(() => {
+    if (visible) {
+      panY.set(0);
+      setIsMounted(true);
+    }
+  }, [visible, panY]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    if (visible) {
+      sheetTranslateY.set(winH);
+      backdropOpacity.set(0);
+      const frame = requestAnimationFrame(() => {
+        sheetTranslateY.set(withTiming(0,    { duration: SHEET_ANIM_MS, easing: Easing.out(Easing.cubic) }));
+        backdropOpacity.set(withTiming(1,    { duration: 220,           easing: Easing.out(Easing.cubic) }));
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+
+    sheetTranslateY.set(withTiming(winH, { duration: SHEET_ANIM_MS, easing: Easing.in(Easing.cubic) }));
+    backdropOpacity.set(withTiming(0,    { duration: SHEET_ANIM_MS, easing: Easing.in(Easing.cubic) }));
+    const timer = setTimeout(() => setIsMounted(false), SHEET_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [backdropOpacity, isMounted, sheetTranslateY, visible, winH]);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.get() }));
+  // Combine slide-in/out animation with live drag offset
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.get() + Math.max(0, panY.get()) }],
+  }));
 
   const canSubmit = selectedDays.length > 0 && selectedSlots.length > 0;
 
@@ -148,6 +227,7 @@ export default function SwapRequestModal({
     }
   }, [appointment, canSubmit, selectedDays, selectedSlots, userPhone, userName, onSuccess, resetState, t]);
 
+  // ── Locale helpers ───────────────────────────────────────────────────────
   const locale = i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US';
 
   const nextDateLabelByDayIndex = useMemo(() => {
@@ -161,185 +241,196 @@ export default function SwapRequestModal({
     return out;
   }, [locale]);
 
-  if (!appointment) return null;
+  if (!isMounted || !appointment) return null;
 
   const formattedDate = new Date(appointment.slot_date).toLocaleDateString(locale as any, {
     weekday: 'long', day: 'numeric', month: 'long',
   });
 
+  const PRIMARY  = colors.primary;
+  const INFO_BG  = `${PRIMARY}12`;
+  const timeParts = formatTime12Hour(appointment.slot_time || '').split(' ');
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={s.overlay}>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      <View style={s.modalRoot} pointerEvents="box-none">
 
-        {/*
-          direction: 'rtl' על ה-sheet מאלץ את כל הילדים לפעול ב-RTL
-          ללא תלות ב-I18nManager — זהו הפתרון הבטוח ביותר.
-          עם direction:'rtl':
-            flexDirection:'row' זורם מימין לשמאל
-            alignItems:'flex-start' = מיישר לימין
-            textAlign:'right' ← יש גם מפורשות
-        */}
-        <View style={s.sheet}>
+        {/* ── Backdrop ── */}
+        <Animated.View style={[s.backdrop, backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} />
+        </Animated.View>
 
-          {/* ── Drag handle ── */}
-          <View style={s.handle} />
+        {/* ── Sheet ── */}
+        <Animated.View style={[s.sheet, sheetStyle]}>
 
-          {/* ── Header ─────────────────────────────────────────────────────
-              row + direction:rtl → ① כותרת = ימין  ② X = שמאל          */}
-          <View style={s.header}>
-            <Text style={s.title}>{t('swap.title', 'החלפת תור')}</Text>
-            <TouchableOpacity
-              onPress={handleClose}
-              style={s.closeBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="close" size={18} color="#636366" />
-            </TouchableOpacity>
-          </View>
+          {/* ── Drag area: handle + header ── */}
+          <GestureDetector gesture={panGesture}>
+            <View>
+              <View style={s.handleWrap}>
+                <View style={s.handle} />
+              </View>
+              <View style={s.header}>
+                <Text style={s.title}>{t('swap.title', 'החלפת תור')}</Text>
+              </View>
+            </View>
+          </GestureDetector>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={s.scroll}
+            scrollEventThrottle={16}
+          >
 
-            {/* ── Appointment card — styled like clientNextCard on home screen ── */}
+            {/* ── Appointment card — identical to home screen clientNextCard ── */}
             <View style={s.apptCard}>
 
-              {/* Header: date (RIGHT) + label (LEFT) */}
+              {/* Header: direction:ltr forces date LEFT, label RIGHT — same as home screen */}
               <View style={s.apptCardHeader}>
-                {/* ① first → RIGHT in RTL */}
                 <Text style={s.apptCardDate}>{formattedDate}</Text>
-                {/* ② second → LEFT in RTL */}
                 <Text style={s.apptCardLabel}>{t('swap.yourAppointment', 'התור שלך')}</Text>
               </View>
 
               <View style={s.apptCardDivider} />
 
-              {/* Body: [service+icon RIGHT] | [divider] | [time LEFT] */}
+              {/* Body: [info RIGHT] | [divider] | [time LEFT] — 'row' in global RTL = right-to-left */}
               <View style={s.apptCardBody}>
 
-                {/* ① Service info — RIGHT side */}
-                <View style={s.apptServiceRow}>
-                  {/* icon bubble — first in row = rightmost */}
-                  <View style={s.apptIconCircle}>
-                    <LinearGradient
-                      colors={[PRIMARY, `${PRIMARY}CC`]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={s.apptIconGradient}
-                    >
-                      <Ionicons name="cut-outline" size={20} color="#FFF" />
-                    </LinearGradient>
-                  </View>
-                  {/* text — second in row */}
+                {/* Info side — first child in RTL row → rightmost */}
+                <View style={s.apptInfo}>
+                  {barberImage ? (
+                    <Image
+                      source={{ uri: barberImage }}
+                      style={s.apptAvatar}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[s.apptAvatar, s.apptAvatarFallback]}>
+                      <Ionicons name="person" size={22} color="#AAA" />
+                    </View>
+                  )}
                   <View style={s.apptTextCol}>
-                    <Text style={s.apptServiceName} numberOfLines={2}>
+                    <Text style={s.apptServiceName} numberOfLines={1}>
                       {appointment.service_name || t('booking.field.service', 'שירות')}
                     </Text>
-                    <View style={s.apptStatusRow}>
-                      <View style={s.apptStatusDot} />
-                      <Text style={s.apptStatusText}>{t('appointments.confirmed', 'מאושר')}</Text>
-                    </View>
+                    {barberName ? (
+                      <Text style={s.apptBarberName} numberOfLines={1}>{barberName}</Text>
+                    ) : null}
                   </View>
                 </View>
 
-                {/* ② Vertical divider */}
                 <View style={[s.apptTimeDivider, { backgroundColor: `${PRIMARY}25` }]} />
 
-                {/* ③ Time block — LEFT side */}
+                {/* Time — last child in RTL row → leftmost */}
                 <View style={s.apptTimeBlock}>
-                  <Text style={[s.apptTimeHM, { color: PRIMARY }]}>
-                    {formatTime12Hour(appointment.slot_time || '').split(' ')[0]}
-                  </Text>
-                  {formatTime12Hour(appointment.slot_time || '').split(' ')[1] ? (
-                    <Text style={[s.apptTimeSuffix, { color: `${PRIMARY}99` }]}>
-                      {formatTime12Hour(appointment.slot_time || '').split(' ')[1]}
-                    </Text>
+                  <Text style={[s.apptTimeHM, { color: PRIMARY }]}>{timeParts[0]}</Text>
+                  {timeParts[1] ? (
+                    <Text style={[s.apptTimeSuffix, { color: `${PRIMARY}B3` }]}>{timeParts[1]}</Text>
                   ) : null}
                 </View>
 
               </View>
             </View>
 
-            {/* ── Days — row + rtl → א=ימין … ו=שמאל ─────────────────────── */}
-            <View style={s.sectionHeaderRow}>
-              <Text style={s.sectionLabel}>{t('swap.selectDays', 'באילו ימים מתאים לך?')}</Text>
-              {selectedDays.length > 0 && (
-                <View style={s.countBadge}>
-                  <Text style={s.countBadgeText}>{selectedDays.length}</Text>
+            {/* ── Days section ── */}
+            <View style={s.sectionBlock}>
+              {/* Title centered; badge on physical LEFT (direction:ltr row) */}
+              <View style={s.sectionTitleRow}>
+                <View style={s.sectionTitleSide}>
+                  {selectedDays.length > 0 ? (
+                    <View style={[s.countBadge, { backgroundColor: PRIMARY }]}>
+                      <Text style={s.countBadgeText}>{selectedDays.length}</Text>
+                    </View>
+                  ) : null}
                 </View>
-              )}
-            </View>
+                <Text style={s.sectionLabel}>{t('swap.selectDays', 'באילו ימים מתאים לך?')}</Text>
+                <View style={s.sectionTitleSide} />
+              </View>
 
-            <View style={s.daysRow}>
-              {DAYS.map(day => {
-                const active = selectedDays.includes(day.dayIndex);
-                const dateHint = nextDateLabelByDayIndex[day.dayIndex];
-                return (
-                  <View key={day.dayIndex} style={s.dayCell}>
-                    <Text style={s.dayDateAbove} numberOfLines={1}>
-                      {dateHint || '—'}
-                    </Text>
+              {/* Days grid — 'row' in global RTL → א first = rightmost */}
+              <View style={s.daysRow}>
+                {DAYS.map(day => {
+                  const active   = selectedDays.includes(day.dayIndex);
+                  const dateHint = nextDateLabelByDayIndex[day.dayIndex];
+                  return (
                     <TouchableOpacity
-                      style={[s.dayBtn, active && s.dayBtnActive]}
+                      key={day.dayIndex}
+                      style={[
+                        s.dayBtn,
+                        active && [s.dayBtnActive, { backgroundColor: PRIMARY, borderColor: PRIMARY, shadowColor: PRIMARY }],
+                      ]}
                       onPress={() => toggleDay(day.dayIndex)}
                       activeOpacity={0.72}
                     >
-                      <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>
-                        {day.label}
-                      </Text>
-                      {active && <View style={s.dayDot} />}
+                      <Text style={[s.dayLetter, active && s.dayLetterActive]}>{day.label}</Text>
+                      <Text style={[s.dayDate,   active && s.dayDateActive]}>{dateHint || '—'}</Text>
                     </TouchableOpacity>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
 
-            {/* ── Divider ── */}
             <View style={s.divider} />
 
-            {/* ── Time slots — full-width row so label hugs the RTL start (visual right) ── */}
-            <View style={s.sectionLabelFullWidth}>
-              <Text style={[s.sectionLabel, s.sectionLabelNoMargin]}>
-                {t('swap.selectTime', 'באיזה שעות?')}
-              </Text>
+            {/* ── Time slots ── */}
+            <View style={s.sectionBlock}>
+              <View style={s.sectionTitleRow}>
+                <View style={s.sectionTitleSide} />
+                <Text style={s.sectionLabel}>{t('swap.selectTime', 'באיזה שעות?')}</Text>
+                <View style={s.sectionTitleSide} />
+              </View>
+
+              <View style={s.slotsRow}>
+                {TIME_SLOTS.map(slot => {
+                  const active = selectedSlots.includes(slot.id);
+                  return (
+                    <TouchableOpacity
+                      key={slot.id}
+                      style={[
+                        s.slotCube,
+                        active && [
+                          s.slotCubeActive,
+                          { backgroundColor: PRIMARY, borderColor: PRIMARY },
+                          Platform.OS === 'ios'
+                            ? { shadowColor: PRIMARY, shadowOpacity: 0.28, shadowRadius: 10 }
+                            : { elevation: 5 },
+                        ],
+                      ]}
+                      onPress={() => toggleSlot(slot.id)}
+                      activeOpacity={0.72}
+                    >
+                      <Text style={s.slotEmoji}>{slot.emoji}</Text>
+                      <Text style={[s.slotLabel, active && s.slotLabelActive]} numberOfLines={1}>
+                        {t(slot.labelKey as never)}
+                      </Text>
+                      <Text style={[s.slotRange, active && s.slotRangeActive]} numberOfLines={2}>
+                        {t(slot.rangeKey as never)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
-            <View style={s.slotsRow}>
-              {TIME_SLOTS.map(slot => {
-                const active = selectedSlots.includes(slot.id);
-                return (
-                  <TouchableOpacity
-                    key={slot.id}
-                    style={[s.slotCube, active && s.slotCubeActive]}
-                    onPress={() => toggleSlot(slot.id)}
-                    activeOpacity={0.72}
-                  >
-                    <Text style={s.slotCubeEmoji}>{slot.emoji}</Text>
-                    <Text
-                      style={[s.slotCubeLabel, active && s.slotCubeLabelActive]}
-                      numberOfLines={1}
-                    >
-                      {t(slot.labelKey as never)}
-                    </Text>
-                    <Text
-                      style={[s.slotCubeRange, active && s.slotCubeRangeActive]}
-                      numberOfLines={2}
-                    >
-                      {t(slot.rangeKey as never)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* ── Info box ────────────────────────────────────────────────────
-                row + rtl → ① text=ימין (flex:1)  ② icon=שמאל            */}
-            <View style={s.infoBox}>
-              <Text style={s.infoText}>
+            {/* ── Info box ── */}
+            <View style={[s.infoBox, { backgroundColor: INFO_BG }]}>
+              <Ionicons
+                name="information-circle-outline"
+                size={17}
+                color={PRIMARY}
+                style={s.infoIcon}
+              />
+              <Text style={[s.infoText, { color: PRIMARY }]}>
                 {t(
                   'swap.infoText',
                   'כשנמצא לקוח עם תור מתאים, הוא מאשר את ההחלפה פעם אחת והתורים מתעדכנים. תקבל התראה עם הזמן החדש — בלי אישור נוסף ממך.'
                 )}
               </Text>
-              <Ionicons name="information-circle-outline" size={17} color={INFO_TEXT} style={s.infoIcon} />
             </View>
 
           </ScrollView>
@@ -347,7 +438,11 @@ export default function SwapRequestModal({
           {/* ── Footer / CTA ── */}
           <View style={s.footer}>
             <TouchableOpacity
-              style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
+              style={[
+                s.submitBtn,
+                { backgroundColor: canSubmit ? PRIMARY : '#E5E5EA', shadowColor: PRIMARY },
+                !canSubmit && { shadowOpacity: 0, elevation: 0 },
+              ]}
               onPress={handleSave}
               disabled={!canSubmit || isSaving}
               activeOpacity={0.84}
@@ -355,62 +450,60 @@ export default function SwapRequestModal({
               {isSaving ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                /* row + rtl → ① text=ימין  ② icon=שמאל */
-                <>
+                <View style={[s.submitBtnInner, { flexDirection: rtl ? 'row' : 'row-reverse' }]}>
                   <Text style={[s.submitBtnText, !canSubmit && s.submitBtnTextDisabled]}>
                     {t('swap.submit', 'שלח בקשת החלפה')}
                   </Text>
-                  <Ionicons
-                    name="swap-horizontal"
-                    size={18}
-                    color={canSubmit ? '#FFF' : '#AEAEB2'}
-                  />
-                </>
+                  <Ionicons name="swap-horizontal" size={18} color={canSubmit ? '#FFF' : '#AEAEB2'} />
+                </View>
               )}
             </TouchableOpacity>
           </View>
 
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
-  overlay: {
+  modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.50)',
     justifyContent: 'flex-end',
   },
-
-  /* ─── direction:'rtl' כאן מפעיל RTL על כל הילדים ─────────────────────── */
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.50)',
+  },
   sheet: {
-    direction: 'rtl' as any,
-    backgroundColor: '#F8F8FC',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    backgroundColor: '#F7F7FB',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     maxHeight: '92%',
     overflow: 'hidden',
   },
 
+  // ── Drag handle ───────────────────────────────────────────────────────────
+  handleWrap: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: '#FFFFFF',
+  },
   handle: {
     width: 38,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#DCDCE0',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 2,
   },
 
   // ── Header ───────────────────────────────────────────────────────────────
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
+    paddingTop: 10,
+    paddingBottom: 14,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
   },
@@ -419,36 +512,31 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1C1E',
     letterSpacing: -0.4,
-    textAlign: 'right',
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F2F2F7',
-    alignItems: 'center',
-    justifyContent: 'center',
+    textAlign: 'center',
   },
 
   scroll: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 0,
   },
 
-  // ── Appointment summary card (mirrors clientNextCard from home screen) ──
+  // ── Appointment card — mirrors home screen clientNextCard exactly ─────────
   apptCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    marginBottom: 22,
+    marginBottom: 20,
     ...Platform.select({
-      ios: { shadowColor: '#1e253b', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 5 } },
-      android: { elevation: 5 },
+      ios:     { shadowColor: '#1e253b', shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+      android: { elevation: 9 },
     }),
   },
-  // Header — RTL row: ① date=RIGHT, ② label=LEFT
+  // direction:'ltr' keeps date physically LEFT, label physically RIGHT —
+  // matching clientNextHeader on the home screen (same trick used there).
   apptCardHeader: {
     flexDirection: 'row',
+    direction: 'ltr' as any,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -459,77 +547,61 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#3C3C43',
-    textAlign: 'right',
-    flexShrink: 1,
   },
   apptCardLabel: {
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
     color: '#64748B',
-    textAlign: 'left',
   },
   apptCardDivider: {
     height: 1,
     backgroundColor: '#F1F5F9',
   },
-  // Body — RTL row: ① serviceRow=RIGHT, ② timeDivider, ③ timeBlock=LEFT
   apptCardBody: {
-    flexDirection: 'row',
+    flexDirection: 'row',         // global RTL makes 'row' flow right-to-left
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 14,
   },
-  // RTL row inside: ① iconCircle=RIGHT, ② textCol=LEFT
-  apptServiceRow: {
+  apptInfo: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row',         // global RTL: first child (avatar) on right
     alignItems: 'center',
     gap: 12,
     minWidth: 0,
   },
-  apptIconCircle: {
+  apptTextCol: {
+    flex: 1,
+    alignItems: 'flex-start',     // flex-start in RTL row = right side (towards start)
+    gap: 3,
+    minWidth: 0,
+  },
+  apptAvatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
     overflow: 'hidden',
     flexShrink: 0,
   },
-  apptIconGradient: {
-    width: 50,
-    height: 50,
+  apptAvatarFallback: {
+    backgroundColor: '#E5E5EA',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  apptTextCol: {
-    flex: 1,
-    gap: 4,
   },
   apptServiceName: {
     fontSize: 17,
     fontWeight: '700',
     color: '#1C1C1E',
     letterSpacing: -0.3,
-    textAlign: 'right',
   },
-  apptStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    justifyContent: 'flex-start',
-  },
-  apptStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#34C759',
-  },
-  apptStatusText: {
-    fontSize: 12,
-    color: '#34C759',
+  apptBarberName: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#3C3C43',
+    flexShrink: 1,
   },
   apptTimeDivider: {
     width: 1.5,
@@ -543,7 +615,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
     flexShrink: 0,
-    minWidth: 52,
+    minWidth: 60,
   },
   apptTimeHM: {
     fontSize: 28,
@@ -558,38 +630,39 @@ const s = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  // ── Section header ───────────────────────────────────────────────────────
-  sectionHeaderRow: {
+  // ── Section blocks ────────────────────────────────────────────────────────
+  sectionBlock: {
+    marginBottom: 20,
+  },
+  // direction:'ltr' + row → physical LEFT (badge) | CENTER (title) | RIGHT (spacer)
+  // Title uses textAlign:'center' (ממורכז); row anchor is the physical left column.
+  sectionTitleRow: {
     flexDirection: 'row',
+    direction: 'ltr' as any,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    width: '100%',
+    marginBottom: 14,
+  },
+  sectionTitleSide: {
+    width: 36,
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionLabel: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '700',
     color: '#1C1C1E',
-    textAlign: 'right',
-    marginBottom: 12,
-  },
-  /** Block wrapper so shrink-to-fit Text does not sit on the wrong screen edge */
-  sectionLabelFullWidth: {
-    width: '100%',
-    marginBottom: 12,
-  },
-  sectionLabelNoMargin: {
-    marginBottom: 0,
-    width: '100%',
+    textAlign: 'center',
   },
   countBadge: {
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 5,
-    marginBottom: 12,
+    paddingHorizontal: 6,
   },
   countBadgeText: {
     fontSize: 12,
@@ -597,63 +670,49 @@ const s = StyleSheet.create({
     color: '#FFF',
   },
 
-  // ── Days row ─────────────────────────────────────────────────────────────
+  // ── Days ──────────────────────────────────────────────────────────────────
+  // 'row' in global RTL → first day (א) rightmost, last day (ו) leftmost
   daysRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 22,
-  },
-  dayCell: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  dayDateAbove: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 6,
-    textAlign: 'center',
-    width: '100%',
+    gap: 7,
   },
   dayBtn: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#DCDCE0',
-    backgroundColor: '#FFF',
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    gap: 4,
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
   },
   dayBtnActive: {
-    backgroundColor: PRIMARY,
-    borderColor: PRIMARY,
-    shadowColor: PRIMARY,
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  dayBtnText: {
-    fontSize: 13,
+  dayLetter: {
+    fontSize: 16,
     fontWeight: '800',
-    color: '#3C3C43',
+    color: '#1C1C1E',
+    letterSpacing: -0.3,
   },
-  dayBtnTextActive: {
-    color: '#FFF',
+  dayLetterActive: {
+    color: '#FFFFFF',
   },
-  dayDot: {
-    position: 'absolute',
-    bottom: 5,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.70)',
+  dayDate: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 0.1,
+  },
+  dayDateActive: {
+    color: 'rgba(255,255,255,0.78)',
   },
 
   // ── Divider ───────────────────────────────────────────────────────────────
@@ -663,131 +722,107 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // ── Time slots (one row — same cube feel as book-appointment TimeSelection grid) ──
+  // ── Time slot cubes ───────────────────────────────────────────────────────
   slotsRow: {
     flexDirection: 'row',
     gap: 9,
-    marginBottom: 22,
     marginTop: 4,
   },
   slotCube: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 4,
-    minHeight: 102,
-    borderRadius: 18,
+    minHeight: 100,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.06)',
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: '#FFFFFF',
     ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.13,
-        shadowRadius: 8,
-      },
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 8 },
       android: { elevation: 3 },
     }),
   },
   slotCubeActive: {
-    backgroundColor: PRIMARY,
-    borderColor: PRIMARY,
-    ...Platform.select({
-      ios: {
-        shadowColor: PRIMARY,
-        shadowOpacity: 0.28,
-        shadowRadius: 10,
-      },
-      android: { elevation: 5 },
-    }),
+    borderWidth: 0,
   },
-  slotCubeEmoji: {
-    fontSize: 20,
-    lineHeight: 26,
-    marginBottom: 4,
+  slotEmoji: {
+    fontSize: 22,
+    lineHeight: 28,
+    marginBottom: 5,
   },
-  slotCubeLabel: {
+  slotLabel: {
     fontSize: 12,
     fontWeight: '800',
     color: '#1C1C1E',
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  slotCubeLabelActive: {
+  slotLabelActive: {
     color: '#FFF',
   },
-  slotCubeRange: {
+  slotRange: {
     marginTop: 4,
     fontSize: 10,
     fontWeight: '600',
     color: '#8E8E93',
     textAlign: 'center',
-    lineHeight: 13,
+    lineHeight: 14,
   },
-  slotCubeRangeActive: {
-    color: 'rgba(255,255,255,0.88)',
+  slotRangeActive: {
+    color: 'rgba(255,255,255,0.85)',
   },
 
   // ── Info box ──────────────────────────────────────────────────────────────
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: INFO_BG,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 13,
     paddingHorizontal: 14,
     alignItems: 'flex-start',
-    gap: 10,
-    marginBottom: 4,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: INFO_TEXT,
-    fontWeight: '500',
-    textAlign: 'right',
+    gap: 9,
   },
   infoIcon: {
     marginTop: 2,
     flexShrink: 0,
   },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
 
   // ── Footer / CTA ──────────────────────────────────────────────────────────
   footer: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 36,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.06)',
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
   },
   submitBtn: {
-    backgroundColor: PRIMARY,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    shadowColor: PRIMARY,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.30,
+    shadowOpacity: 0.28,
     shadowRadius: 10,
     elevation: 4,
   },
-  submitBtnDisabled: {
-    backgroundColor: '#E5E5EA',
-    shadowOpacity: 0,
-    elevation: 0,
+  submitBtnInner: {
+    alignItems: 'center',
+    gap: 8,
   },
   submitBtnText: {
     fontSize: 16,
     fontWeight: '800',
     color: '#FFF',
     letterSpacing: -0.3,
-    textAlign: 'right',
   },
   submitBtnTextDisabled: {
     color: '#AEAEB2',

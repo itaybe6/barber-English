@@ -263,9 +263,7 @@ export default function SelectBarberScreen() {
   const scrollX = useSharedValue(0);
   const flatListRef = useRef<any>(null);
 
-  // Reversed display order: barbers[0] lands at the physical-right end.
-  // Swiping RIGHT decreases contentOffset.x → shows the next original barber.
-  const displayBarbers = useMemo(() => [...barbers].reverse(), [barbers]);
+  const displayBarbers = useMemo(() => barbers, [barbers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,18 +293,10 @@ export default function SelectBarberScreen() {
     loadBarbers();
   }, []);
 
-  // After data loads, scroll to the last display item (= barbers[0]) so the
-  // first barber is shown on screen and swiping RIGHT reveals the next one.
   useEffect(() => {
-    if (barbers.length < 2) return;
-    const lastDisplayIndex = barbers.length - 1;
-    const targetOffset = lastDisplayIndex * (_slideWidth + _spacing);
-    // Defer until after the FlatList has laid out
-    const t = setTimeout(() => {
-      flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
-      scrollX.value = lastDisplayIndex;
-    }, 50);
-    return () => clearTimeout(t);
+    if (barbers.length >= 1) {
+      scrollX.value = 0;
+    }
   }, [barbers]);
 
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -389,8 +379,9 @@ export default function SelectBarberScreen() {
         ))}
       </View>
 
-      {/* Carousel — data is reversed so barbers[0] sits at the physical-right end.
-          Swiping RIGHT reduces contentOffset.x and reveals the next barber. */}
+      {/* Carousel — direction forced LTR so contentOffset grows left→right regardless of RTL.
+          barbers[0] shown first. Swiping LEFT (finger left) reveals the next barber. */}
+      <View style={{ direction: 'ltr' }}>
       <Animated.FlatList
         ref={flatListRef}
         data={displayBarbers}
@@ -408,11 +399,16 @@ export default function SelectBarberScreen() {
             barber={item}
             scrollX={scrollX}
             onPress={() => {
-              // Convert display index back to original barbers index
-              setActiveIndex(barbers.length - 1 - index);
+              setActiveIndex(index);
             }}
           />
         )}
+        initialScrollIndex={0}
+        getItemLayout={(_, index) => ({
+          length: _slideWidth + _spacing,
+          offset: (_slideWidth + _spacing) * index,
+          index,
+        })}
         snapToInterval={_slideWidth + _spacing}
         decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
@@ -420,15 +416,15 @@ export default function SelectBarberScreen() {
         onScroll={onScroll}
         scrollEventThrottle={1000 / 60}
         onMomentumScrollEnd={(e) => {
-          const displayIndex = Math.round(
+          const index = Math.round(
             e.nativeEvent.contentOffset.x / (_slideWidth + _spacing)
           );
-          const originalIndex = barbers.length - 1 - displayIndex;
-          if (originalIndex >= 0 && originalIndex < barbers.length) {
-            setActiveIndex(originalIndex);
+          if (index >= 0 && index < barbers.length) {
+            setActiveIndex(index);
           }
         }}
       />
+      </View>
 
       {/* Continue Button */}
       <View

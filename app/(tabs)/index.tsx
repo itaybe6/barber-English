@@ -69,7 +69,7 @@ import CategoryBar from '@/components/CategoryBar';
 import DesignCard from '@/components/DesignCard';
 import DesignCarousel from '@/components/DesignCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
-import DailySchedule from '@/components/DailySchedule';
+import DailySchedule, { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getHomeLogoSourceFromUrl } from '@/src/theme/assets';
@@ -99,7 +99,7 @@ const HERO_TOP_SCHEDULE_BAND_HEIGHT = Math.round(
   Math.max(196, Math.min(SCREEN_HEIGHT * 0.23, 226))
 );
 /** Bottom corner radius of the hero schedule band (matches DailySchedule banner feel) */
-const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 32;
+const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = DAILY_SCHEDULE_SURFACE_RADIUS;
 /** Logical hero height (scroll padding / snap math) */
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.82);
 /** Taller marquee layer so tiles can extend under the white sheet (z-index below sheet) */
@@ -2342,7 +2342,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   /** רשימת המתנה — מיושר לכרטיס nextCard ב-DailySchedule (surface, צל, כותרת+מפריד+גוף) */
   waitlistCard: {
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     ...Platform.select({
       ios: {
         shadowColor: '#1e293b',

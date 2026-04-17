@@ -50,6 +50,9 @@ function parseFormattedTime(formatted: string): { hm: string; suffix: string } {
   return { hm: m?.[1] ?? trimmed, suffix: m?.[2] ?? '' };
 }
 
+/** Large radius for today banner + next card (soft “pill” look, aligned with client home cards). */
+export const DAILY_SCHEDULE_SURFACE_RADIUS = 36;
+
 export default function DailySchedule({
   nextAppointment,
   loading,
@@ -291,9 +294,13 @@ const createStyles = (colors: any) => StyleSheet.create({
 
   /* ── Today Banner (גרדיאנט + LavaLamp כמו login) ── */
   todayBannerOuter: {
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     overflow: 'hidden',
     position: 'relative',
+    ...Platform.select({
+      ios: { borderCurve: 'continuous' as const },
+      default: {},
+    }),
   },
   todayBannerContent: {
     paddingVertical: 18,
@@ -338,9 +345,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   /* ── Next Appointment Card — רקע surface + צל (בלי overflow:hidden כדי שלא ייחתך הצל ב‑iOS) ── */
   nextCard: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     ...Platform.select({
       ios: {
+        borderCurve: 'continuous' as const,
         shadowColor: '#1e293b',
         shadowOpacity: 0.16,
         shadowRadius: 20,

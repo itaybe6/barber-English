@@ -347,6 +347,10 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
+  if (currentTab === "add-recurring-appointment") {
+    return null;
+  }
+
   if (currentTab === "pick-primary-color") {
     return (
       <View

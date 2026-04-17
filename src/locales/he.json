@@ -740,7 +740,7 @@
       "clientSwapSubtitle": "לקוחות יוכלו להציע ולבצע החלפת משבצות זמן",
       "clientSwapSaveFailed": "לא ניתן לעדכן את הגדרת ההחלפה",
       "allowMultiServiceBookingTitle": "כמה שירותים באותו תור",
-      "allowMultiServiceBookingSubtitle": "כבוי: הלקוח בוחר שירות אחד בכל קביעת תור. מופעל: אפשר לסמן כמה שירותים והם יירשמו יחד כתור רציף אחד (לפי סך הזמנים).",
+      "allowMultiServiceBookingSubtitle": "כבוי: שירות אחד לתור.\nמופעל: כמה שירותים באותו מועד",
       "allowMultiServiceBookingSaveFailed": "לא ניתן לשמור את ההגדרה",
       "requireClientApprovalTitle": "אישור לקוחות חדשים",
       "requireClientApprovalSubtitle": "כשמופעל — נרשמים חדשים ממתינים לאישורך לפני קביעת תורים",
@@ -821,6 +821,7 @@
     
     "profile": {
       "businessAddressTitle": "כתובת העסק",
+      "businessAddressSheetSubtitle": "לקוחות רואים את הכתובת בזמן ההזמנה. בחרו הצעה או הקלידו בחופשיות.",
       "addressLabel": "כתובת",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "כתובת העסק",
@@ -1028,6 +1029,16 @@
       "deleteFailed": "נכשל במחיקת התור",
       "a11yDelete": "מחק",
       "pageSubtitle": "מלאו את הפרטים — הכל בעמוד אחד",
+      "wizardSubtitle": "בוחרים שלב אחר שלב",
+      "wizardStepCounter": "שלב {{current}} מתוך {{total}}",
+      "wizardBackStep": "שלב קודם",
+      "wizardStepTitleClient": "לקוח",
+      "wizardStepTitleService": "שירות",
+      "wizardStepTitleDay": "יום בשבוע",
+      "wizardStepTitleTime": "שעה",
+      "wizardStepTitleRepeat": "תדירות חזרה",
+      "wizardStepTitleSummary": "סיכום",
+      "wizardStepSubtitleSummary": "בדקו שהכל נכון לפני השמירה",
       "saveButton": "שמירת תור קבוע",
       "summaryTitle": "סיכום",
       "selectServiceAndDayFirst": "בחרו שירות ויום כדי לראות שעות פנויות",
@@ -1085,6 +1096,8 @@
       "passwordLabel": "סיסמה *",
       "passwordPlaceholder": "הזן/י סיסמה",
       "passwordHint": "* לפחות 6 תווים",
+      "passwordPlaceholderOptional": "סיסמה חדשה (אופציונלי)",
+      "confirmPasswordPlaceholderOptional": "אימות סיסמה חדשה",
       "confirmPasswordLabel": "אימות סיסמה *",
       "confirmPasswordPlaceholder": "אשר/י סיסמה",
       "review": "סקירה",
@@ -1098,7 +1111,13 @@
       "addEmployeeSectionProfile": "פרטי העובד",
       "addEmployeeSectionSecurity": "סיסמת כניסה",
       "addEmployeeCta": "הוספת עובד למערכת",
-      "addEmployeeFormHint": "העובד יתחבר עם מספר הטלפון והסיסמה שתגדירו."
+      "addEmployeeFormHint": "העובד יתחבר עם מספר הטלפון והסיסמה שתגדירו.",
+      "editEmployee": "עריכת עובד",
+      "editEmployeeSubtitle": "עדכון שם, טלפון או סיסמה.",
+      "editEmployeePasswordHint": "השאר את שדות הסיסמה ריקים כדי לשמור על הסיסמה הקיימת.",
+      "saveEmployeeChanges": "שמירת שינויים",
+      "updateEmployeeFailed": "עדכון העובד נכשל",
+      "editEmployeeA11y": "עריכת עובד"
     }
   },
   "admin": {

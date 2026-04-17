@@ -364,6 +364,19 @@ export function useAddRecurringAppointmentForm(onCreated?: () => void) {
     [selectedDayOfWeek, isTimeAvailable, t],
   );
 
+  const reset = useCallback(() => {
+    setClientSearch('');
+    setSelectedClient(null);
+    setSelectedDayOfWeek(null);
+    setSelectedTime(null);
+    setSelectedService(null);
+    setRepeatWeeks(1);
+    setShowClientDropdown(false);
+    setShowServiceDropdown(false);
+    setAvailableTimes([]);
+    void searchClients('');
+  }, [searchClients]);
+
   return {
     clientSearch,
     setClientSearch,
@@ -388,5 +401,6 @@ export function useAddRecurringAppointmentForm(onCreated?: () => void) {
     isSubmitting,
     submit,
     onPickTime,
+    reset,
   };
 }

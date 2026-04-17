@@ -72,11 +72,12 @@ import { getExpoExtra } from '@/lib/getExtra';
 import { getHomeLogoSource } from '@/src/theme/assets';
 import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import {
-  HOME_HEADER_TITLE_FONT_IDS,
+  HOME_HEADER_GOOGLE_FONT_OPTIONS,
   filterEnglishHomeHeaderTitle,
-  homeHeaderTitleFontIdToDb,
-  normalizeHomeHeaderTitleFontId,
-  type HomeHeaderTitleFontId,
+  homeHeaderTitleFontKeyToDb,
+  homeHeaderTitleFontStyle,
+  homeHeaderTitleFontToPickerSelection,
+  type HomeHeaderGoogleFontId,
 } from '@/lib/homeHeaderTitleFont';
 import { normalizeHomeHeroMode, type HomeHeroMode } from '@/lib/utils/homeHeroMode';
 
@@ -95,6 +96,8 @@ const shadowStyle = Platform.select({
 
 /** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
 const SETTINGS_GROUPED_BG = '#F2F2F7';
+/** Extra scroll padding above the floating admin tab bar (pill ~52px + bottom offset 12 + small buffer). */
+const SETTINGS_SCROLL_BOTTOM_EXTRA = 84;
 /** Ruler + manual row in policy bottom sheets (booking days, client hours, admin minutes) */
 const SHEET_RULER_SETTINGS_CARD_BG = '#FAFAFC';
 
@@ -287,6 +290,10 @@ export default function SettingsScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState('');
   /** Custom home header line when logo is hidden (saved to `home_header_text_without_logo`). */
   const [homeHeaderNoLogoTitleDraft, setHomeHeaderNoLogoTitleDraft] = useState('');
+  /** Google font row: local choice until Save (synced from profile when server value changes). */
+  const [homeHeaderTitleFontDraft, setHomeHeaderTitleFontDraft] = useState<'system' | HomeHeaderGoogleFontId>('system');
+  /** Preview + font strip + save: collapsed by default to save vertical space. */
+  const [homeHeaderNoLogoFontEditorOpen, setHomeHeaderNoLogoFontEditorOpen] = useState(false);
   const [profileAddress, setProfileAddress] = useState('');
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
@@ -471,6 +478,27 @@ export default function SettingsScreen() {
   useEffect(() => {
     setHomeHeaderNoLogoTitleDraft(filterEnglishHomeHeaderTitle(String(profile?.home_header_text_without_logo ?? '')));
   }, [profile?.home_header_text_without_logo]);
+
+  useEffect(() => {
+    setHomeHeaderTitleFontDraft(homeHeaderTitleFontToPickerSelection(profile?.home_header_title_font));
+  }, [profile?.home_header_title_font]);
+
+  useEffect(() => {
+    if (profile?.home_header_show_logo !== false) setHomeHeaderNoLogoFontEditorOpen(false);
+  }, [profile?.home_header_show_logo]);
+
+  const hasHomeHeaderNoLogoPendingSave = useMemo(() => {
+    const raw = filterEnglishHomeHeaderTitle(homeHeaderNoLogoTitleDraft).trim();
+    const stored = filterEnglishHomeHeaderTitle(String(profile?.home_header_text_without_logo ?? '')).trim();
+    if (raw !== stored) return true;
+    const savedPicker = homeHeaderTitleFontToPickerSelection(profile?.home_header_title_font);
+    return homeHeaderTitleFontDraft !== savedPicker;
+  }, [
+    homeHeaderNoLogoTitleDraft,
+    profile?.home_header_text_without_logo,
+    profile?.home_header_title_font,
+    homeHeaderTitleFontDraft,
+  ]);
 
   useEffect(() => {
     (async () => {
@@ -1755,24 +1783,74 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleHomeHeaderTitleFontSelect = async (nextId: HomeHeaderTitleFontId) => {
-    const current = normalizeHomeHeaderTitleFontId(profile?.home_header_title_font);
-    if (nextId === current) return;
+  const saveHomeHeaderNoLogoFromSaveButton = async () => {
+    const raw = filterEnglishHomeHeaderTitle(homeHeaderNoLogoTitleDraft).trim();
+    const stored = filterEnglishHomeHeaderTitle(String(profile?.home_header_text_without_logo ?? '')).trim();
+    const textDirty = raw !== stored;
+    const savedPicker = homeHeaderTitleFontToPickerSelection(profile?.home_header_title_font);
+    const fontDirty = homeHeaderTitleFontDraft !== savedPicker;
+
+    if (!textDirty && !fontDirty) return;
+
     setIsSavingProfile(true);
     try {
-      const updated = await businessProfileApi.updateHomeHeaderTitleFont(homeHeaderTitleFontIdToDb(nextId));
-      if (!updated) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('settings.profile.homeHeaderTitleFontSaveFailed', 'Could not save font'),
-        );
-        return;
+      if (textDirty) {
+        const updated = await businessProfileApi.updateHomeHeaderTextWithoutLogo(raw.length > 0 ? raw : null);
+        if (!updated) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.profile.homeHeaderNoLogoTitleSaveFailed', 'Could not save header text'),
+          );
+          return;
+        }
+        setProfile(updated);
       }
-      setProfile(updated);
+      if (fontDirty) {
+        const updated = await businessProfileApi.updateHomeHeaderTitleFont(
+          homeHeaderTitleFontKeyToDb(homeHeaderTitleFontDraft),
+        );
+        if (!updated) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.profile.homeHeaderTitleFontSaveFailed', 'Could not save font'),
+          );
+          return;
+        }
+        setProfile(updated);
+      }
+      setHomeHeaderNoLogoFontEditorOpen(false);
     } finally {
       setIsSavingProfile(false);
     }
+    Keyboard.dismiss();
   };
+
+  const renderHomeNoLogoSaveButton = () => (
+    <TouchableOpacity
+      style={[
+        styles.homeFixedMessageSaveButton,
+        {
+          backgroundColor: hasHomeHeaderNoLogoPendingSave ? businessColors.primary : '#D1D1D6',
+          opacity: isSavingProfile ? 0.55 : 1,
+        },
+      ]}
+      onPress={() => void saveHomeHeaderNoLogoFromSaveButton()}
+      disabled={!hasHomeHeaderNoLogoPendingSave || isSavingProfile}
+      activeOpacity={0.88}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !hasHomeHeaderNoLogoPendingSave || isSavingProfile }}
+      accessibilityLabel={t('save', 'Save')}
+    >
+      <Text
+        style={[
+          styles.homeFixedMessageSaveButtonText,
+          !hasHomeHeaderNoLogoPendingSave && !isSavingProfile && { color: '#636366' },
+        ]}
+      >
+        {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const handleHomeHeroModeSelect = async (next: HomeHeroMode) => {
     const current = normalizeHomeHeroMode(profile?.home_hero_mode);
@@ -2425,7 +2503,7 @@ export default function SettingsScreen() {
               {
                 paddingBottom:
                   insets.bottom +
-                  120 +
+                  SETTINGS_SCROLL_BOTTOM_EXTRA +
                   (Platform.OS === 'android' ? settingsKeyboardInset : 0),
               },
             ]}
@@ -2685,6 +2763,7 @@ export default function SettingsScreen() {
             style={styles.settingsAppointmentsScroll}
             contentContainerStyle={[
               styles.settingsAppointmentsScrollContent,
+              { flexGrow: 0 },
               {
                 /**
                  * iOS: do NOT add keyboard height here — `automaticallyAdjustKeyboardInsets` already
@@ -2693,7 +2772,7 @@ export default function SettingsScreen() {
                  */
                 paddingBottom:
                   insets.bottom +
-                  120 +
+                  SETTINGS_SCROLL_BOTTOM_EXTRA +
                   (Platform.OS === 'android' ? settingsKeyboardInset : 0),
               },
             ]}
@@ -2976,7 +3055,7 @@ export default function SettingsScreen() {
                   styles.servicesModalScrollContent,
                   {
                     paddingTop: 10,
-                    paddingBottom: insets.bottom + 80,
+                    paddingBottom: insets.bottom + SETTINGS_SCROLL_BOTTOM_EXTRA,
                     backgroundColor: 'transparent',
                   },
                 ]}
@@ -3275,10 +3354,11 @@ export default function SettingsScreen() {
             style={styles.settingsAppointmentsScroll}
             contentContainerStyle={[
               styles.settingsAppointmentsScrollContent,
+              { flexGrow: 0 },
               {
                 paddingBottom:
                   insets.bottom +
-                  120 +
+                  SETTINGS_SCROLL_BOTTOM_EXTRA +
                   (Platform.OS === 'android' ? settingsKeyboardInset : 0),
               },
             ]}
@@ -3434,7 +3514,7 @@ export default function SettingsScreen() {
                           label: t('settings.profile.homeHeaderModeTextLabel', 'English name only'),
                           sub: t(
                             'settings.profile.homeHeaderModeTextSub',
-                            'Text at the top; leave empty to use display name',
+                            'Text is shown instead of a logo',
                           ),
                         },
                       ] as const
@@ -3517,7 +3597,7 @@ export default function SettingsScreen() {
                       <Text style={styles.homeHeaderNoLogoTitleHint}>
                         {t(
                           'settings.profile.homeHeaderNoLogoTitleHint',
-                          'English letters, numbers, and basic punctuation only. Leave empty to use the business display name from business details.',
+                          'English letters, numbers, and basic punctuation only.',
                         )}
                       </Text>
                       <TextInput
@@ -3536,65 +3616,144 @@ export default function SettingsScreen() {
                         autoCapitalize="words"
                         keyboardType={Platform.OS === 'ios' ? 'ascii-capable' : 'default'}
                       />
-                      <Text style={styles.homeHeaderFontLabel}>
-                        {t('settings.profile.homeHeaderTitleFontLabel', 'Font')}
-                      </Text>
-                      <View style={styles.homeHeaderFontChipsWrap}>
-                        {HOME_HEADER_TITLE_FONT_IDS.map((fid) => {
-                          const selected =
-                            normalizeHomeHeaderTitleFontId(profile?.home_header_title_font) === fid;
-                          return (
-                            <TouchableOpacity
-                              key={fid}
+                      {!homeHeaderNoLogoFontEditorOpen && hasHomeHeaderNoLogoPendingSave
+                        ? renderHomeNoLogoSaveButton()
+                        : null}
+                      {!homeHeaderNoLogoFontEditorOpen ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.homeHeaderNoLogoChangeFontButton,
+                            { borderColor: businessColors.primary },
+                          ]}
+                          onPress={() => setHomeHeaderNoLogoFontEditorOpen(true)}
+                          disabled={isSavingProfile}
+                          activeOpacity={0.88}
+                          accessibilityRole="button"
+                          accessibilityLabel={t(
+                            'settings.profile.homeHeaderNoLogoChangeFontButton',
+                            'Change font',
+                          )}
+                        >
+                          <Text style={[styles.homeHeaderNoLogoChangeFontButtonText, { color: businessColors.primary }]}>
+                            {t('settings.profile.homeHeaderNoLogoChangeFontButton', 'Change font')}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {homeHeaderNoLogoFontEditorOpen ? (
+                        <>
+                          <TouchableOpacity
+                            style={styles.homeHeaderNoLogoCollapseFontRow}
+                            onPress={() => setHomeHeaderNoLogoFontEditorOpen(false)}
+                            disabled={isSavingProfile}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={t(
+                              'settings.profile.homeHeaderNoLogoHideFontOptions',
+                              'Hide font options',
+                            )}
+                          >
+                            <Ionicons name="chevron-up" size={20} color={businessColors.primary} />
+                            <Text style={[styles.homeHeaderNoLogoCollapseFontText, { color: businessColors.primary }]}>
+                              {t('settings.profile.homeHeaderNoLogoHideFontOptions', 'Hide font options')}
+                            </Text>
+                          </TouchableOpacity>
+                          <View style={styles.homeHeaderNamePreviewBox}>
+                            <Text style={styles.homeHeaderNamePreviewCaption}>
+                              {t('settings.profile.homeHeaderNamePreviewCaption', 'Preview')}
+                            </Text>
+                            <Text
                               style={[
-                                styles.homeHeaderFontChip,
-                                selected && {
-                                  backgroundColor: `${businessColors.primary}18`,
-                                  borderColor: businessColors.primary,
-                                },
+                                styles.homeHeaderNamePreviewText,
+                                homeHeaderTitleFontStyle(homeHeaderTitleFontKeyToDb(homeHeaderTitleFontDraft)),
                               ]}
-                              onPress={() => void handleHomeHeaderTitleFontSelect(fid)}
-                              disabled={isSavingProfile}
-                              activeOpacity={0.85}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected }}
-                              accessibilityLabel={t(`settings.profile.homeHeaderTitleFont.${fid}`, fid)}
+                              numberOfLines={2}
                             >
-                              <Text
+                              {homeHeaderNoLogoTitleDraft.trim() ||
+                                (profileDisplayName || '').trim() ||
+                                t('settings.profile.displayNameFallbackShort', 'Business')}
+                            </Text>
+                          </View>
+                          <Text style={styles.homeHeaderFontLabel}>
+                            {t('settings.profile.homeHeaderTitleFontLabelGoogle', 'Google Fonts')}
+                          </Text>
+                          {/* Bleed past card padding:16 so font pills reach the gray card edges */}
+                          <View style={styles.homeHeaderGoogleFontsScrollBleed}>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.homeHeaderGoogleFontsRow}
+                            >
+                              <TouchableOpacity
+                                key="system"
                                 style={[
-                                  styles.homeHeaderFontChipText,
-                                  selected && { color: businessColors.primary },
+                                  styles.homeHeaderGoogleFontPill,
+                                  homeHeaderTitleFontDraft === 'system' && {
+                                    backgroundColor: `${businessColors.primary}12`,
+                                    borderColor: businessColors.primary,
+                                    borderWidth: 2,
+                                  },
                                 ]}
+                                onPress={() => setHomeHeaderTitleFontDraft('system')}
+                                disabled={isSavingProfile}
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: homeHeaderTitleFontDraft === 'system' }}
+                                accessibilityLabel={t('settings.profile.homeHeaderGoogleFontSystem', 'System default')}
                               >
-                                {t(`settings.profile.homeHeaderTitleFont.${fid}`, fid)}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.homeFixedMessageSaveButton,
-                          {
-                            backgroundColor: businessColors.primary,
-                            opacity: isSavingProfile ? 0.55 : 1,
-                          },
-                        ]}
-                        onPress={async () => {
-                          await saveHomeHeaderTextWithoutLogoIfChanged();
-                          Keyboard.dismiss();
-                        }}
-                        disabled={isSavingProfile}
-                        activeOpacity={0.88}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('save', 'Save')}
-                      >
-                        <Text style={styles.homeFixedMessageSaveButtonText}>
-                          {isSavingProfile
-                            ? t('settings.common.saving', 'Saving...')
-                            : t('save', 'Save')}
-                        </Text>
-                      </TouchableOpacity>
+                                <Text style={styles.homeHeaderGoogleFontPillSample}>Aa</Text>
+                                <Text
+                                  style={[
+                                    styles.homeHeaderGoogleFontPillMeta,
+                                    homeHeaderTitleFontDraft === 'system' && {
+                                      color: businessColors.primary,
+                                      fontWeight: '800',
+                                    },
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {t('settings.profile.homeHeaderGoogleFontSystem', 'System default')}
+                                </Text>
+                              </TouchableOpacity>
+                              {HOME_HEADER_GOOGLE_FONT_OPTIONS.map((opt) => {
+                                const selected = homeHeaderTitleFontDraft === opt.id;
+                                return (
+                                  <TouchableOpacity
+                                    key={opt.id}
+                                    style={[
+                                      styles.homeHeaderGoogleFontPill,
+                                      selected && {
+                                        backgroundColor: `${businessColors.primary}12`,
+                                        borderColor: businessColors.primary,
+                                        borderWidth: 2,
+                                      },
+                                    ]}
+                                    onPress={() => setHomeHeaderTitleFontDraft(opt.id)}
+                                    disabled={isSavingProfile}
+                                    activeOpacity={0.85}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected }}
+                                    accessibilityLabel={opt.displayName}
+                                  >
+                                    <Text style={[styles.homeHeaderGoogleFontPillSample, { fontFamily: opt.fontFamily }]}>
+                                      Aa
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.homeHeaderGoogleFontPillMeta,
+                                        selected && { color: businessColors.primary, fontWeight: '800' },
+                                      ]}
+                                      numberOfLines={2}
+                                    >
+                                      {opt.displayName}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </ScrollView>
+                          </View>
+                          {renderHomeNoLogoSaveButton()}
+                        </>
+                      ) : null}
                     </View>
                     <View style={styles.settingDivider} />
                   </>
@@ -3653,7 +3812,11 @@ export default function SettingsScreen() {
                 style={{ flex: 1, backgroundColor: 'transparent' }}
                 contentContainerStyle={[
                   styles.modalContentContainer,
-                  { paddingTop: 4, paddingBottom: insets.bottom + 80, backgroundColor: 'transparent' },
+                  {
+                    paddingTop: 4,
+                    paddingBottom: insets.bottom + SETTINGS_SCROLL_BOTTOM_EXTRA,
+                    backgroundColor: 'transparent',
+                  },
                 ]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
@@ -5492,11 +5655,13 @@ const styles = StyleSheet.create({
   settingsBelowTabs: {
     flex: 1,
     flexGrow: 1,
-    paddingTop: 16,
+    /** No top padding — avoids a full-width grey band between the white tab strip and content. */
+    paddingTop: 0,
     backgroundColor: SETTINGS_GROUPED_BG,
   },
   settingsAppointmentsScroll: {
     flex: 1,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
   settingsAppointmentsScrollContent: {
     flexGrow: 1,
@@ -5876,6 +6041,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     marginHorizontal: 14,
+    marginTop: 16,
     marginBottom: 14,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
@@ -6002,6 +6168,34 @@ const styles = StyleSheet.create({
     color: Colors.text,
     backgroundColor: '#FFFFFF',
   },
+  homeHeaderNoLogoChangeFontButton: {
+    marginTop: 14,
+    alignSelf: 'stretch',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeHeaderNoLogoChangeFontButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  homeHeaderNoLogoCollapseFontRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    alignSelf: 'stretch',
+  },
+  homeHeaderNoLogoCollapseFontText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   homeHeaderFontLabel: {
     marginTop: 14,
     marginBottom: 2,
@@ -6029,6 +6223,96 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
+  },
+  homeHeaderNamePreviewBox: {
+    marginTop: 14,
+    marginBottom: 2,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.12)',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  homeHeaderNamePreviewCaption: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.subtext,
+    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  homeHeaderNamePreviewText: {
+    fontSize: 26,
+    fontWeight: '600',
+    color: Colors.text,
+    textAlign: 'center',
+    lineHeight: 40,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  /** Cancels `homeHeaderNoLogoCard` horizontal padding so the font strip is full-bleed inside the card. */
+  homeHeaderGoogleFontsScrollBleed: {
+    marginHorizontal: -16,
+  },
+  homeHeaderGoogleFontsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+    paddingVertical: 2,
+    /** Physical left only — breathing room when scrolled to the end (RTL list). */
+    paddingLeft: 14,
+    paddingRight: 0,
+  },
+  homeHeaderGoogleFontPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    borderRadius: 14,
+    minWidth: 104,
+    maxWidth: 132,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  homeHeaderGoogleFontPillSample: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: Colors.text,
+    textAlign: 'center',
+    lineHeight: 28,
+    marginTop: -2,
+    includeFontPadding: false,
+  },
+  homeHeaderGoogleFontPillMeta: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.subtext,
+    textAlign: 'center',
+    lineHeight: 13,
+    marginBottom: -1,
   },
   homeHeroModeBlock: {
     paddingHorizontal: 16,
@@ -6101,9 +6385,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   homeLogoPreviewWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 14,
+    width: 112,
+    height: 112,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(60, 60, 67, 0.18)',
@@ -6112,8 +6396,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   homeLogoPreviewImage: {
-    width: '82%',
-    height: '82%',
+    width: '86%',
+    height: '86%',
   },
   addressSheetContainer: {
     position: 'absolute',

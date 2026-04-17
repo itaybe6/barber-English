@@ -32,7 +32,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
-import { homeHeaderTitleFontStyle, normalizeHomeHeaderTitleFontId } from '@/lib/homeHeaderTitleFont';
+import { homeHeaderTitleFontStyle } from '@/lib/homeHeaderTitleFont';
 import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -84,6 +84,8 @@ const CLIENT_HOME_LOGO_WIDTH = 138;
 const CLIENT_HOME_LOGO_HEIGHT = 52;
 /** Positive = more space below status bar / Dynamic Island (was −15, too tight). */
 const CLIENT_HOME_LOGO_TOP_OFFSET = 8;
+/** When showing text instead of logo — slightly higher than logo (name felt too low). */
+const CLIENT_HOME_NAME_ONLY_TOP_OFFSET = 2;
 
 const HERO_BG = '#FFFFFF';
 /** Top scrim over hero images — matches admin home primary fade (readability for status bar / header). */
@@ -364,10 +366,7 @@ export default function ClientHomeScreen() {
   }, [businessProfile?.home_logo_url]);
   const clientHomeHeaderShowLogo = businessProfile?.home_header_show_logo !== false;
   const clientHomeHeaderTitleFontStyle = useMemo(
-    () =>
-      homeHeaderTitleFontStyle(
-        normalizeHomeHeaderTitleFontId(businessProfile?.home_header_title_font),
-      ),
+    () => homeHeaderTitleFontStyle(businessProfile?.home_header_title_font),
     [businessProfile?.home_header_title_font],
   );
 
@@ -1390,7 +1389,15 @@ export default function ClientHomeScreen() {
 
       <RNAnimated.View
         pointerEvents="none"
-        style={[styles.overlayHeaderLogoOnly, { top: insets.top + CLIENT_HOME_LOGO_TOP_OFFSET }, { opacity: heroOverlayOpacity }]}
+        style={[
+          styles.overlayHeaderLogoOnly,
+          {
+            top:
+              insets.top +
+              (clientHomeHeaderShowLogo ? CLIENT_HOME_LOGO_TOP_OFFSET : CLIENT_HOME_NAME_ONLY_TOP_OFFSET),
+          },
+          { opacity: heroOverlayOpacity },
+        ]}
       >
         {businessProfile ? (
           clientHomeHeaderShowLogo ? (
@@ -1633,22 +1640,29 @@ const styles = StyleSheet.create<any>({
   /** When `home_header_show_logo` is false — matches admin `overlayNameInner` */
   clientHomeHeaderTitleNoLogoWrap: {
     maxWidth: Math.min(CLIENT_HOME_LOGO_WIDTH + 100, SCREEN_WIDTH - 40),
-    minHeight: CLIENT_HOME_LOGO_HEIGHT,
+    minHeight: Math.max(CLIENT_HOME_LOGO_HEIGHT, 76),
     paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   /** Matches admin `overlayBusinessName` when logo is hidden */
   clientHomeHeaderTitleNoLogo: {
     color: '#FFFFFF',
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: '800',
     textAlign: 'center',
-    lineHeight: 30,
+    /** Script/display fonts need extra line box — tight lineHeight clips ascenders */
+    lineHeight: 52,
+    paddingTop: 4,
+    paddingBottom: 2,
     letterSpacing: -0.5,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+    ...(Platform.OS === 'android' ? { includeFontPadding: true } : {}),
   },
   /** Full-width safe area so the sheet is not inset from screen edges (admin home is edge-to-edge white). */
   clientHomeSafeArea: {

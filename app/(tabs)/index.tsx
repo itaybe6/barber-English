@@ -49,8 +49,7 @@ import { supabase, type BusinessProfile } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import {
   homeHeaderTitleFontStyle,
-  normalizeHomeHeaderTitleFontId,
-  type HomeHeaderTitleFontId,
+  normalizeHomeHeaderTitleFontKey,
 } from '@/lib/homeHeaderTitleFont';
 import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Pencil } from 'lucide-react-native';
@@ -118,6 +117,8 @@ const HERO_OVERLAP = 214;
 const HERO_SHEET_PULL_UP = 64;
 /** Logo overlay — positive nudges logo down for space under status bar / Dynamic Island. */
 const ADMIN_HOME_LOGO_TOP_OFFSET = 8;
+/** Text-only header — sits a bit higher than the logo block. */
+const ADMIN_HOME_NAME_ONLY_TOP_OFFSET = 2;
 /** Hero header logo frame — compact so mark doesn’t dominate the hero. */
 const ADMIN_HOME_LOGO_HEIGHT = 52;
 const ADMIN_HOME_LOGO_WIDTH = 138;
@@ -221,7 +222,7 @@ export default function HomeScreen() {
   const homeLogoPrevUserIdRef = useRef<string | undefined>(undefined);
   const [homeHeaderShowLogo, setHomeHeaderShowLogo] = useState(true);
   const [homeHeaderDisplayName, setHomeHeaderDisplayName] = useState('');
-  const [homeHeaderTitleFontId, setHomeHeaderTitleFontId] = useState<HomeHeaderTitleFontId>('system');
+  const [homeHeaderTitleFontKey, setHomeHeaderTitleFontKey] = useState<string>('system');
 
   useEffect(() => {
     const id = user?.id;
@@ -242,7 +243,7 @@ export default function HomeScreen() {
       setHomeLogoUrl(/^https?:\/\//i.test(rawLogo) ? rawLogo : null);
       setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
       setHomeHeaderDisplayName(getHomeHeaderTitleWhenLogoHidden(p));
-      setHomeHeaderTitleFontId(normalizeHomeHeaderTitleFontId((p as any)?.home_header_title_font));
+      setHomeHeaderTitleFontKey(normalizeHomeHeaderTitleFontKey((p as any)?.home_header_title_font));
       setHomeHeroMode(normalizeHomeHeroMode((p as any)?.home_hero_mode));
       const su = String((p as any)?.home_hero_single_url ?? '').trim();
       setHomeHeroSingleUrl(/^https?:\/\//i.test(su) ? su : null);
@@ -267,7 +268,7 @@ export default function HomeScreen() {
           setHomeLogoUrl(null);
           setHomeHeaderShowLogo(true);
           setHomeHeaderDisplayName('');
-          setHomeHeaderTitleFontId('system');
+          setHomeHeaderTitleFontKey('system');
           setHomeHeroMode('marquee');
           setHomeHeroSingleUrl(null);
           setHomeHeroSingleKind('image');
@@ -293,7 +294,7 @@ export default function HomeScreen() {
       setHomeLogoUrl(null);
       setHomeHeaderShowLogo(true);
       setHomeHeaderDisplayName('');
-      setHomeHeaderTitleFontId('system');
+      setHomeHeaderTitleFontKey('system');
       setHomeHeroMode('marquee');
       setHomeHeroSingleUrl(null);
       setHomeHeroSingleKind('image');
@@ -301,8 +302,8 @@ export default function HomeScreen() {
   }, []);
 
   const adminHomeHeaderTitleFontStyle = useMemo(
-    () => homeHeaderTitleFontStyle(homeHeaderTitleFontId),
-    [homeHeaderTitleFontId],
+    () => homeHeaderTitleFontStyle(homeHeaderTitleFontKey),
+    [homeHeaderTitleFontKey],
   );
 
   useEffect(() => {
@@ -1831,7 +1832,13 @@ export default function HomeScreen() {
       {/* Logo overlay (white tint on primary band) */}
       <Animated.View
         pointerEvents="none"
-        style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }, heroOverlayFadeStyle]}
+        style={[
+          styles.overlayLogoWrapper,
+          {
+            top: insets.top + (homeHeaderShowLogo ? ADMIN_HOME_LOGO_TOP_OFFSET : ADMIN_HOME_NAME_ONLY_TOP_OFFSET),
+          },
+          heroOverlayFadeStyle,
+        ]}
       >
         {homeHeaderShowLogo ? (
           <View style={styles.overlayLogoInner}>
@@ -2822,21 +2829,27 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   overlayNameInner: {
     maxWidth: Math.min(ADMIN_HOME_LOGO_WIDTH + 100, SCREEN_WIDTH - 40),
-    minHeight: ADMIN_HOME_LOGO_HEIGHT,
+    minHeight: Math.max(ADMIN_HOME_LOGO_HEIGHT, 76),
     paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   overlayBusinessName: {
     color: '#FFFFFF',
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: '800',
     textAlign: 'center',
-    lineHeight: 30,
+    lineHeight: 52,
+    paddingTop: 4,
+    paddingBottom: 2,
     letterSpacing: -0.5,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+    ...(Platform.OS === 'android' ? { includeFontPadding: true } : {}),
   },
   fullScreenHeroContent: {
     position: 'absolute',

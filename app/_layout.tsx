@@ -1,4 +1,22 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { AlfaSlabOne_400Regular } from "@expo-google-fonts/alfa-slab-one";
+import { BebasNeue_400Regular } from "@expo-google-fonts/bebas-neue";
+import { Cinzel_700Bold } from "@expo-google-fonts/cinzel";
+import { DancingScript_600SemiBold } from "@expo-google-fonts/dancing-script";
+import { Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { Lato_700Bold } from "@expo-google-fonts/lato";
+import { Lobster_400Regular } from "@expo-google-fonts/lobster";
+import { Merriweather_700Bold } from "@expo-google-fonts/merriweather";
+import { Montserrat_600SemiBold } from "@expo-google-fonts/montserrat";
+import { Orbitron_700Bold } from "@expo-google-fonts/orbitron";
+import { Oswald_600SemiBold } from "@expo-google-fonts/oswald";
+import { Pacifico_400Regular } from "@expo-google-fonts/pacifico";
+import { PermanentMarker_400Regular } from "@expo-google-fonts/permanent-marker";
+import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
+import { Righteous_400Regular } from "@expo-google-fonts/righteous";
+import { Poppins_600SemiBold } from "@expo-google-fonts/poppins";
+import { Roboto_500Medium } from "@expo-google-fonts/roboto";
+import { SpaceMono_700Bold } from "@expo-google-fonts/space-mono";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -34,6 +52,25 @@ type SplashHideState = "idle" | "hiding" | "done";
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...FontAwesome.font,
+    /** Google Fonts — home header “English name” line (see `lib/homeHeaderTitleFont.ts`) */
+    Inter_600SemiBold,
+    Montserrat_600SemiBold,
+    PlayfairDisplay_700Bold,
+    Roboto_500Medium,
+    Merriweather_700Bold,
+    Oswald_600SemiBold,
+    Lato_700Bold,
+    Poppins_600SemiBold,
+    DancingScript_600SemiBold,
+    Pacifico_400Regular,
+    SpaceMono_700Bold,
+    BebasNeue_400Regular,
+    AlfaSlabOne_400Regular,
+    Lobster_400Regular,
+    Cinzel_700Bold,
+    Righteous_400Regular,
+    PermanentMarker_400Regular,
+    Orbitron_700Bold,
     'FbPragmati-Regular': require('../assets/fonts/FbPragmati-Regular.otf'),
     'FbPragmati-Bold': require('../assets/fonts/FbPragmati-Bold.otf'),
     'FbPragmati-Light': require('../assets/fonts/FbPragmati-Light.otf'),

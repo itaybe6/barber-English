@@ -4,6 +4,20 @@ import { useRouter } from 'expo-router';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 
+/** Normalize any common CSS-like color string to #RRGGBB for display. */
+function toDisplayHex(input: string): string {
+  let s = (input || '#000000').trim();
+  if (!s.startsWith('#')) s = `#${s}`;
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    const r = s[1];
+    const g = s[2];
+    const b = s[3];
+    s = `#${r}${r}${g}${g}${b}${b}`;
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toUpperCase();
+  return s.length >= 7 ? s.slice(0, 7).toUpperCase() : '#000000';
+}
+
 interface ColorPickerProps {
   currentColor?: string;
   /** טאב פעיל בהגדרות לשחזור אחרי מסך בחירת הצבע */
@@ -35,7 +49,12 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       <View style={styles.selectionRow}>
         <View style={styles.chosenGroup}>
           <View style={[styles.chosenSwatch, { backgroundColor: selectedColor }]} />
-          <Text style={styles.chosenLabel}>{t('color.chosenLabel', 'Chosen color')}</Text>
+          <View style={styles.chosenTextCol}>
+            <Text style={styles.chosenLabel}>{t('color.chosenLabel', 'Chosen color')}</Text>
+            <Text style={styles.chosenHex} selectable>
+              {toDisplayHex(selectedColor)}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           style={[styles.changeColorButton, { backgroundColor: colors.primary }]}
@@ -82,6 +101,10 @@ const styles = StyleSheet.create({
     gap: 10,
     flexShrink: 1,
   },
+  chosenTextCol: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
   chosenSwatch: {
     width: 32,
     height: 32,
@@ -93,6 +116,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     fontWeight: '600',
+  },
+  chosenHex: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#8E8E93',
+    letterSpacing: 0.4,
+    ...Platform.select({
+      ios: { fontVariant: ['tabular-nums'] as const },
+      default: {},
+    }),
   },
   changeColorButton: {
     paddingVertical: 7,

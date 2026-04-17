@@ -752,6 +752,8 @@
       "homeFixedMessageSaveFailed": "לא ניתן לשמור את הגדרת ההודעה",
       "homeFixedMessageTooLong": "ההודעה חייבת להיות עד {{max}} תווים",
       "homeFixedMessageTapToEdit": "הקש לעריכה",
+      "homeFixedMessageEditCta": "לחץ כאן כדי לערוך את ההודעה",
+      "homeFixedMessageModalTitle": "עריכת ההודעה ללקוחות",
       "homeFixedMessageNoMessageYet": "עדיין אין הודעה — הקש להוספה",
       "ownerOnlyEditHint": "רק בעל העסק (החשבון המקושר לטלפון העסק) יכול לשנות את ההגדרות האלה."
     },

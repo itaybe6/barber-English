@@ -123,6 +123,16 @@ export default function SettingsScreen() {
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
   const { colors: businessColors } = useBusinessColors();
   const { onPrimary, onPrimaryMuted, isLightPrimary, primaryOnSurface } = usePrimaryContrast();
+  /** Distinct on/off track colors — same color for both breaks Android Switch paint when value hydrates from the server. */
+  const settingsSwitchPalette = useMemo(
+    () => ({
+      trackOff: '#E5E5EA',
+      trackOn: businessColors.primary,
+      thumbOn: onPrimary,
+      thumbOffAndroid: '#f4f3f4' as const,
+    }),
+    [businessColors.primary, onPrimary],
+  );
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
@@ -305,7 +315,7 @@ export default function SettingsScreen() {
   const [homeFixedMessageEnabled, setHomeFixedMessageEnabled] = useState(false);
   const [homeFixedMessageText, setHomeFixedMessageText] = useState('');
   const [homeFixedInputFocused, setHomeFixedInputFocused] = useState(false);
-  /** When false, show a one-line summary; full editor opens on tap (collapsed after save / when message exists). */
+  /** Home fixed message: full editor lives in a modal; this flag controls modal visibility. */
   const [homeFixedMessageEditorOpen, setHomeFixedMessageEditorOpen] = useState(false);
   /** Extra ScrollView bottom inset so policies + home-message composer stay above keyboard & tab bar */
   const [settingsKeyboardInset, setSettingsKeyboardInset] = useState(0);
@@ -455,11 +465,7 @@ export default function SettingsScreen() {
         }
         setHomeFixedMessageEnabled(p.home_fixed_message_enabled === true);
         setHomeFixedMessageText(p.home_fixed_message ?? '');
-        {
-          const hm = String(p.home_fixed_message ?? '').trim();
-          const on = p.home_fixed_message_enabled === true;
-          setHomeFixedMessageEditorOpen(on && hm.length === 0);
-        }
+        setHomeFixedMessageEditorOpen(false);
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -875,10 +881,7 @@ export default function SettingsScreen() {
         setProfile(updated);
         setHomeFixedMessageEnabled(updated.home_fixed_message_enabled === true);
         setHomeFixedMessageText(updated.home_fixed_message ?? '');
-        {
-          const hm = String(updated.home_fixed_message ?? '').trim();
-          setHomeFixedMessageEditorOpen(hm.length === 0);
-        }
+        setHomeFixedMessageEditorOpen(false);
       } else {
         const updated = await businessProfileApi.updateHomeFixedMessage({ enabled: false });
         if (!updated) {
@@ -2541,15 +2544,15 @@ export default function SettingsScreen() {
                     value={requireClientApproval}
                     onValueChange={handleRequireClientApprovalToggle}
                     disabled={isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
                       requireClientApproval
-                        ? primaryOnSurface
+                        ? settingsSwitchPalette.thumbOn
                         : Platform.OS === 'android'
-                          ? '#f4f3f4'
+                          ? settingsSwitchPalette.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor="#E5E5EA"
+                    ios_backgroundColor={settingsSwitchPalette.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -2580,134 +2583,47 @@ export default function SettingsScreen() {
                       void handleHomeFixedMessageToggle(v);
                     }}
                     disabled={isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
                       homeFixedMessageEnabled
-                        ? primaryOnSurface
+                        ? settingsSwitchPalette.thumbOn
                         : Platform.OS === 'android'
-                          ? '#f4f3f4'
+                          ? settingsSwitchPalette.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor="#E5E5EA"
+                    ios_backgroundColor={settingsSwitchPalette.trackOff}
                   />
                 </View>
                 {homeFixedMessageEnabled ? (
-                  homeFixedMessageEditorOpen ? (
-                    <View style={styles.homeFixedMessageComposer}>
-                      <TextInput
-                        ref={homeFixedMessageInputRef}
-                        style={[
-                          styles.homeFixedMessageInput,
-                          {
-                            borderColor: homeFixedInputFocused
-                              ? `${businessColors.primary}66`
-                              : 'rgba(60,60,67,0.11)',
-                            textAlign: editAdminInputsRtl ? 'right' : 'left',
-                          },
-                        ]}
-                        value={homeFixedMessageText}
-                        onChangeText={setHomeFixedMessageText}
-                        placeholder={t('settings.policies.homeFixedMessagePlaceholder', 'Message for clients…')}
-                        placeholderTextColor={Colors.subtext}
-                        multiline
-                        maxLength={HOME_FIXED_MESSAGE_MAX_LEN}
-                        editable={!isSavingProfile}
-                        textAlignVertical="top"
-                        selectionColor={businessColors.primary}
-                        onFocus={() => {
-                          setHomeFixedInputFocused(true);
-                        }}
-                        onBlur={() => setHomeFixedInputFocused(false)}
-                      />
-                      <View
-                        style={[
-                          styles.homeFixedMessageComposerFooter,
-                          editAdminInputsRtl ? styles.homeFixedMessageComposerFooterRtl : null,
-                        ]}
-                      >
-                        <Text style={styles.homeFixedMessageCounter}>
-                          {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
-                        </Text>
-                      </View>
-                      <View style={styles.homeFixedMessageComposerActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.homeFixedMessageSaveButton,
-                            styles.homeFixedMessageSaveButtonInComposerRow,
-                            {
-                              backgroundColor: businessColors.primary,
-                              opacity: isSavingProfile ? 0.55 : 1,
-                            },
-                          ]}
-                          onPress={() => {
-                            void handleHomeFixedMessageSavePress();
-                          }}
-                          disabled={isSavingProfile}
-                          activeOpacity={0.88}
-                          accessibilityRole="button"
-                          accessibilityLabel={t('settings.policies.homeFixedMessageSave', 'Save message')}
-                        >
-                          <Text style={styles.homeFixedMessageSaveButtonText}>
-                            {isSavingProfile
-                              ? t('settings.common.saving', 'Saving...')
-                              : t('settings.policies.homeFixedMessageSave', 'Save message')}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.homeFixedMessageCancelButton}
-                          onPress={handleHomeFixedMessageEditorCancel}
-                          disabled={isSavingProfile}
-                          activeOpacity={0.88}
-                          accessibilityRole="button"
-                          accessibilityLabel={t('cancel', 'Cancel')}
-                        >
-                          <Text style={styles.homeFixedMessageCancelButtonText}>{t('cancel', 'Cancel')}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.homeFixedMessageSummaryCard,
-                        pressed ? { opacity: 0.88 } : null,
+                  <TouchableOpacity
+                    style={styles.homeFixedMessageEditCtaOuter}
+                    onPress={() => setHomeFixedMessageEditorOpen(true)}
+                    disabled={isSavingProfile}
+                    activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.policies.homeFixedMessageEditCta', 'Tap here to edit the message')}
+                  >
+                    <View
+                      style={[
+                        styles.homeFixedMessageEditCtaInner,
+                        {
+                          backgroundColor: businessColors.primary,
+                          borderColor: businessColors.primary,
+                        },
                       ]}
-                      onPress={() => {
-                        setHomeFixedMessageEditorOpen(true);
-                      }}
-                      disabled={isSavingProfile}
                     >
-                      <View style={styles.homeFixedMessageSummaryTextCol}>
-                        <Text
-                          style={[
-                            styles.homeFixedMessagePreviewText,
-                            editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
-                            homeFixedMessageText.trim().length === 0
-                              ? styles.homeFixedMessagePreviewEmpty
-                              : null,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {homeFixedMessageText.trim().length > 0
-                            ? homeFixedMessageText.trim()
-                            : t(
-                                'settings.policies.homeFixedMessageNoMessageYet',
-                                'No message yet — tap to add one',
-                              )}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.homeFixedMessageTapToEdit,
-                            editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
-                          ]}
-                        >
-                          {t('settings.policies.homeFixedMessageTapToEdit', 'Tap to edit')}
-                        </Text>
-                      </View>
-                      <View style={styles.homeFixedMessageSummaryIconWrap}>
-                        <Pencil size={18} color={primaryOnSurface} strokeWidth={2} />
-                      </View>
-                    </Pressable>
-                  )
+                      <Pencil size={14} color={onPrimary} strokeWidth={2} />
+                      <Text
+                        style={[
+                          styles.homeFixedMessageEditCtaText,
+                          { color: onPrimary },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t('settings.policies.homeFixedMessageEditCta', 'Tap here to edit the message')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 ) : null}
                 </>
                 ) : null}
@@ -2877,15 +2793,15 @@ export default function SettingsScreen() {
                       void handleCancellationSwitchToggle(v);
                     }}
                     disabled={isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
                       cancellationLimitActive
-                        ? primaryOnSurface
+                        ? settingsSwitchPalette.thumbOn
                         : Platform.OS === 'android'
-                          ? '#f4f3f4'
+                          ? settingsSwitchPalette.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor="#E5E5EA"
+                    ios_backgroundColor={settingsSwitchPalette.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -2930,15 +2846,15 @@ export default function SettingsScreen() {
                   void handleAdminReminderSwitch(v);
                 }}
                 disabled={!user?.id || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                 thumbColor={
                   adminSelfReminderOn
-                    ? primaryOnSurface
+                    ? settingsSwitchPalette.thumbOn
                     : Platform.OS === 'android'
-                      ? '#f4f3f4'
+                      ? settingsSwitchPalette.thumbOffAndroid
                       : undefined
                 }
-                ios_backgroundColor="#E5E5EA"
+                ios_backgroundColor={settingsSwitchPalette.trackOff}
               />
             </View>
             {canSeeAddEmployee ? (
@@ -2966,15 +2882,15 @@ export default function SettingsScreen() {
                     value={clientSwapEnabled}
                     onValueChange={handleClientSwapToggle}
                     disabled={isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
                       clientSwapEnabled
-                        ? primaryOnSurface
+                        ? settingsSwitchPalette.thumbOn
                         : Platform.OS === 'android'
-                          ? '#f4f3f4'
+                          ? settingsSwitchPalette.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor="#E5E5EA"
+                    ios_backgroundColor={settingsSwitchPalette.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -3006,15 +2922,15 @@ export default function SettingsScreen() {
                     value={allowMultiServiceBooking}
                     onValueChange={handleAllowMultiServiceBookingToggle}
                     disabled={isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
                       allowMultiServiceBooking
-                        ? primaryOnSurface
+                        ? settingsSwitchPalette.thumbOn
                         : Platform.OS === 'android'
-                          ? '#f4f3f4'
+                          ? settingsSwitchPalette.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor="#E5E5EA"
+                    ios_backgroundColor={settingsSwitchPalette.trackOff}
                   />
                 </View>
               </>
@@ -3981,6 +3897,112 @@ export default function SettingsScreen() {
           </View>
         </View>
       </View>
+
+      {/* Home fixed message — edit modal; centered, rises above keyboard on focus */}
+      <Modal
+        visible={homeFixedMessageEditorOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={handleHomeFixedMessageEditorCancel}
+      >
+        <KeyboardAvoidingView
+          style={styles.homeFixedMessageModalRoot}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <Pressable
+            style={styles.homeFixedMessageModalOverlay}
+            onPress={isSavingProfile ? undefined : handleHomeFixedMessageEditorCancel}
+          >
+          <Pressable
+            style={[
+              styles.homeFixedMessageModalCard,
+              { direction: 'ltr' },
+            ]}
+            onPress={() => {}}
+          >
+            <Text
+              style={[
+                styles.homeFixedMessageModalTitle,
+                editAdminInputsRtl ? styles.homeFixedMessageModalTitleRtl : styles.homeFixedMessageModalTitleLtr,
+              ]}
+            >
+              {t('settings.policies.homeFixedMessageModalTitle', 'Edit home message')}
+            </Text>
+            <TextInput
+              ref={homeFixedMessageInputRef}
+              style={[
+                styles.homeFixedMessageInput,
+                styles.homeFixedMessageModalInput,
+                {
+                  borderColor: homeFixedInputFocused
+                    ? `${businessColors.primary}66`
+                    : 'rgba(60,60,67,0.11)',
+                  textAlign: editAdminInputsRtl ? 'right' : 'left',
+                },
+              ]}
+              value={homeFixedMessageText}
+              onChangeText={setHomeFixedMessageText}
+              placeholder={t('settings.policies.homeFixedMessagePlaceholder', 'Message for clients…')}
+              placeholderTextColor={Colors.subtext}
+              multiline
+              maxLength={HOME_FIXED_MESSAGE_MAX_LEN}
+              editable={!isSavingProfile}
+              textAlignVertical="top"
+              selectionColor={businessColors.primary}
+              onFocus={() => setHomeFixedInputFocused(true)}
+              onBlur={() => setHomeFixedInputFocused(false)}
+            />
+            <View
+              style={[
+                styles.homeFixedMessageComposerFooter,
+                editAdminInputsRtl ? styles.homeFixedMessageComposerFooterRtl : null,
+              ]}
+            >
+              <Text style={styles.homeFixedMessageCounter}>
+                {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
+              </Text>
+            </View>
+            <View style={styles.homeFixedMessageComposerActions}>
+              <TouchableOpacity
+                style={[
+                  styles.homeFixedMessageSaveButton,
+                  styles.homeFixedMessageSaveButtonInComposerRow,
+                  {
+                    backgroundColor: businessColors.primary,
+                    opacity: isSavingProfile ? 0.55 : 1,
+                  },
+                ]}
+                onPress={() => {
+                  void handleHomeFixedMessageSavePress();
+                }}
+                disabled={isSavingProfile}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.policies.homeFixedMessageSave', 'Save message')}
+              >
+                <Text style={styles.homeFixedMessageSaveButtonText}>
+                  {isSavingProfile
+                    ? t('settings.common.saving', 'Saving...')
+                    : t('settings.policies.homeFixedMessageSave', 'Save message')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.homeFixedMessageCancelButton}
+                onPress={handleHomeFixedMessageEditorCancel}
+                disabled={isSavingProfile}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <Text style={styles.homeFixedMessageCancelButtonText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+        </Modal>
 
       {/* Logout Confirmation Modal */}
       <Modal
@@ -5666,65 +5688,6 @@ const styles = StyleSheet.create({
   settingsAppointmentsScrollContent: {
     flexGrow: 1,
   },
-  homeFixedMessageComposer: {
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 6,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.08)',
-  },
-  /** direction: 'ltr' fixes physical row order [text | pencil] so RTL text can align right (see finance.tsx rtlRoot / rtlText). */
-  homeFixedMessageSummaryCard: {
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 6,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.08)',
-    direction: 'ltr',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  homeFixedMessageSummaryTextCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  homeFixedMessageSummaryTextRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    alignSelf: 'stretch',
-  },
-  homeFixedMessagePreviewText: {
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '500',
-    color: Colors.text,
-  },
-  homeFixedMessagePreviewEmpty: {
-    fontWeight: '400',
-    color: Colors.subtext,
-    fontStyle: 'italic',
-  },
-  homeFixedMessageTapToEdit: {
-    marginTop: 6,
-    fontSize: 13,
-    color: Colors.subtext,
-  },
-  homeFixedMessageSummaryIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   homeFixedMessageInput: {
     minHeight: 120,
     paddingHorizontal: 14,
@@ -5805,6 +5768,78 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.white,
+  },
+  homeFixedMessageEditCtaOuter: {
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  homeFixedMessageEditCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  homeFixedMessageEditCtaText: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  homeFixedMessageModalRoot: {
+    flex: 1,
+  },
+  homeFixedMessageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  homeFixedMessageModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '88%',
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.16,
+        shadowRadius: 22,
+      },
+      android: { elevation: 12 },
+    }),
+  },
+  homeFixedMessageModalTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.35,
+    marginBottom: 14,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  homeFixedMessageModalTitleRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  homeFixedMessageModalTitleLtr: {
+    textAlign: 'left',
+  },
+  homeFixedMessageModalInput: {
+    minHeight: 110,
+    marginTop: 0,
   },
   /** Profile header in layout flow (full-width gradient + lava) */
   adminProfileHeaderRoot: {

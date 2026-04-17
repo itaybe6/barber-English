@@ -729,6 +729,8 @@
       "homeFixedMessageSaveFailed": "Could not save the home message setting",
       "homeFixedMessageTooLong": "Message must be at most {{max}} characters",
       "homeFixedMessageTapToEdit": "Tap to edit",
+      "homeFixedMessageEditCta": "Tap here to edit the message",
+      "homeFixedMessageModalTitle": "Edit home message",
       "homeFixedMessageNoMessageYet": "No message yet — tap to add one",
       "ownerOnlyEditHint": "Only the business owner (account linked to the business phone) can change these policies."
     },

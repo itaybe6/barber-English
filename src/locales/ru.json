@@ -842,6 +842,8 @@
       "homeFixedMessageSaveFailed": "Не удалось сохранить настройку сообщения",
       "homeFixedMessageTooLong": "Сообщение не должно превышать {{max}} символов",
       "homeFixedMessageTapToEdit": "Нажмите, чтобы изменить",
+      "homeFixedMessageEditCta": "Нажмите здесь, чтобы изменить сообщение",
+      "homeFixedMessageModalTitle": "Редактирование сообщения для клиентов",
       "homeFixedMessageNoMessageYet": "Сообщения пока нет — нажмите, чтобы добавить",
       "ownerOnlyEditHint": "Только владелец компании (аккаунт, связанный с служебным телефоном) может изменить эти правила."
     },

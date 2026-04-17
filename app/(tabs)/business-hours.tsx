@@ -31,6 +31,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
+import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 
 // Modern Apple-like Colors
@@ -249,7 +250,19 @@ export default function BusinessHoursScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
+  const { onPrimary } = usePrimaryContrast();
   const primary = businessColors.primary;
+
+  /** Solid on-track + contrasting thumb — translucent track + thumb both “primary” can fail to repaint on Android after async load. */
+  const hoursSwitchPalette = useMemo(
+    () => ({
+      trackOff: Colors.border,
+      trackOn: businessColors.primary,
+      thumbOn: onPrimary,
+      thumbOff: Colors.card,
+    }),
+    [businessColors.primary, onPrimary],
+  );
 
   const hoursPageBg = Colors.background;
   const hoursOnGrayFg = readableOnHex(hoursPageBg);
@@ -555,9 +568,9 @@ export default function BusinessHoursScreen() {
             <Switch
               value={isActive}
               onValueChange={(value) => handleDayToggle(dayOfWeek, value)}
-              trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
-              thumbColor={isActive ? businessColors.primary : Colors.card}
-              ios_backgroundColor={Colors.border}
+              trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
+              thumbColor={isActive ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
+              ios_backgroundColor={hoursSwitchPalette.trackOff}
               style={styles.switch}
             />
           </Animated.View>
@@ -576,9 +589,9 @@ export default function BusinessHoursScreen() {
                 <Switch
                   value={useBreaks}
                   onValueChange={setUseBreaks}
-                  trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
-                  thumbColor={useBreaks ? businessColors.primary : Colors.card}
-                  ios_backgroundColor={Colors.border}
+                  trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
+                  thumbColor={useBreaks ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
+                  ios_backgroundColor={hoursSwitchPalette.trackOff}
                 />
               </View>
               <View style={styles.timeRow}>

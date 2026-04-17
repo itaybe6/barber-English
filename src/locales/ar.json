@@ -842,6 +842,8 @@
       "homeFixedMessageSaveFailed": "تعذر حفظ إعداد الرسالة",
       "homeFixedMessageTooLong": "يجب ألا تتجاوز الرسالة {{max}} حرفًا",
       "homeFixedMessageTapToEdit": "اضغط للتعديل",
+      "homeFixedMessageEditCta": "اضغط هنا لتعديل الرسالة",
+      "homeFixedMessageModalTitle": "تعديل الرسالة للعملاء",
       "homeFixedMessageNoMessageYet": "لا توجد رسالة بعد — اضغط للإضافة",
       "ownerOnlyEditHint": "يمكن فقط لمالك النشاط التجاري (الحساب المرتبط بهاتف العمل) تغيير هذه السياسات."
     },

@@ -63,6 +63,8 @@ import { swapRequestsApi } from '@/lib/api/swapRequests';
 import type { SwapRequest } from '@/lib/supabase';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { toBcp47Locale } from '@/lib/i18nLocale';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
+import { servicesApi } from '@/lib/api/services';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -175,10 +177,11 @@ const clientHomeApi = {
       
       let query = supabase
         .from('appointments')
-        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id, duration_minutes')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, service_id, barber_id, status, business_id, user_id, duration_minutes')
         .eq('business_id', businessId)
         .in('slot_date', dates)
         .eq('is_available', false)
+        .neq('status', 'cancelled')
         .order('slot_date')
         .order('slot_time');
 
@@ -204,7 +207,7 @@ const clientHomeApi = {
         filteredData = filteredData.filter(slot => String(slot.client_name || '').trim().toLowerCase() === userName.trim().toLowerCase());
       }
 
-      return filteredData;
+      return filteredData as unknown as AvailableTimeSlot[];
     } catch (error) {
       console.error('Error in getUserAppointmentsForMultipleDates:', error);
       throw error;
@@ -537,23 +540,71 @@ export default function ClientHomeScreen() {
     const dates: string[] = [];
     
     // Fetch appointments for the next N days — max horizon across barbers (per-employee windows)
-    const horizonDays = await businessProfileApi.getMaxBookingOpenDaysAcrossBusiness();
+    let horizonDays = 14;
+    try {
+      horizonDays = await businessProfileApi.getMaxBookingOpenDaysAcrossBusiness();
+    } catch {
+      // keep default
+    }
     for (let i = 0; i <= horizonDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
-      const dateString = date.toISOString().split('T')[0];
-      dates.push(dateString);
+      dates.push(formatDateToYMDLocal(date));
     }
     
     try {
-      const userAppointments = await clientHomeApi.getUserAppointmentsForMultipleDates(
+      const rawAppointments = await clientHomeApi.getUserAppointmentsForMultipleDates(
         dates, 
         user?.name, 
         user?.phone
       );
+
+      const businessId = getBusinessId();
+      const scopedByBusiness = rawAppointments.filter(
+        (slot) => String(slot.business_id) === String(businessId)
+      );
+
+      // Match `appointments.tsx` verifiedUserAppointments: exact name OR phone (API may use broader name match).
+      const identityFiltered = scopedByBusiness.filter((slot) => {
+        const nameMatch =
+          slot.client_name &&
+          user?.name &&
+          String(slot.client_name).trim().toLowerCase() === user.name.trim().toLowerCase();
+        const phoneMatch =
+          slot.client_phone &&
+          user?.phone &&
+          String(slot.client_phone).trim() === user.phone.trim();
+        return Boolean(nameMatch || phoneMatch);
+      });
+
+      let serviceIdList: string[] = [];
+      let serviceNameList: string[] = [];
+      try {
+        const services = await servicesApi.getAllServices();
+        serviceIdList = (services || []).map((s: { id: string }) => String(s.id));
+        serviceNameList = (services || []).map((s: { name?: string | null }) =>
+          String((s.name || '').trim().toLowerCase())
+        );
+      } catch {
+        // If services fail to load, keep lists empty — same as appointments (no extra hiding).
+      }
+
+      const userAppointments = identityFiltered.filter((slot) => {
+        const snameRaw = String(slot.service_name || '').trim().toLowerCase();
+        if (snameRaw === 'available slot') return false;
+        if (serviceIdList.length === 0 && serviceNameList.length === 0) return true;
+        const sid = (slot as { service_id?: string }).service_id
+          ? String((slot as { service_id?: string }).service_id)
+          : '';
+        const sname = slot.service_name ? String(slot.service_name).trim().toLowerCase() : '';
+        const byId = sid ? serviceIdList.includes(sid) : false;
+        const byName = sname ? serviceNameList.includes(sname) : false;
+        return byId || byName;
+      });
       
       const upcomingAppointments = userAppointments
         .filter((apt: AvailableTimeSlot) => {
+          if (apt.status === 'cancelled') return false;
           const timeString = apt.slot_time ? String(apt.slot_time) : '00:00';
           const [hh = '00', mm = '00'] = timeString.split(':');
           const appointmentDateTime = new Date(`${apt.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);

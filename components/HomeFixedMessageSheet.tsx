@@ -29,6 +29,7 @@ import { useColors } from '@/src/theme/ThemeProvider';
 const { height: SCREEN_H } = Dimensions.get('window');
 const COPY_MAX_WIDTH = 340;
 
+
 const OPEN_SPRING = { damping: 22, stiffness: 280, mass: 0.9 };
 const CLOSE_DURATION = 260;
 
@@ -253,17 +254,22 @@ export default function HomeFixedMessageSheet({
                 </View>
 
                 <View style={styles.bodyBlock}>
-                  <Text
-                    style={[
-                      styles.body,
-                      {
-                        color: colors.text,
-                        writingDirection: isRTL ? 'rtl' : 'ltr',
-                      },
-                    ]}
-                  >
-                    {message}
-                  </Text>
+                  {message.split('\n').map((line, idx) => (
+                    <Text
+                      key={idx}
+                      style={[
+                        styles.body,
+                        {
+                          color: colors.text,
+                          textAlign: 'center',
+                        },
+                      ]}
+                    >
+                      {isRTL
+                        ? '\u200E' + line  // LTR base: neutral chars (emojis) stay left; Hebrew RTL run goes right
+                        : line}
+                    </Text>
+                  ))}
                 </View>
               </View>
             </ScrollView>
@@ -372,9 +378,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: COPY_MAX_WIDTH,
     fontSize: 17,
-    lineHeight: 25,
+    lineHeight: 26,
     fontWeight: '500',
     letterSpacing: -0.12,
-    textAlign: 'center',
   },
 });

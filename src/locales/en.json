@@ -1511,14 +1511,18 @@
       "whatToBlock": "What do you want to block?",
       "modeHint": {
         "hours": "Block a time window on one day",
-        "singleDay": "Closed all day — pick one date",
-        "multiDays": "Pick start and end — every day in between is closed"
+        "singleDay": "Closed all day\nSingle date",
+        "multiDays": "Pick start and end dates\nAll days between are closed"
       },
       "tapToEditHours": "Tap to set hours",
       "rangeHelp": "First tap: start date. Second tap: end date.",
       "reasonHelper": "For your reference only — helps you remember why this block exists.",
       "openConstraintsManager": "Manage constraints",
-      "emptyListHint": "Saved blocks appear here so you can remove them anytime."
+      "emptyListHint": "Saved blocks appear here so you can remove them anytime.",
+      "deleteConstraintTitle": "Delete this block?",
+      "deleteConstraintMessage": "It will be removed from the calendar. This cannot be undone.",
+      "deleteConstraintConfirm": "Delete",
+      "deleteConstraintFailed": "Could not delete. Please try again."
     },
     "hours": {
       "title": "Working hours",

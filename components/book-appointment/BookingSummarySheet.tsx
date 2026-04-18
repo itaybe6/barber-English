@@ -123,6 +123,11 @@ const summaryDividerStyles = StyleSheet.create({
 export interface BookingSuccessData {
   serviceName: string;
   barberName?: string;
+  /**
+   * Label for the row that shows `barberName` in the success card (defaults to staff/barber copy).
+   * Pass the client label when an admin books for a customer so it reads “Client”, not “Barber”.
+   */
+  personRowLabel?: string;
   /** Formatted date label, e.g. "יום שני · 21.4.26" */
   dateLabel: string;
   /** Formatted time label, e.g. "14:00 – 15:15" */
@@ -636,7 +641,8 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
                       <View style={styles.successMetaCardDivider} />
                       <View style={styles.successMetaRow}>
                         <Text style={styles.successMetaLabel}>
-                          {t('booking.field.barber', '\u05E1\u05E4\u05E8')}
+                          {successData.personRowLabel ??
+                            t('booking.field.barber', '\u05E1\u05E4\u05E8')}
                         </Text>
                         <Text style={styles.successMetaValue} numberOfLines={1}>
                           {successData.barberName}

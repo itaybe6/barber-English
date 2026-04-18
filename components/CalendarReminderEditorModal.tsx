@@ -592,17 +592,17 @@ export default function CalendarReminderEditorModal({
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          {/* Title + notes (single card) */}
+          {/* Title + notes (single card, delicate labels + placeholders) */}
           <View style={styles.card}>
-            <CardSectionHeader
-              icon="create-outline"
-              primary={primary}
-              label={tHe('admin.calendarReminder.fieldTitle', 'כותרת')}
-            />
+            <View style={styles.fieldLabelRowRtl}>
+              <Text style={styles.fieldLabelDelicate}>
+                {tHe('admin.calendarReminder.fieldTitle', 'כותרת')}
+              </Text>
+            </View>
             <TextInput
               value={title}
               onChangeText={setTitle}
-              placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'למשל: טכנאי מגיע')}
+              placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'כתבו כאן את הכותרת')}
               placeholderTextColor={UI.textTertiary}
               style={[
                 styles.textField,
@@ -611,18 +611,24 @@ export default function CalendarReminderEditorModal({
               ]}
             />
 
-            <View style={styles.fieldDivider} />
+            <View style={styles.fieldDividerSpaced} />
 
-            <View style={styles.subSectionHead}>
-              <View style={[styles.subSectionAccent, { backgroundColor: primary }]} />
-              <Text style={styles.subSectionTitle}>
-                {tHe('admin.calendarReminder.fieldNotes', 'הערות (אופציונלי)')}
+            <View style={styles.fieldLabelRowRtl}>
+              <Text style={styles.fieldLabelDelicate}>
+                {tHe('admin.calendarReminder.fieldDetailsLabel', 'פרטים נוספים')}
+                <Text style={styles.fieldLabelOptional}>
+                  {' '}
+                  {tHe('admin.calendarReminder.fieldOptionalHint', '(אופציונלי)')}
+                </Text>
               </Text>
             </View>
             <TextInput
               value={notes}
               onChangeText={setNotes}
-              placeholder={tHe('admin.calendarReminder.notesPlaceholder', 'פרטים נוספים…')}
+              placeholder={tHe(
+                'admin.calendarReminder.notesPlaceholder',
+                'כתבו כאן פרטים נוספים (אופציונלי)',
+              )}
               placeholderTextColor={UI.textTertiary}
               style={[
                 styles.textField,
@@ -935,31 +941,38 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
-  fieldDivider: {
+  /** Breathing room between titled field groups inside one card */
+  fieldDividerSpaced: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: UI.border,
-    marginTop: 4,
-    marginBottom: 2,
-    opacity: 0.85,
+    marginTop: 14,
+    marginBottom: 12,
+    opacity: 0.75,
+    alignSelf: 'stretch',
   },
-  subSectionHead: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    marginBottom: 8,
+  /** RTL row so short labels sit on the visual right, aligned with field placeholders */
+  fieldLabelRowRtl: {
+    alignSelf: 'stretch',
+    width: '100%',
+    direction: 'rtl',
   },
-  subSectionAccent: {
-    width: 3,
-    height: 16,
-    borderRadius: 2,
-  },
-  subSectionTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
+  fieldLabelDelicate: {
+    alignSelf: 'stretch',
+    width: '100%',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
     color: UI.textSecondary,
     textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 5,
+    opacity: 0.95,
+  },
+  fieldLabelOptional: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+    color: UI.textTertiary,
   },
 
   // ── calendar ──────────────────────────────────────────────────────────────

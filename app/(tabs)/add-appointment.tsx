@@ -12,11 +12,9 @@ import {
   DeviceEventEmitter,
   I18nManager,
   Modal,
-  Alert,
   BackHandler,
   useWindowDimensions,
 } from 'react-native';
-import * as Calendar from 'expo-calendar';
 import BookingSummarySheet, { type BookingSummarySheetHandle, type BookingSuccessData } from '@/components/book-appointment/BookingSummarySheet';
 import type { BookingProgressChipModel } from '@/components/book-appointment/BookingProgressChipsStrip';
 import { toBcp47Locale } from '@/lib/i18nLocale';
@@ -196,23 +194,6 @@ function adminGetPeriod(timeStr: string): AdminTimePeriod {
   return 'evening';
 }
 
-/** Max height for admin time list: screen minus floating FAB, step intro, glass insets, and floating footer + gap. */
-function computeAdminTimeSlotsMaxHeight(windowHeight: number, topInset: number, bottomInset: number): number {
-  // Scroll paddingTop reserves space for the floating FAB + safe area
-  const scrollPaddingTop = topInset + 64;
-  const stepIntroApprox = 6 + 16 + 44 + 10 + 22 * 3 + 8;
-  const glassTop = 18;
-  const topReserve = scrollPaddingTop + stepIntroApprox + glassTop;
-
-  const footerBottom = Math.max(bottomInset, 12) + 8;
-  const footerPill = 54;
-  const gapAboveFooter = 22;
-  const glassBottom = 18;
-  const bottomReserve = footerBottom + footerPill + gapAboveFooter + glassBottom;
-
-  return Math.max(200, Math.round(windowHeight - topReserve - bottomReserve));
-}
-
 const adminBookingGridStyles = StyleSheet.create({
   grid: { gap: 9 },
   row: { flexDirection: 'row', gap: 9 },
@@ -249,8 +230,8 @@ const adminBookingGridStyles = StyleSheet.create({
     color: '#1C1C1E',
   },
   cellTimeSelected: { color: '#FFFFFF', fontWeight: '800' },
-  timeSlotsScroll: { alignSelf: 'stretch' },
-  timeSlotsScrollInner: { gap: 16, paddingBottom: 14 },
+  /** Time grid sits in the outer wizard scroll (same as client `TimeSelection`) — no nested maxHeight ScrollView. */
+  timeSlotsList: { alignSelf: 'stretch', gap: 16, paddingBottom: 6 },
   timeSection: { gap: 10 },
   /** `direction: 'ltr'` + [line][label][emoji] keeps period title flush to the card’s visual end (right in Hebrew RTL). */
   sectionLabelRow: {
@@ -282,10 +263,11 @@ export default function AddAppointmentScreen() {
 
   const summarySheetRef = useRef<BookingSummarySheetHandle>(null);
   const [adminSuccessData, setAdminSuccessData] = useState<BookingSuccessData | null>(null);
-  const [successSnapshot, setSuccessSnapshot] = useState<AdminBookingSaveSuccessPayload | null>(null);
   const [wizardStep, setWizardStep] = useState(1);
   const [clientWizardPhase, setClientWizardPhase] = useState<AdminClientWizardPhase>('chooseMode');
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState(0);
+
+  const { t, i18n } = useTranslation();
 
   const onSaveSuccess = useCallback((payload: AdminBookingSaveSuccessPayload) => {
     const { client, service, services, date, time } = payload;
@@ -311,15 +293,15 @@ export default function AddAppointmentScreen() {
     const endTime = fromMin(toMin(time) + durationM);
     const timeLabel = `${time} – ${endTime}`;
 
-    setSuccessSnapshot(payload);
     setAdminSuccessData({
       serviceName: namesJoined,
       barberName: client.name,
+      personRowLabel: t('admin.client', 'לקוח'),
       dateLabel,
       timeLabel,
     });
     summarySheetRef.current?.expand();
-  }, [i18n?.language]);
+  }, [t, i18n?.language]);
 
   const form = useAdminAddAppointmentForm({
     initialDateKey,
@@ -348,7 +330,6 @@ export default function AddAppointmentScreen() {
       setWizardStep(1);
       summarySheetRef.current?.collapse();
       setAdminSuccessData(null);
-      setSuccessSnapshot(null);
       setClientWizardPhase('chooseMode');
       setNewClientNameFocused(false);
       setNewClientPhoneFocused(false);
@@ -385,7 +366,6 @@ export default function AddAppointmentScreen() {
   );
 
   const { colors: businessColors } = useBusinessColors();
-  const { t, i18n } = useTranslation();
   const layoutRtl = I18nManager.isRTL;
   const isHeCopy = i18n.language?.startsWith('he') ?? true;
   /** True when the UI should behave RTL — either system RTL or Hebrew language. */
@@ -553,11 +533,6 @@ export default function AddAppointmentScreen() {
           }
         : {},
     [useLightFg],
-  );
-
-  const adminTimeSlotsMaxHeight = useMemo(
-    () => computeAdminTimeSlotsMaxHeight(windowHeight, insets.top, insets.bottom),
-    [windowHeight, insets.top, insets.bottom],
   );
 
   const adminTimeSections = useMemo(() => {
@@ -866,11 +841,16 @@ export default function AddAppointmentScreen() {
   );
 
   const sheetVisible = adminBookingChips.length > 0;
-  const scrollBottomPad = Math.max(insets.bottom, 20) + 88 + (sheetVisible ? SHEET_PEEK_H : 0);
+  const scrollBottomPad = useMemo(() => {
+    if (wizardStep === 4 && sheetVisible) {
+      // Single outer scroll for step 4: pad so the last time row can scroll above the summary sheet.
+      return Math.max(insets.bottom, 12) + SHEET_PEEK_H + 12;
+    }
+    return Math.max(insets.bottom, 20) + 88 + (sheetVisible ? SHEET_PEEK_H : 0);
+  }, [insets.bottom, wizardStep, sheetVisible]);
   const scrollPaddingTop = Math.max(insets.top, 8) + 64;
   /** Min height so short steps (client type, services, date) sit visually centered like client booking. */
   const adminWizardContentMinHeight = Math.max(320, windowHeight - scrollPaddingTop - scrollBottomPad);
-
   const adminNewClientFieldsMaxWidth = useMemo(
     () => Math.min(340, Math.max(260, windowWidth - 72)),
     [windowWidth],
@@ -1058,14 +1038,21 @@ export default function AddAppointmentScreen() {
           {
             paddingBottom: scrollBottomPad,
             paddingTop: scrollPaddingTop,
-            flexGrow: 1,
+            // Step 4: short day — avoid stretching content taller than the sheet peek (orange “air”).
+            flexGrow: wizardStep === 4 && sheetVisible ? 0 : 1,
           },
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.adminWizardScrollInner, { minHeight: adminWizardContentMinHeight }]}>
+        <View
+          style={[
+            styles.adminWizardScrollInner,
+            wizardStep === 4 && styles.adminWizardScrollInnerAlignStart,
+            wizardStep !== 4 ? { minHeight: adminWizardContentMinHeight } : null,
+          ]}
+        >
         {showWizardStepIntro && !bundleClientSelected ? (
         <View
           style={[
@@ -1569,12 +1556,9 @@ export default function AddAppointmentScreen() {
                   <ActivityIndicator color={iconOnGlass} />
                   <Text
                     style={[
-                      styles.emptyTxt,
-                      styles.hintBlock,
+                      styles.timesLoadingLabel,
                       {
                         color: innerMuted,
-                        marginTop: 8,
-                        textAlign: textAlignPrimary,
                         writingDirection: writingDir,
                       },
                     ]}
@@ -1593,13 +1577,7 @@ export default function AddAppointmentScreen() {
                   {t('selectTime.noTimes', 'No available times for this day')}
                 </Text>
               ) : (
-                <ScrollView
-                  nestedScrollEnabled
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  style={[adminBookingGridStyles.timeSlotsScroll, { maxHeight: adminTimeSlotsMaxHeight }]}
-                  contentContainerStyle={adminBookingGridStyles.timeSlotsScrollInner}
-                >
+                <View style={adminBookingGridStyles.timeSlotsList}>
                   {adminTimeSections.map(({ period, slots, sectionDelay }) => {
                     const rows: string[][] = [];
                     for (let i = 0; i < slots.length; i += 3) rows.push(slots.slice(i, i + 3));
@@ -1693,7 +1671,7 @@ export default function AddAppointmentScreen() {
                       </Animated.View>
                     );
                   })}
-                </ScrollView>
+                </View>
               )
             ) : null}
           </View>
@@ -1785,63 +1763,8 @@ export default function AddAppointmentScreen() {
         successData={adminSuccessData ?? undefined}
         onSuccessDismiss={() => {
           setAdminSuccessData(null);
-          setSuccessSnapshot(null);
           onBookedSuccess();
         }}
-        onAddToCalendar={async () => {
-          if (!successSnapshot) return;
-          try {
-            const { date, time, service, services, client } = successSnapshot;
-            const allSvcs = services?.length ? services : [service];
-            const duration = totalServicesDurationMinutes(allSvcs);
-            const dateStr = formatDateToLocalString(date);
-            const timeStr = time || '00:00';
-            const start = new Date(`${dateStr}T${timeStr}:00`);
-            const end = new Date(start.getTime() + duration * 60000);
-            const calendarTitleNames = allSvcs.map((s) => s.name).join(' + ');
-
-            const perm = await Calendar.requestCalendarPermissionsAsync();
-            if (perm.status !== 'granted') {
-              Alert.alert(
-                t('booking.permissionsRequired', 'נדרש אישור'),
-                t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.')
-              );
-              return;
-            }
-
-            let calendarId: string | undefined;
-            if (Platform.OS === 'ios') {
-              const defCal = await Calendar.getDefaultCalendarAsync();
-              calendarId = defCal?.id;
-            } else {
-              const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-              calendarId =
-                cals.find(
-                  (c) => c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER
-                )?.id || cals[0]?.id;
-            }
-
-            if (!calendarId) {
-              Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
-              return;
-            }
-
-            await Calendar.createEventAsync(calendarId, {
-              title: `${calendarTitleNames} · ${client.name}`,
-              startDate: start,
-              endDate: end,
-              notes: t('booking.calendarNotes', 'Booked via the app'),
-            });
-
-            Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
-          } catch {
-            Alert.alert(
-              t('error.generic', 'שגיאה'),
-              t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.')
-            );
-          }
-        }}
-        addToCalendarLabel={t('booking.addToCalendar', 'הוסף ליומן')}
         gotItLabel={t('booking.gotIt', 'הבנתי')}
       />
     </View>
@@ -1939,6 +1862,10 @@ const styles = StyleSheet.create({
   adminWizardScrollInner: {
     width: '100%',
     justifyContent: 'center',
+  },
+  /** Time step: align like client booking — title + grid from the top, no dead band above the hours. */
+  adminWizardScrollInnerAlignStart: {
+    justifyContent: 'flex-start',
   },
   glassCard: {
     borderRadius: 26,
@@ -2313,8 +2240,19 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   timesLoading: {
+    width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 20,
+    gap: 10,
+  },
+  timesLoadingLabel: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    paddingHorizontal: 12,
   },
   emptyTxt: {
     textAlign: 'center',

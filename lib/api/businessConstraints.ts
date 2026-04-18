@@ -9,6 +9,37 @@ export function constraintTimeToMinutes(t: string | undefined | null): number {
   return hh * 60 + mm;
 }
 
+/** 24h after local end instant — constraints older than this are auto-deleted from management. */
+const CONSTRAINT_AUTO_DELETE_AFTER_END_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * End instant of the block in the device local timezone (`date` calendar day + `end_time`).
+ */
+export function constraintLocalEndMs(constraint: BusinessConstraint): number | null {
+  const dateStr = String(constraint.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const raw = String(constraint.end_time ?? '').trim();
+  const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const hh = Math.min(23, parseInt(m[1]!, 10));
+  const mm = Math.min(59, parseInt(m[2]!, 10));
+  const ss = m[3] != null ? Math.min(59, parseInt(m[3], 10)) : 0;
+  const [y, mo, d] = dateStr.split('-').map((x) => parseInt(x, 10));
+  const dt = new Date(y, mo - 1, d, hh, mm, ss, 0);
+  const t = dt.getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/** True when now is at least 24h after the constraint's local end time — remove from management (and DB). */
+export function isConstraintPastAutoDeleteWindow(
+  constraint: BusinessConstraint,
+  nowMs: number = Date.now()
+): boolean {
+  const endMs = constraintLocalEndMs(constraint);
+  if (endMs == null) return false;
+  return nowMs >= endMs + CONSTRAINT_AUTO_DELETE_AFTER_END_MS;
+}
+
 /** תואם ל־`_isFullDayConstraint` ביומן האדמין — חסימה מלאה ליום */
 function isFullCalendarDayConstraint(c: BusinessConstraint): boolean {
   const s = constraintTimeToMinutes(c.start_time);

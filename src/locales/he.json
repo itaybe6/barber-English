@@ -1516,14 +1516,18 @@
       "whatToBlock": "מה לחסום?",
       "modeHint": {
         "hours": "חלון זמן ביום אחד",
-        "singleDay": "סגור כל היום — תאריך בודד",
-        "multiDays": "בחר/י התחלה וסוף — כל הימים ביניהם נסגרים"
+        "singleDay": "סגור כל היום\nתאריך בודד",
+        "multiDays": "שתי תאריכים בלוח\nכל מה שביניהם נסגר"
       },
       "tapToEditHours": "לחצו לבחירת שעות",
       "rangeHelp": "לחיצה ראשונה: תאריך התחלה. לחיצה שנייה: תאריך סיום.",
       "reasonHelper": "לעצמך בלבד — עוזר לזכור למה נוצר החסום.",
       "openConstraintsManager": "ניהול אילוצים",
-      "emptyListHint": "אילוצים שמורים יופיעו כאן כדי שתוכל/י למחוק אותם בכל עת."
+      "emptyListHint": "אילוצים שמורים יופיעו כאן כדי שתוכל/י למחוק אותם בכל עת.",
+      "deleteConstraintTitle": "למחוק את האילוץ?",
+      "deleteConstraintMessage": "החסימה תוסר מהיומן. לא ניתן לשחזר.",
+      "deleteConstraintConfirm": "מחק",
+      "deleteConstraintFailed": "לא ניתן למחוק. נסו שוב."
     },
     "hours": {
       "title": "שעות עבודה",

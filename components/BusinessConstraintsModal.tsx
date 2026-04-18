@@ -13,7 +13,6 @@ import {
   Modal,
   I18nManager,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,13 +24,13 @@ import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
-import BookingSuccessAnimatedOverlay, {
-  type SuccessLine,
-} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
+import type { SuccessLine } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
+import { ConstraintSaveSuccessShell } from '@/components/ConstraintSaveSuccessShell';
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
+  useBottomSheetSpringConfigs,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
@@ -136,11 +135,12 @@ function pickNearestTimeOption(dbHHMM: string, timeOptions: string[], to24: (s: 
   return best;
 }
 
-const formatISOToMMDDYYYY = (iso: string) => {
+/** ISO `YYYY-MM-DD` → `DD/MM/YYYY` (local-style display) */
+const formatISOToDDMMYYYY = (iso: string) => {
   try {
     const [yyyy, mm, dd] = iso.split('-');
     if (!yyyy || !mm || !dd) return iso;
-    return `${mm}/${dd}/${yyyy}`;
+    return `${dd}/${mm}/${yyyy}`;
   } catch {
     return iso;
   }
@@ -276,6 +276,39 @@ function buildCalendarTheme(primary: string) {
   } as const;
 }
 
+/**
+ * Pixel snap height for the compact “saved” state so the sheet hugs the success block
+ * instead of staying at 90% with empty space.
+ */
+function estimateConstraintSuccessSheetHeight(
+  screenH: number,
+  bottomInset: number,
+  lineCount: number,
+): number {
+  const handleBreathing = 8;
+  const checkBlock = 74;
+  const titleBlock = 54;
+  const pillsRow = 48;
+  let metaBlock = 90;
+  if (lineCount >= 5) metaBlock += 50;
+  else if (lineCount >= 4) metaBlock += 34;
+  const betweenClusterAndBtn = 18;
+  const btn = 52;
+  const verticalPad = 20;
+  const raw =
+    handleBreathing +
+    checkBlock +
+    titleBlock +
+    pillsRow +
+    metaBlock +
+    betweenClusterAndBtn +
+    btn +
+    verticalPad +
+    bottomInset;
+  const maxH = Math.round(screenH * 0.52);
+  return Math.min(maxH, Math.max(300, raw + 12));
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export default function BusinessConstraintsModal({
@@ -300,8 +333,6 @@ export default function BusinessConstraintsModal({
 
   const primary = businessColors.primary;
   const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
-  /** Same height as `CalendarReminderEditorModal` (תזכורת ביומן) */
-  const snapPoints = useMemo(() => ['90%'], []);
 
   const sheetMaxHeight = Dimensions.get('window').height - Math.max(insets.top, 16) - 12;
 
@@ -331,6 +362,31 @@ export default function BusinessConstraintsModal({
   const [pendingConstraintConflict, setPendingConstraintConflict] = useState<PendingConstraintConflict | null>(null);
   const [isConfirmingConstraintConflict, setIsConfirmingConstraintConflict] = useState(false);
 
+  const screenHeight = Dimensions.get('window').height;
+  const snapPoints = useMemo((): (string | number)[] => {
+    if (!visible) {
+      return ['90%'];
+    }
+    if (!showConstraintSuccess) {
+      return ['90%'];
+    }
+    return [estimateConstraintSuccessSheetHeight(screenHeight, insets.bottom, constraintSuccessLines.length)];
+  }, [visible, showConstraintSuccess, screenHeight, insets.bottom, constraintSuccessLines.length]);
+
+  const defaultSheetAnim = useAdminCalendarSheetTimingConfig();
+  const successResizeSheetAnim = useBottomSheetSpringConfigs(
+    useMemo(
+      () => ({
+        damping: 36,
+        stiffness: 220,
+        mass: 0.95,
+        overshootClamping: true,
+      }),
+      [],
+    ),
+  );
+  const animationConfigs = showConstraintSuccess ? successResizeSheetAnim : defaultSheetAnim;
+
   const editingId = editingConstraint?.id ?? null;
   const isEditMode = Boolean(editingId);
   const editingRef = useRef<BusinessConstraint | null>(null);
@@ -338,7 +394,17 @@ export default function BusinessConstraintsModal({
     editingRef.current = editingConstraint;
   }, [editingConstraint]);
 
-  const animationConfigs = useAdminCalendarSheetTimingConfig();
+  useEffect(() => {
+    if (!showConstraintSuccess) return;
+    const id = requestAnimationFrame(() => {
+      try {
+        sheetRef.current?.snapToIndex(0);
+      } catch {
+        /* sheet may be unmounted */
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showConstraintSuccess, snapPoints]);
 
   const calendarMinDate = useMemo(() => {
     const todayIso = toISODate(today);
@@ -395,6 +461,8 @@ export default function BusinessConstraintsModal({
     if (!visible) {
       setPendingConstraintConflict(null);
       setIsConfirmingConstraintConflict(false);
+      setShowConstraintSuccess(false);
+      setConstraintSuccessLines([]);
     }
   }, [visible]);
 
@@ -1036,8 +1104,18 @@ export default function BusinessConstraintsModal({
         android_keyboardInputMode="adjustResize"
       >
         <View style={[styles.sheetBody, layoutRtl ? styles.sheetBodyRtl : styles.sheetBodyLtr]}>
-          {/* ── header (fixed; form scrolls like calendar reminder sheet) ── */}
-          <View style={styles.sheetHeader}>
+          <ConstraintSaveSuccessShell
+            success={showConstraintSuccess}
+            animKey={constraintSuccessAnimKey}
+            lines={constraintSuccessLines}
+            primaryColor={primary}
+            gotItLabel={t('booking.gotIt', 'הבנתי')}
+            onGotIt={() => {
+              onClose();
+            }}
+          >
+            {/* ── header (fixed; form scrolls like calendar reminder sheet) ── */}
+            <View style={styles.sheetHeader}>
             <View style={styles.sheetHeaderInner}>
               <View style={styles.sheetTitleBlock}>
                 <Text style={styles.sheetTitle} numberOfLines={1}>
@@ -1212,17 +1290,11 @@ export default function BusinessConstraintsModal({
                 <Text style={styles.rangeHelp}>{t('admin.hoursAdmin.rangeHelp', 'לחץ על יום ההתחלה, ואז על יום הסיום')}</Text>
                 <View style={styles.calendarShell}>{renderCalendar('range')}</View>
                 {rangeStartISO && rangeEndISO && (
-                  <LinearGradient
-                    colors={[`${primary}20`, `${primary}08`]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.rangePill}
-                  >
-                    <Ionicons name="checkmark-done" size={18} color={primary} />
-                    <Text style={styles.rangePillText}>
-                      {formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}
+                  <View style={[styles.rangePill, { borderColor: `${primary}40`, backgroundColor: `${primary}10` }]}>
+                    <Text style={[styles.rangePillText, layoutRtl && { writingDirection: 'rtl' }]}>
+                      {formatISOToDDMMYYYY(rangeStartISO)} — {formatISOToDDMMYYYY(rangeEndISO)}
                     </Text>
-                  </LinearGradient>
+                  </View>
                 )}
               </View>
             )}
@@ -1248,6 +1320,7 @@ export default function BusinessConstraintsModal({
               )}
             </TouchableOpacity>
           </BottomSheetScrollView>
+          </ConstraintSaveSuccessShell>
         </View>
       </BottomSheetModal>
 
@@ -1318,37 +1391,22 @@ export default function BusinessConstraintsModal({
             <View style={[styles.conflictIconRing, { borderColor: `${UI.danger}44` }]}>
               <Ionicons name="alert-circle" size={32} color={UI.danger} />
             </View>
-            <Text
-              style={[styles.conflictCardTitle, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
-            >
+            <Text style={[styles.conflictCardTitle, layoutRtl && styles.conflictTextRtl]}>
               {t('admin.hoursAdmin.constraintConflictSheetTitle', 'יש תורים שחופפים לאילוץ')}
             </Text>
-            <Text
-              style={[styles.conflictCardBody, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
-            >
+            <Text style={[styles.conflictCardBody, layoutRtl && styles.conflictTextRtl]}>
               {t('admin.hoursAdmin.constraintConflictSheetBody', 'זיהינו {{count}} תורים של לקוחות שכבר נקבעו בטווח הזמן שבחרת.', {
                 count: pendingConstraintConflict?.conflicts.length ?? 0,
               })}
             </Text>
-            <Text
-              style={[styles.conflictCardHint, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
-            >
+            <Text style={[styles.conflictCardHint, layoutRtl && styles.conflictTextRtl]}>
               {t(
                 'admin.hoursAdmin.constraintConflictSheetHint',
                 'אם תאשר/י — כל התורים האלה יוסרו מהיומן, ולכל לקוח שמספר הטלפון שלו רשום במערכת תישלח התראה באפליקציה והודעת SMS על ביטול התור.',
               )}
             </Text>
-            <View style={[styles.conflictActionsRow, layoutRtl && styles.conflictActionsRowRtl]}>
-              <TouchableOpacity
-                style={[styles.conflictBtnSecondary, { borderColor: UI.border }]}
-                onPress={() => {
-                  if (!isConfirmingConstraintConflict) setPendingConstraintConflict(null);
-                }}
-                disabled={isConfirmingConstraintConflict}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.conflictBtnSecondaryText}>{t('admin.hoursAdmin.constraintConflictCancel', 'ביטול')}</Text>
-              </TouchableOpacity>
+            {/* direction ltr so primary (destructive) stays visually left, cancel right — independent of app RTL */}
+            <View style={styles.conflictActionsRow}>
               <TouchableOpacity
                 style={[styles.conflictBtnPrimary, { backgroundColor: UI.danger }]}
                 onPress={() => void handleConfirmConstraintConflict()}
@@ -1363,31 +1421,21 @@ export default function BusinessConstraintsModal({
                   </Text>
                 )}
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.conflictBtnSecondary, { borderColor: UI.border }]}
+                onPress={() => {
+                  if (!isConfirmingConstraintConflict) setPendingConstraintConflict(null);
+                }}
+                disabled={isConfirmingConstraintConflict}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.conflictBtnSecondaryText}>{t('admin.hoursAdmin.constraintConflictCancel', 'ביטול')}</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* ── success animation ── */}
-      <Modal
-        visible={showConstraintSuccess}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={() => setShowConstraintSuccess(false)}
-      >
-        <BookingSuccessAnimatedOverlay
-          key={constraintSuccessAnimKey}
-          lines={constraintSuccessLines}
-          rtl={rtl}
-          accentColor={primary}
-          onDismiss={() => {
-            setShowConstraintSuccess(false);
-            onClose();
-          }}
-          gotItLabel={t('booking.gotIt', 'הבנתי')}
-        />
-      </Modal>
     </>
   );
 }
@@ -1621,16 +1669,22 @@ const styles = StyleSheet.create({
   // ── range ─────────────────────────────────────────────────────────────────
   rangeHelp: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginBottom: 10, lineHeight: 18, textAlign: 'right' },
   rangePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginTop: 14,
     paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    alignSelf: 'stretch',
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    alignSelf: 'center',
+    maxWidth: '100%',
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  rangePillText: { fontSize: 14, fontWeight: '800', color: UI.text, flex: 1, textAlign: 'right' },
+  rangePillText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: UI.text,
+    textAlign: 'center',
+  },
 
   // ── time row ──────────────────────────────────────────────────────────────
   timeRow: {
@@ -1753,6 +1807,8 @@ const styles = StyleSheet.create({
     color: UI.text,
     marginBottom: 10,
     letterSpacing: -0.3,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   conflictCardBody: {
     fontSize: 15,
@@ -1760,6 +1816,8 @@ const styles = StyleSheet.create({
     color: UI.text,
     lineHeight: 22,
     marginBottom: 10,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   conflictCardHint: {
     fontSize: 13,
@@ -1767,15 +1825,18 @@ const styles = StyleSheet.create({
     color: UI.textSecondary,
     lineHeight: 19,
     marginBottom: 22,
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  conflictTextRtl: {
+    writingDirection: 'rtl',
   },
   conflictActionsRow: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-  },
-  conflictActionsRowRtl: {
-    flexDirection: 'row-reverse',
   },
   conflictBtnSecondary: {
     flex: 1,
@@ -1791,6 +1852,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: UI.textSecondary,
+    textAlign: 'center',
   },
   conflictBtnPrimary: {
     flex: 1,

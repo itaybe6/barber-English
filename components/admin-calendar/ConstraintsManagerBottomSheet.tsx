@@ -404,6 +404,15 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
+              <TouchableOpacity
+                style={[styles.addMoreBtn, { borderColor: `${addMoreOnSurface}99` }]}
+                onPress={onAddConstraint}
+                activeOpacity={0.8}
+              >
+                <Plus size={18} color={addMoreOnSurface} strokeWidth={2.5} />
+                <Text style={[styles.addMoreText, { color: addMoreOnSurface }]}>הוסף אילוץ נוסף</Text>
+              </TouchableOpacity>
+
               {grouped.map(({ date, items }) => (
                 <View key={date} style={styles.dateGroup}>
                   <View style={styles.dateGroupHeader}>
@@ -424,15 +433,6 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
                   })}
                 </View>
               ))}
-
-              <TouchableOpacity
-                style={[styles.addMoreBtn, { borderColor: `${addMoreOnSurface}99` }]}
-                onPress={onAddConstraint}
-                activeOpacity={0.8}
-              >
-                <Plus size={18} color={addMoreOnSurface} strokeWidth={2.5} />
-                <Text style={[styles.addMoreText, { color: addMoreOnSurface }]}>הוסף אילוץ נוסף</Text>
-              </TouchableOpacity>
             </BottomSheetScrollView>
           )}
         </View>
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 16,
     paddingVertical: 14,
-    marginTop: 4,
+    marginBottom: 14,
   },
   addMoreText: {
     fontSize: 15,

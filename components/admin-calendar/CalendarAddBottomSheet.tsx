@@ -1,10 +1,4 @@
-import React, {
-  forwardRef,
-  useCallback,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-} from 'react';
+import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
 import {
   I18nManager,
   Platform,
@@ -56,9 +50,6 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
 
     const animationConfigs = useAdminCalendarSheetTimingConfig();
 
-    /** Fixed height avoids dynamic layout passes during open (smoother than enableDynamicSizing). */
-    const snapPoints = useMemo(() => ['64%'], []);
-
     // Call present() immediately — Reanimated runs on the UI thread and doesn't need JS to yield first.
     useImperativeHandle(ref, () => ({
       open: () => sheetRef.current?.present(),
@@ -87,9 +78,7 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
     return (
       <BottomSheetModal
         ref={sheetRef}
-        snapPoints={snapPoints}
-        index={0}
-        enableDynamicSizing={false}
+        enableDynamicSizing
         onDismiss={handleDismiss}
         animationConfigs={animationConfigs}
         backdropComponent={renderBackdrop}
@@ -102,7 +91,7 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
         <BottomSheetView
           style={[
             styles.container,
-            { paddingBottom: insets.bottom + 28 },
+            { paddingBottom: Math.max(insets.bottom, 12) + 12 },
           ]}
         >
           {/* Header */}

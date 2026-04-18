@@ -1,20 +1,19 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, I18nManager } from 'react-native';
 import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
-import { X, AlertTriangle, Trash2 } from 'lucide-react-native';
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetScrollView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
+import { AlertTriangle, Trash2 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/authStore';
+import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
 
 interface DeleteAccountModalProps {
   visible: boolean;
@@ -22,270 +21,340 @@ interface DeleteAccountModalProps {
   onSuccess: () => void;
 }
 
+const DELETE_ITEM_KEYS = [
+  'profile.delete.items.profile',
+  'profile.delete.items.appointments',
+  'profile.delete.items.constraints',
+  'profile.delete.items.hours',
+  'profile.delete.items.gallery',
+  'profile.delete.items.notifications',
+  'profile.delete.items.recurring',
+  'profile.delete.items.waitlist',
+] as const;
+
+const DANGER = '#E53935';
+const DANGER_SOFT = '#FFEBEE';
+
 export default function DeleteAccountModal({ visible, onClose, onSuccess }: DeleteAccountModalProps) {
-  const { colors: businessColors } = useBusinessColors();
+  const { colors } = useBusinessColors();
   const logout = useAuthStore((state) => state.logout);
   const [isLoading, setIsLoading] = useState(false);
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['90%'], []);
+  const animationConfigs = useAdminCalendarSheetTimingConfig();
+  const isRTL = I18nManager.isRTL;
+
+  useEffect(() => {
+    if (visible) {
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [visible]);
+
+  const handleDismiss = useCallback(() => onClose(), [onClose]);
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+        pressBehavior="close"
+      />
+    ),
+    [],
+  );
+
+  const sheetBg = useCallback(
+    () => (
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: colors.surface,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+          },
+        ]}
+      />
+    ),
+    [colors.surface],
+  );
 
   const handleDeleteAccount = async () => {
-    Alert.alert(
-      t('profile.delete.title', 'Delete Account'),
-      t('profile.delete.confirm', 'Are you absolutely sure you want to delete your account? This action cannot be undone and will permanently delete all your data.'),
-      [
-        {
-          text: t('cancel', 'Cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('profile.delete.confirmButton', 'Delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setIsLoading(true);
-            
-            try {
-              const success = await usersApi.deleteUserAndAllData();
-              
-              if (success) {
-                Alert.alert(
-                  t('success.generic', 'Success'),
-                  t('profile.delete.success', 'Your account and all associated data have been permanently deleted.'),
-                  [
-                    {
-                      text: t('ok', 'OK'),
-                      onPress: () => {
-                        onClose();
-                        logout();
-                        onSuccess();
-                      }
-                    }
-                  ]
-                );
-              } else {
-                Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
-              }
-            } catch (error) {
-              console.error('Error deleting account:', error);
-              Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
-            } finally {
-              setIsLoading(false);
+    Alert.alert(t('profile.delete.title'), t('profile.delete.confirmAlert'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('profile.delete.confirmButton'),
+        style: 'destructive',
+        onPress: async () => {
+          setIsLoading(true);
+          try {
+            const success = await usersApi.deleteUserAndAllData();
+            if (success) {
+              Alert.alert(t('success.generic'), t('profile.delete.success'), [
+                {
+                  text: t('ok'),
+                  onPress: () => {
+                    onClose();
+                    logout();
+                    onSuccess();
+                  },
+                },
+              ]);
+            } else {
+              Alert.alert(t('error.generic'), t('profile.delete.failed'));
             }
+          } catch (error) {
+            console.error('Error deleting account:', error);
+            Alert.alert(t('error.generic'), t('profile.delete.failed'));
+          } finally {
+            setIsLoading(false);
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+    <BottomSheetModal
+      ref={sheetRef}
+      snapPoints={snapPoints}
+      index={0}
+      enableDynamicSizing={false}
+      onDismiss={handleDismiss}
+      animationConfigs={animationConfigs}
+      backdropComponent={renderBackdrop}
+      backgroundComponent={sheetBg}
+      handleIndicatorStyle={{ backgroundColor: `${colors.text}24`, width: 42, height: 4 }}
+      enablePanDownToClose
+      topInset={insets.top}
     >
-      <KeyboardAvoidingView 
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <BottomSheetScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 20 },
+        ]}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>{t('profile.delete.title', 'Delete Account')}</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.content}>
-          <View style={styles.warningContainer}>
-            <AlertTriangle size={48} color="#FF3B30" style={styles.warningIcon} />
-            <Text style={styles.warningTitle}>{t('profile.delete.warningTitle', 'Warning: This action is irreversible')}</Text>
-            <Text style={styles.warningText}>
-              {t('profile.delete.warningBody', 'Deleting your account will permanently remove:')}
-            </Text>
-          </View>
-
-          <View style={styles.listContainer}>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.profile', 'Your user profile')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.appointments', 'All appointments')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.constraints', 'Business constraints')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.hours', 'Business hours')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.gallery', 'Designs and gallery')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.notifications', 'Notifications')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.recurring', 'Recurring appointments')}</Text>
-            </View>
-            <View style={styles.listItem}>
-              <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>{t('profile.delete.items.waitlist', 'Waitlist entries')}</Text>
-            </View>
-          </View>
-
-          <View style={styles.noteContainer}>
-            <Text style={styles.noteText}>
-              {t('profile.delete.note','This action cannot be undone. Please make sure you have backed up any important data before proceeding.')}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.cancelButton, { borderColor: businessColors.primary }]}
-            onPress={onClose}
-            disabled={isLoading}
+        <View style={styles.headerBlock}>
+          <LinearGradient
+            colors={[`${DANGER}22`, DANGER_SOFT]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerIconRing}
           >
-            <Text style={[styles.cancelButtonText, { color: businessColors.primary }]}>
-              {t('cancel','Cancel')}
-            </Text>
-          </TouchableOpacity>
-          
+            <AlertTriangle size={30} color={DANGER} strokeWidth={2.2} />
+          </LinearGradient>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>{t('profile.delete.title')}</Text>
+          <Text style={[styles.sheetSubtitle, { color: colors.textSecondary }]}>
+            {t('profile.delete.subtitle')}
+          </Text>
+        </View>
+
+        <Text style={[styles.warningTitle, { color: DANGER }]}>{t('profile.delete.warningTitle')}</Text>
+        <Text style={[styles.warningBody, { color: colors.textSecondary, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('profile.delete.warningBody')}
+        </Text>
+
+        <View style={[styles.listCard, { borderColor: `${colors.text}10`, backgroundColor: colors.surface }]}>
+          {DELETE_ITEM_KEYS.map((key, i) => (
+            <View
+              key={key}
+              style={[
+                styles.listRow,
+                i < DELETE_ITEM_KEYS.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${colors.text}0D` },
+              ]}
+            >
+              {isRTL ? (
+                <>
+                  <Trash2 size={17} color={`${colors.text}55`} style={styles.listTrash} />
+                  <Text style={[styles.listText, { color: colors.text, textAlign: 'right' }]} numberOfLines={2}>
+                    {t(key)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.listText, { color: colors.text, textAlign: 'left' }]} numberOfLines={2}>
+                    {t(key)}
+                  </Text>
+                  <Trash2 size={17} color={`${colors.text}55`} style={styles.listTrash} />
+                </>
+              )}
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.noteCard, { borderStartColor: '#F9A825' }]}>
+          <Text style={[styles.noteText, { textAlign: isRTL ? 'right' : 'left' }]}>{t('profile.delete.note')}</Text>
+        </View>
+
+        <View style={[styles.actionsRow, isRTL && styles.actionsRowRtl]}>
           <TouchableOpacity
-            style={[styles.deleteButton, { backgroundColor: '#FF3B30' }]}
+            style={[
+              styles.deleteBtn,
+              { backgroundColor: DANGER, shadowColor: DANGER },
+              isLoading && styles.btnDisabled,
+            ]}
             onPress={handleDeleteAccount}
             disabled={isLoading}
+            activeOpacity={0.85}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="white" />
+              <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
-                <Trash2 size={16} color="white" style={styles.deleteIcon} />
-                <Text style={styles.deleteButtonText}>{t('profile.delete.title','Delete Account')}</Text>
+                <Trash2 size={18} color="#fff" style={isRTL ? styles.iconLeadingRtl : styles.iconLeading} />
+                <Text style={styles.deleteBtnLabel}>{t('profile.delete.title')}</Text>
               </>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.cancelBtn,
+              { borderColor: colors.primary, backgroundColor: colors.surface },
+              isLoading && styles.btnDisabled,
+            ]}
+            onPress={() => sheetRef.current?.dismiss()}
+            disabled={isLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.cancelBtnLabel, { color: colors.primary }]}>{t('cancel')}</Text>
+          </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </BottomSheetScrollView>
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  scrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    paddingTop: 8,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-  },
-  warningContainer: {
+  headerBlock: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
   },
-  warningIcon: {
-    marginBottom: 16,
+  headerIconRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  sheetSubtitle: {
+    fontSize: 14,
+    marginTop: 6,
+    lineHeight: 20,
+    textAlign: 'center',
+    paddingHorizontal: 12,
   },
   warningTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#FF3B30',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
+    lineHeight: 24,
   },
-  warningText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+  warningBody: {
+    fontSize: 15,
     lineHeight: 22,
+    marginBottom: 16,
   },
-  listContainer: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+  listCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
-  listItem: {
+  listRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   listText: {
-    fontSize: 16,
-    color: '#1C1C1E',
-    marginLeft: 12,
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '500',
   },
-  noteContainer: {
-    backgroundColor: '#FFF3CD',
-    borderRadius: 12,
+  listTrash: {
+    flexShrink: 0,
+  },
+  noteCard: {
+    backgroundColor: '#FFFDE7',
+    borderRadius: 14,
     padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFC107',
+    borderStartWidth: 4,
+    marginBottom: 22,
   },
   noteText: {
     fontSize: 14,
-    color: '#856404',
-    lineHeight: 20,
+    lineHeight: 21,
+    color: '#5D4037',
   },
-  footer: {
+  actionsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
     gap: 12,
+    alignItems: 'stretch',
   },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
+  actionsRowRtl: {
+    flexDirection: 'row-reverse',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+  deleteBtn: {
+    flex: 1.05,
+    minHeight: 52,
+    borderRadius: 14,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  deleteIcon: {
+  cancelBtn: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  cancelBtnLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  deleteBtnLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  iconLeading: {
     marginRight: 8,
   },
-  deleteButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+  iconLeadingRtl: {
+    marginLeft: 8,
+  },
+  btnDisabled: {
+    opacity: 0.55,
   },
 });

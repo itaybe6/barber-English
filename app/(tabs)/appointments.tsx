@@ -19,7 +19,6 @@ import {
   Platform,
   Pressable,
   DeviceEventEmitter,
-  InteractionManager,
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { getPrimaryAsForegroundOnLightSurface } from '@/lib/colorContrast';
@@ -2260,10 +2259,10 @@ export default function AdminAppointmentsScreen() {
     if (pendingOpenConstraintsManagerAfterAddSheetRef.current) {
       pendingOpenConstraintsManagerAfterAddSheetRef.current = false;
       setShowConstraintsManager(true);
-      InteractionManager.runAfterInteractions(() => {
-        requestAnimationFrame(() => {
-          constraintsManagerSheetRef.current?.open();
-        });
+      // `onDismiss` already ran after the + sheet closed — open the next sheet immediately.
+      // `InteractionManager.runAfterInteractions` can stall for seconds on a heavy calendar screen.
+      queueMicrotask(() => {
+        constraintsManagerSheetRef.current?.open();
       });
     } else if (pendingOpenReminderEditorAfterAddSheetRef.current) {
       pendingOpenReminderEditorAfterAddSheetRef.current = false;
@@ -2397,10 +2396,12 @@ export default function AdminAppointmentsScreen() {
     if (showCalendarFabSheet) {
       closeReminderModal();
     } else {
-      // open() first so Reanimated gets the earliest possible start on the UI thread,
-      // before the React re-render triggered by setShowCalendarFabSheet.
+      // present() first; defer local state to a microtask so the modal can start before
+      // the heavy appointments tree re-renders (fab registration no longer re-renders this screen).
       calendarAddSheetRef.current?.open();
-      setShowCalendarFabSheet(true);
+      queueMicrotask(() => {
+        setShowCalendarFabSheet(true);
+      });
     }
   }, [
     showCalendarFabSheet,

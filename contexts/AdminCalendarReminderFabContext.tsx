@@ -3,8 +3,10 @@ import React, {
   useContext,
   useMemo,
   useState,
+  type Dispatch,
   type ReactNode,
-} from "react";
+  type SetStateAction,
+} from 'react';
 
 /** קואורדינטות חלון (measureInWindow) של כפתור הפלוס בסרגל */
 export type AdminCalendarPlusAnchorWindow = {
@@ -19,14 +21,21 @@ export type AdminCalendarReminderFabRegistration = {
   onPress: () => void;
 } | null;
 
-type Ctx = {
-  registration: AdminCalendarReminderFabRegistration;
-  setRegistration: (r: AdminCalendarReminderFabRegistration) => void;
-  plusAnchorWindow: AdminCalendarPlusAnchorWindow;
-  setPlusAnchorWindow: (r: AdminCalendarPlusAnchorWindow) => void;
+type Setters = {
+  setRegistration: Dispatch<SetStateAction<AdminCalendarReminderFabRegistration>>;
+  setPlusAnchorWindow: Dispatch<SetStateAction<AdminCalendarPlusAnchorWindow>>;
 };
 
-const AdminCalendarReminderFabContext = createContext<Ctx | null>(null);
+/**
+ * Setters live in their own context so updating `registration` or `plusAnchorWindow`
+ * does not re-render components that only need stable dispatchers (e.g. calendar screen).
+ */
+const ReminderFabSettersContext = createContext<Setters | null>(null);
+
+const ReminderFabRegistrationContext =
+  createContext<AdminCalendarReminderFabRegistration>(null);
+
+const PlusAnchorWindowContext = createContext<AdminCalendarPlusAnchorWindow>(null);
 
 export function AdminCalendarReminderFabProvider({
   children,
@@ -38,49 +47,46 @@ export function AdminCalendarReminderFabProvider({
   const [plusAnchorWindow, setPlusAnchorWindow] =
     useState<AdminCalendarPlusAnchorWindow>(null);
 
-  const value = useMemo(
-    () => ({
-      registration,
-      setRegistration,
-      plusAnchorWindow,
-      setPlusAnchorWindow,
-    }),
-    [registration, plusAnchorWindow]
+  const setters = useMemo(
+    () => ({ setRegistration, setPlusAnchorWindow }),
+    [],
   );
 
   return (
-    <AdminCalendarReminderFabContext.Provider value={value}>
-      {children}
-    </AdminCalendarReminderFabContext.Provider>
+    <ReminderFabSettersContext.Provider value={setters}>
+      <ReminderFabRegistrationContext.Provider value={registration}>
+        <PlusAnchorWindowContext.Provider value={plusAnchorWindow}>
+          {children}
+        </PlusAnchorWindowContext.Provider>
+      </ReminderFabRegistrationContext.Provider>
+    </ReminderFabSettersContext.Provider>
   );
 }
 
 export function useAdminCalendarReminderFabRegistration() {
-  const ctx = useContext(AdminCalendarReminderFabContext);
+  const ctx = useContext(ReminderFabSettersContext);
   if (!ctx) {
     throw new Error(
-      "useAdminCalendarReminderFabRegistration must be used within AdminCalendarReminderFabProvider"
+      'useAdminCalendarReminderFabRegistration must be used within AdminCalendarReminderFabProvider',
     );
   }
   return ctx.setRegistration;
 }
 
-export function useAdminCalendarReminderFab(): AdminCalendarReminderFabRegistration {
-  const ctx = useContext(AdminCalendarReminderFabContext);
-  return ctx?.registration ?? null;
-}
-
-export function useAdminCalendarPlusAnchorWindow(): AdminCalendarPlusAnchorWindow {
-  const ctx = useContext(AdminCalendarReminderFabContext);
-  return ctx?.plusAnchorWindow ?? null;
-}
-
 export function useAdminCalendarSetPlusAnchorWindow() {
-  const ctx = useContext(AdminCalendarReminderFabContext);
+  const ctx = useContext(ReminderFabSettersContext);
   if (!ctx) {
     throw new Error(
-      "useAdminCalendarSetPlusAnchorWindow must be used within AdminCalendarReminderFabProvider"
+      'useAdminCalendarSetPlusAnchorWindow must be used within AdminCalendarReminderFabProvider',
     );
   }
   return ctx.setPlusAnchorWindow;
+}
+
+export function useAdminCalendarReminderFab(): AdminCalendarReminderFabRegistration {
+  return useContext(ReminderFabRegistrationContext);
+}
+
+export function useAdminCalendarPlusAnchorWindow(): AdminCalendarPlusAnchorWindow {
+  return useContext(PlusAnchorWindowContext);
 }

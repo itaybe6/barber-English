@@ -5,7 +5,6 @@ import {
   I18nManager,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +21,7 @@ import {
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import AdminWheelTimePickerSheet from '@/components/admin/AdminWheelTimePickerSheet';
 import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useAuthStore } from '@/stores/authStore';
@@ -33,6 +33,15 @@ import {
   updateCalendarReminder,
   type CalendarReminderColorKey,
 } from '@/lib/api/calendarReminders';
+
+/** First swatch in the row (`colorRow` is LTR) — default selection hugs the visual left */
+const DEFAULT_REMINDER_SWATCH_COLOR = CALENDAR_REMINDER_COLOR_KEYS[0];
+
+function normalizeReminderColorKey(raw: string | null | undefined): CalendarReminderColorKey {
+  const s = String(raw ?? '').trim();
+  if ((CALENDAR_REMINDER_COLOR_KEYS as readonly string[]).includes(s)) return s as CalendarReminderColorKey;
+  return DEFAULT_REMINDER_SWATCH_COLOR;
+}
 
 LocaleConfig.locales['en'] = {
   monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
@@ -76,7 +85,8 @@ const REMINDER_PALETTE: Record<string, { bar: string; bg: string }> = {
 };
 
 function reminderPalette(key: string | null | undefined) {
-  return REMINDER_PALETTE[key || 'blue'] || REMINDER_PALETTE.blue;
+  const k = key || DEFAULT_REMINDER_SWATCH_COLOR;
+  return REMINDER_PALETTE[k] || REMINDER_PALETTE[DEFAULT_REMINDER_SWATCH_COLOR];
 }
 
 function buildCalendarTheme(primary: string) {
@@ -184,88 +194,12 @@ function parseISODateToLocalDay(iso: string): Date {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function CardSectionHeader({
-  icon,
-  label,
-  primary,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  primary: string;
-}) {
+function CardSectionTitleCentered({ label }: { label: string }) {
   return (
-    <View style={styles.cardSectionRow}>
-      <View style={styles.cardSectionLabelWrap}>
-        <Text style={styles.cardSectionLabel} numberOfLines={3}>
-          {label}
-        </Text>
-      </View>
-      <View style={[styles.cardIconWrap, { backgroundColor: `${primary}12` }]}>
-        <Ionicons name={icon} size={17} color={primary} />
-      </View>
-    </View>
-  );
-}
-
-function TimeSlotPickerSheet({
-  visible,
-  title,
-  options,
-  selectedHHMM,
-  primary,
-  formatOptionLabel,
-  onSelect,
-  onClose,
-  insetBottom,
-}: {
-  visible: boolean;
-  title: string;
-  options: string[];
-  selectedHHMM: string;
-  primary: string;
-  formatOptionLabel: (hhmm: string) => string;
-  onSelect: (hhmm: string) => void;
-  onClose: () => void;
-  insetBottom: number;
-}) {
-  if (!visible) return null;
-  return (
-    <View style={styles.timeSheetHost} pointerEvents="box-none">
-      <Pressable
-        style={styles.timeSheetBackdrop}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="סגור"
-      />
-      <View style={[styles.timeSheetCard, { paddingBottom: Math.max(insetBottom, 16) }]}>
-        <View style={styles.timeSheetDragHandle} />
-        <Text style={styles.timeSheetTitle} numberOfLines={1}>{title}</Text>
-        <ScrollView
-          style={styles.timeSheetList}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {options.map((item) => {
-            const on = item === selectedHHMM.slice(0, 5);
-            return (
-              <TouchableOpacity
-                key={item}
-                style={[styles.timeSheetRow, styles.timeSheetRowRtl, on && { backgroundColor: `${primary}12` }]}
-                onPress={() => { onSelect(item); onClose(); }}
-                activeOpacity={0.72}
-              >
-                <Text style={[styles.timeSheetRowText, { writingDirection: 'ltr', textAlign: 'right' }, on && { color: primary, fontWeight: '800' }]}>
-                  {formatOptionLabel(item)}
-                </Text>
-                {on
-                  ? <Ionicons name="checkmark-circle" size={22} color={primary} />
-                  : <View style={{ width: 22 }} />}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+    <View style={styles.cardSectionTitleCenterWrap}>
+      <Text style={styles.cardSectionTitleCenter} numberOfLines={2}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -294,6 +228,9 @@ export default function CalendarReminderEditorModal({
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
   const { i18n } = useTranslation();
+  const isHebrewOrRtl =
+    (i18n?.language?.toLowerCase?.().startsWith('he') ?? false) || i18n?.dir?.() === 'rtl';
+  const useAmPmWheel = user?.user_type === 'admin' && !isHebrewOrRtl;
 
   const tHe = useCallback(
     (key: string, fallback: string) => String(i18n.t(key, { lng: 'he', defaultValue: fallback })),
@@ -325,7 +262,7 @@ export default function CalendarReminderEditorModal({
   const [eventDateISO, setEventDateISO] = useState(() => toLocalISODate(defaultDate));
   const [startTimeDate, setStartTimeDate] = useState(() => timeOnDate('09:00', defaultDate));
   const [endTimeDate, setEndTimeDate] = useState(() => timeOnDate('09:30', defaultDate));
-  const [colorKey, setColorKey] = useState<CalendarReminderColorKey>('blue');
+  const [colorKey, setColorKey] = useState<CalendarReminderColorKey>(DEFAULT_REMINDER_SWATCH_COLOR);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [timePickerWhich, setTimePickerWhich] = useState<'start' | 'end' | null>(null);
@@ -353,7 +290,7 @@ export default function CalendarReminderEditorModal({
       const dur = editingReminder.duration_minutes || 30;
       setStartTimeDate(start);
       setEndTimeDate(addMinutesToDate(start, dur));
-      setColorKey((editingReminder.color_key as CalendarReminderColorKey) || 'blue');
+      setColorKey(normalizeReminderColorKey(editingReminder.color_key));
     } else {
       const d = new Date(defaultDate);
       d.setHours(0, 0, 0, 0);
@@ -363,7 +300,7 @@ export default function CalendarReminderEditorModal({
       const s = timeOnDate('09:00', d);
       setStartTimeDate(s);
       setEndTimeDate(addMinutesToDate(s, 30));
-      setColorKey('blue');
+      setColorKey(DEFAULT_REMINDER_SWATCH_COLOR);
     }
   }, [editingReminder, defaultDate]);
 
@@ -386,6 +323,10 @@ export default function CalendarReminderEditorModal({
   }, [isHebrew]);
 
   const reminderDay = useMemo(() => parseISODateToLocalDay(eventDateISO), [eventDateISO]);
+  const reminderDayRef = useRef(reminderDay);
+  useEffect(() => {
+    reminderDayRef.current = reminderDay;
+  }, [reminderDay]);
 
   const reminderMarkedDates = useMemo(
     () => ({ [eventDateISO]: { selected: true, selectedColor: primary } }),
@@ -417,10 +358,10 @@ export default function CalendarReminderEditorModal({
     return mergeHHMMIntoSortedSlots(withStart, dateToHHMM(endTimeDate));
   }, [startTimeDate, endTimeDate]);
 
-  const formatSlotLabel = useCallback(
-    (hhmm: string) => formatTimeLabel(timeOnDate(hhmm, reminderDay)),
-    [formatTimeLabel, reminderDay]
-  );
+  const timePickerWhichRef = useRef(timePickerWhich);
+  useEffect(() => {
+    timePickerWhichRef.current = timePickerWhich;
+  }, [timePickerWhich]);
 
   const rangeDurationMinutes = useMemo(
     () => minutesBetweenStartEnd(startTimeDate, endTimeDate),
@@ -653,11 +594,7 @@ export default function CalendarReminderEditorModal({
 
           {/* Date card */}
           <View style={styles.card}>
-            <CardSectionHeader
-              icon="calendar-outline"
-              primary={primary}
-              label={tHe('admin.hoursAdmin.pickDateShort', 'בחירת תאריך')}
-            />
+            <CardSectionTitleCentered label={tHe('admin.hoursAdmin.pickDateShort', 'בחירת תאריך')} />
             <View style={styles.calendarShell}>
               <View style={styles.calendarModernBox}>
                 <RNCalendar
@@ -678,72 +615,120 @@ export default function CalendarReminderEditorModal({
 
           {/* Time range card */}
           <View style={styles.card}>
-            <CardSectionHeader
-              icon="time-outline"
-              primary={primary}
-              label={tHe('admin.calendarReminder.fieldTimeRange', 'טווח שעות')}
-            />
-            <View style={[styles.rangeChip, { backgroundColor: rangeDurationMinutes > 0 ? `${primary}12` : '#FFF1F0', borderColor: rangeDurationMinutes > 0 ? `${primary}30` : `${UI.danger}40` }]}>
-              <Ionicons
-                name={rangeDurationMinutes > 0 ? 'time-outline' : 'warning-outline'}
-                size={15}
-                color={rangeDurationMinutes > 0 ? primary : UI.danger}
-              />
-              <Text style={[styles.rangeChipText, { color: rangeDurationMinutes > 0 ? primary : UI.danger }]}>
-                {rangeDurationMinutes > 0
-                  ? `${formatTimeLabel(startTimeDate)} – ${formatTimeLabel(endTimeDate)} · ${rangeDurationMinutes} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`
-                  : tHe('admin.calendarReminder.rangeInvalidHint', 'שעת הסיום אחרי שעת ההתחלה')}
-              </Text>
+            <CardSectionTitleCentered label={tHe('admin.calendarReminder.fieldTimeRange', 'טווח שעות')} />
+
+            {/* שני חלונות: התחלה תמיד משמאל, סיום מימין (ב־RTL סדר DOM הפוך) */}
+            <View style={styles.timeRangeColumnsRow}>
+              {I18nManager.isRTL ? (
+                <>
+                  <View style={styles.timeRangeColumn}>
+                    <TouchableOpacity
+                      style={styles.timeWindowCard}
+                      onPress={() => setTimePickerWhich('end')}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.timeRowInner}>
+                        <Ionicons name="chevron-down" size={18} color={UI.textTertiary} style={styles.timeRowChevron} />
+                        <View style={styles.timeRowTexts}>
+                          <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeEnd', 'סיום')}</Text>
+                          <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(endTimeDate)}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.timeRangeArrowSep}>
+                    <Ionicons
+                      name="arrow-back"
+                      size={16}
+                      color={UI.textTertiary}
+                    />
+                  </View>
+
+                  <View style={styles.timeRangeColumn}>
+                    <TouchableOpacity
+                      style={styles.timeWindowCard}
+                      onPress={() => setTimePickerWhich('start')}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.timeRowInner}>
+                        <Ionicons name="chevron-down" size={18} color={UI.textTertiary} style={styles.timeRowChevron} />
+                        <View style={styles.timeRowTexts}>
+                          <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeStart', 'התחלה')}</Text>
+                          <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(startTimeDate)}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.timeRangeColumn}>
+                    <TouchableOpacity
+                      style={styles.timeWindowCard}
+                      onPress={() => setTimePickerWhich('start')}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.timeRowInner}>
+                        <Ionicons name="chevron-down" size={18} color={UI.textTertiary} style={styles.timeRowChevron} />
+                        <View style={styles.timeRowTexts}>
+                          <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeStart', 'התחלה')}</Text>
+                          <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(startTimeDate)}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.timeRangeArrowSep}>
+                    <Ionicons name="arrow-forward" size={16} color={UI.textTertiary} />
+                  </View>
+
+                  <View style={styles.timeRangeColumn}>
+                    <TouchableOpacity
+                      style={styles.timeWindowCard}
+                      onPress={() => setTimePickerWhich('end')}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.timeRowInner}>
+                        <Ionicons name="chevron-down" size={18} color={UI.textTertiary} style={styles.timeRowChevron} />
+                        <View style={styles.timeRowTexts}>
+                          <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeEnd', 'סיום')}</Text>
+                          <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(endTimeDate)}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
 
-            <View style={styles.timeRowsGroup}>
-              <TouchableOpacity
-                style={styles.timeRow}
-                onPress={() => setTimePickerWhich('start')}
-                activeOpacity={0.88}
-                accessibilityRole="button"
+            {/* סיכום טווח — מתחת לחלונות, ממורכז אופקית; תוכן מיושר לשמאל */}
+            <View style={styles.rangeChipOuter}>
+              <View
+                style={[
+                  styles.rangeChip,
+                  { backgroundColor: rangeDurationMinutes > 0 ? `${primary}12` : '#FFF1F0', borderColor: rangeDurationMinutes > 0 ? `${primary}30` : `${UI.danger}40` },
+                ]}
               >
-                <View style={styles.timeRowInner}>
-                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                    <Ionicons name="play-outline" size={16} color={primary} />
-                  </View>
-                  <View style={styles.timeRowTexts}>
-                    <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeStart', 'התחלה')}</Text>
-                    <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(startTimeDate)}</Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={18} color={UI.textTertiary} />
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.timeRowDivider} />
-
-              <TouchableOpacity
-                style={styles.timeRow}
-                onPress={() => setTimePickerWhich('end')}
-                activeOpacity={0.88}
-                accessibilityRole="button"
-              >
-                <View style={styles.timeRowInner}>
-                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                    <Ionicons name="stop-outline" size={16} color={primary} />
-                  </View>
-                  <View style={styles.timeRowTexts}>
-                    <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeEnd', 'סיום')}</Text>
-                    <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(endTimeDate)}</Text>
-                  </View>
-                  <Ionicons name="chevron-down" size={18} color={UI.textTertiary} />
-                </View>
-              </TouchableOpacity>
+                {rangeDurationMinutes <= 0 ? (
+                  <Ionicons name="warning-outline" size={15} color={UI.danger} style={styles.rangeChipWarnIcon} />
+                ) : null}
+                <Text style={[styles.rangeChipText, { color: rangeDurationMinutes > 0 ? primary : UI.danger }]}>
+                  {rangeDurationMinutes > 0
+                    ? `${formatTimeLabel(startTimeDate)} – ${formatTimeLabel(endTimeDate)} · ${rangeDurationMinutes} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`
+                    : tHe('admin.calendarReminder.rangeInvalidHint', 'שעת הסיום אחרי שעת ההתחלה')}
+                </Text>
+              </View>
             </View>
           </View>
 
           {/* Color card */}
           <View style={styles.card}>
-            <CardSectionHeader
-              icon="color-palette-outline"
-              primary={primary}
-              label={tHe('admin.calendarReminder.fieldColor', 'צבע')}
-            />
+            <CardSectionTitleCentered label={tHe('admin.calendarReminder.fieldColor', 'צבע')} />
             <View style={styles.colorRow}>
               {CALENDAR_REMINDER_COLOR_KEYS.map((k) => {
                 const pal = reminderPalette(k);
@@ -799,8 +784,8 @@ export default function CalendarReminderEditorModal({
           </View>
         </BottomSheetScrollView>
 
-        {/* ── time slot picker overlay (inside sheet) ── */}
-        <TimeSlotPickerSheet
+        {/* ── wheel time picker (same UX as business-hours TimePicker) ── */}
+        <AdminWheelTimePickerSheet
           visible={timePickerWhich !== null}
           title={
             timePickerWhich === 'end'
@@ -808,16 +793,20 @@ export default function CalendarReminderEditorModal({
               : tHe('admin.calendarReminder.pickStartTime', 'בחירת שעת התחלה')
           }
           options={timeSlotOptions}
-          selectedHHMM={timePickerWhich === 'end' ? dateToHHMM(endTimeDate) : dateToHHMM(startTimeDate)}
-          primary={primary}
-          formatOptionLabel={formatSlotLabel}
-          onSelect={(hhmm) => {
-            const d = timeOnDate(hhmm, reminderDay);
-            if (timePickerWhich === 'start') onStartTimeChange(d);
+          value={
+            timePickerWhich === 'end'
+              ? dateToHHMM(endTimeDate).slice(0, 5)
+              : dateToHHMM(startTimeDate).slice(0, 5)
+          }
+          useAmPm={useAmPmWheel}
+          primaryColor={primary}
+          onConfirm={(hhmm) => {
+            const d = timeOnDate(hhmm, reminderDayRef.current);
+            if (timePickerWhichRef.current === 'start') onStartTimeChange(d);
             else onEndTimeChange(d);
+            setTimePickerWhich(null);
           }}
           onClose={() => setTimePickerWhich(null)}
-          insetBottom={insets.bottom}
         />
       </View>
     </BottomSheetModal>
@@ -909,30 +898,19 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
-  cardSectionRow: {
-    direction: 'ltr',
-    flexDirection: 'row',
+  cardSectionTitleCenterWrap: {
+    alignSelf: 'stretch',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
-    width: '100%',
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  cardSectionLabelWrap: {
-    flex: 1,
-  },
-  cardSectionLabel: {
+  cardSectionTitleCenter: {
     fontSize: 15,
     fontWeight: '700',
     color: UI.text,
-    textAlign: 'right',
+    textAlign: 'center',
     letterSpacing: -0.2,
-  },
-  cardIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'stretch',
   },
 
   textField: {
@@ -1000,44 +978,71 @@ const styles = StyleSheet.create({
   fieldRtl: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
 
   // ── time range ─────────────────────────────────────────────────────────────
-  rangeChip: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
+  rangeChipOuter: {
     alignSelf: 'stretch',
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  rangeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    alignSelf: 'center',
+    maxWidth: '100%',
+    direction: 'ltr',
+  },
+  rangeChipWarnIcon: {
+    flexShrink: 0,
   },
   rangeChipText: {
     fontSize: 13,
     fontWeight: '600',
-    textAlign: 'right',
-    flex: 1,
+    textAlign: 'left',
     writingDirection: 'ltr',
+    flexShrink: 1,
   },
-  timeRowsGroup: {
+  timeRangeColumnsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  timeRangeColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  timeRangeArrowSep: {
+    width: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 22,
+  },
+  timeWindowCard: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: UI.borderSoft,
     backgroundColor: UI.fieldBg,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
+      android: { elevation: 2 },
+    }),
   },
-  timeRow: {},
   timeRowInner: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 10,
   },
-  timeBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
+  timeRowChevron: {
+    flexShrink: 0,
   },
   timeRowTexts: { flex: 1, alignItems: 'flex-end' },
   timeRowLabel: {
@@ -1049,23 +1054,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   timeRowValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     writingDirection: 'ltr',
     textAlign: 'right',
   },
-  timeRowDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: UI.border,
-    marginHorizontal: 14,
-  },
 
   // ── color picker ──────────────────────────────────────────────────────────
   colorRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
+    direction: 'ltr',
     flexWrap: 'wrap',
     gap: 12,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'stretch',
     width: '100%',
   },
   colorDot: {
@@ -1114,58 +1117,4 @@ const styles = StyleSheet.create({
     color: UI.danger,
   },
 
-  // ── time slot picker sheet ────────────────────────────────────────────────
-  timeSheetHost: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 200,
-  },
-  timeSheetBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.40)',
-  },
-  timeSheetCard: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: UI.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '60%',
-    paddingTop: 12,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.14, shadowRadius: 16 },
-      android: { elevation: 20 },
-    }),
-  },
-  timeSheetDragHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#C7C7CC',
-    alignSelf: 'center',
-    marginBottom: 10,
-  },
-  timeSheetTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: UI.text,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    textAlign: 'right',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: UI.border,
-  },
-  timeSheetList: { maxHeight: 320 },
-  timeSheetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: UI.border,
-  },
-  timeSheetRowRtl: { flexDirection: 'row-reverse' },
-  timeSheetRowText: { fontSize: 16, fontWeight: '600', color: UI.text },
 });

@@ -1501,6 +1501,14 @@
       "saved": "Constraints saved successfully",
       "saveFailed": "Failed to save constraints",
       "constraintConflictsWithAppointments": "There are already client appointments in this time range. Cancel or move those appointments first, then you can add this block.",
+      "constraintConflictSheetTitle": "Client appointments overlap this block",
+      "constraintConflictSheetBody": "We found {{count}} booked client appointment(s) in the time you selected.",
+      "constraintConflictSheetHint": "If you confirm, those appointments will be removed from your calendar. Each client with a phone number on file will get an in-app notification and an SMS that their appointment was cancelled.",
+      "constraintConflictCancel": "Go back",
+      "constraintConflictConfirm": "Confirm and cancel appointments",
+      "constraintCancelAppointmentsFailed": "Could not cancel all overlapping appointments. Please try again.",
+      "appointmentCancelledByConstraintTitle": "Appointment cancelled",
+      "appointmentCancelledByConstraintBody": "{{service}} · {{date}} · {{time}} — cancelled because the schedule was updated at the business.",
       "optionalReason": "Reason (optional)",
       "reasonExamples": "e.g., vacation, errands, temporary closure",
       "successAnimatedHeadline": "Constraint saved",
@@ -1511,14 +1519,18 @@
       "whatToBlock": "What do you want to block?",
       "modeHint": {
         "hours": "Block a time window on one day",
-        "singleDay": "Closed all day — pick one date",
-        "multiDays": "Pick start and end — every day in between is closed"
+        "singleDay": "Closed all day\nSingle date",
+        "multiDays": "Pick start and end dates\nAll days between are closed"
       },
       "tapToEditHours": "Tap to set hours",
       "rangeHelp": "First tap: start date. Second tap: end date.",
       "reasonHelper": "For your reference only — helps you remember why this block exists.",
       "openConstraintsManager": "Manage constraints",
-      "emptyListHint": "Saved blocks appear here so you can remove them anytime."
+      "emptyListHint": "Saved blocks appear here so you can remove them anytime.",
+      "deleteConstraintTitle": "Delete this block?",
+      "deleteConstraintMessage": "It will be removed from the calendar. This cannot be undone.",
+      "deleteConstraintConfirm": "Delete",
+      "deleteConstraintFailed": "Could not delete. Please try again."
     },
     "hours": {
       "title": "Working hours",

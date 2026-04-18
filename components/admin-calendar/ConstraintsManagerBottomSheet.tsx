@@ -9,6 +9,8 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  I18nManager,
   Platform,
   StyleSheet,
   Text,
@@ -23,11 +25,17 @@ import {
 } from '@gorhom/bottom-sheet';
 import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ban, CalendarOff, Pencil, Plus } from 'lucide-react-native';
-import { businessConstraintsApi } from '@/lib/api/businessConstraints';
+import { useTranslation } from 'react-i18next';
+import { CalendarOff, Pencil, Plus, Trash2 } from 'lucide-react-native';
+import {
+  businessConstraintsApi,
+  isConstraintPastAutoDeleteWindow,
+} from '@/lib/api/businessConstraints';
 import type { BusinessConstraint } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import dayjs from 'dayjs';
+import { useColors } from '@/src/theme/ThemeProvider';
+import { getPrimaryAsForegroundOnLightSurface } from '@/lib/colorContrast';
 
 // ─── design tokens ────────────────────────────────────────────────────────────
 
@@ -57,6 +65,8 @@ interface Props {
   onDismiss: () => void;
   onAddConstraint: () => void;
   onEditConstraint: (constraint: BusinessConstraint) => void;
+  /** After delete — refresh calendar / marks (same shape as other constraint flows). */
+  onConstraintsChanged?: (payload?: { dateMin: string; dateMax: string }) => void;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -131,44 +141,69 @@ function EmptyState({
 
 function ConstraintCard({
   constraint,
-  primaryColor,
   onEdit,
+  onRequestDelete,
 }: {
   constraint: BusinessConstraint;
-  primaryColor: string;
   onEdit: (c: BusinessConstraint) => void;
+  onRequestDelete: (c: BusinessConstraint) => void;
 }) {
+  const { t } = useTranslation();
+  const rtl = I18nManager.isRTL;
   const isFullDay =
     sliceHHMM(constraint.start_time) === '00:00' &&
     (sliceHHMM(constraint.end_time) === '23:59' || sliceHHMM(constraint.end_time) === '23:45');
 
   return (
-    <TouchableOpacity
-      style={styles.constraintCard}
-      onPress={() => onEdit(constraint)}
-      activeOpacity={0.78}
-    >
-      <View style={[styles.constraintIconWrap, { backgroundColor: `${primaryColor}12` }]}>
-        <Ban size={18} color={primaryColor} strokeWidth={2} />
-      </View>
-      <View style={styles.constraintTextCol}>
-        {isFullDay ? (
-          <Text style={[styles.constraintTime, { color: UI.text }]}>חסימה כל היום</Text>
-        ) : (
-          <Text style={[styles.constraintTime, { writingDirection: 'ltr', textAlign: 'right' }]}>
-            {sliceHHMM(constraint.start_time)} – {sliceHHMM(constraint.end_time)}
-          </Text>
-        )}
-        {constraint.reason ? (
-          <Text style={styles.constraintReason} numberOfLines={1}>
-            {constraint.reason}
-          </Text>
-        ) : null}
-      </View>
-      <View style={styles.editBadge}>
+    <View style={styles.constraintCard}>
+      <TouchableOpacity
+        style={styles.deleteIconWrap}
+        onPress={() => onRequestDelete(constraint)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={t('admin.hoursAdmin.deleteConstraintA11y', 'מחיקת אילוץ')}
+      >
+        <Trash2 size={18} color="#FFFFFF" strokeWidth={2.2} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.constraintCardLead}
+        onPress={() => onEdit(constraint)}
+        activeOpacity={0.78}
+      >
+        <View style={[styles.constraintTextCol, rtl && styles.constraintTextColRtl]}>
+          {isFullDay ? (
+            <Text style={[styles.constraintTime, { color: UI.text, textAlign: rtl ? 'right' : 'left' }]}>
+              חסימה כל היום
+            </Text>
+          ) : (
+            <Text
+              style={[
+                styles.constraintTime,
+                { writingDirection: 'ltr', textAlign: rtl ? 'right' : 'left' },
+              ]}
+            >
+              {sliceHHMM(constraint.start_time)} – {sliceHHMM(constraint.end_time)}
+            </Text>
+          )}
+          {constraint.reason ? (
+            <Text
+              style={[styles.constraintReason, { textAlign: rtl ? 'right' : 'left' }]}
+              numberOfLines={1}
+            >
+              {constraint.reason}
+            </Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.editBadge}
+        onPress={() => onEdit(constraint)}
+        activeOpacity={0.78}
+        accessibilityRole="button"
+      >
         <Pencil size={14} color={UI.textSecondary} strokeWidth={2} />
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -176,9 +211,15 @@ function ConstraintCard({
 
 export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetHandle, Props>(
   function ConstraintsManagerBottomSheet(
-    { primaryColor, onDismiss, onAddConstraint, onEditConstraint },
+    { primaryColor, onDismiss, onAddConstraint, onEditConstraint, onConstraintsChanged },
     ref,
   ) {
+    const { t } = useTranslation();
+    const colors = useColors();
+    const addMoreOnSurface = useMemo(
+      () => getPrimaryAsForegroundOnLightSurface(primaryColor, colors.text),
+      [primaryColor, colors.text],
+    );
     const sheetRef = useRef<BottomSheetModal>(null);
     const fetchDeferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const insets = useSafeAreaInsets();
@@ -191,20 +232,44 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
       if (!user?.id) return;
       setLoading(true);
       try {
-        const today = dayjs().format('YYYY-MM-DD');
+        /** Look back so rows that already ended +24h can be loaded and purged from DB. */
+        const lookback = dayjs().subtract(120, 'day').format('YYYY-MM-DD');
         const futureLimit = dayjs().add(6, 'month').format('YYYY-MM-DD');
         const data = await businessConstraintsApi.getPersonalConstraintsForBarberInRange(
-          today,
+          lookback,
           futureLimit,
           user.id,
         );
-        setConstraints(data);
+
+        const stale = data.filter((c) => isConstraintPastAutoDeleteWindow(c));
+        let deletedOkIds: string[] = [];
+        if (stale.length > 0) {
+          const outcomes = await Promise.all(stale.map((c) => businessConstraintsApi.deleteConstraint(c.id)));
+          deletedOkIds = stale.filter((c, i) => outcomes[i]).map((c) => c.id);
+          if (deletedOkIds.length > 0) {
+            const dates = stale
+              .filter((c) => deletedOkIds.includes(c.id))
+              .map((c) => c.date)
+              .sort();
+            onConstraintsChanged?.({
+              dateMin: dates[0]!,
+              dateMax: dates[dates.length - 1]!,
+            });
+          }
+        }
+
+        setConstraints(
+          data.filter((c) => {
+            if (!isConstraintPastAutoDeleteWindow(c)) return true;
+            return !deletedOkIds.includes(c.id);
+          }),
+        );
       } catch (e) {
         console.error('[ConstraintsManager] fetch error', e);
       } finally {
         setLoading(false);
       }
-    }, [user?.id]);
+    }, [user?.id, onConstraintsChanged]);
 
     useEffect(() => {
       return () => {
@@ -258,6 +323,44 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
     const grouped = useMemo(() => groupByDate(constraints), [constraints]);
     const isEmpty = !loading && constraints.length === 0;
 
+    const handleRequestDeleteConstraint = useCallback(
+      (c: BusinessConstraint) => {
+        Alert.alert(
+          t('admin.hoursAdmin.deleteConstraintTitle', 'למחוק את האילוץ?'),
+          t('admin.hoursAdmin.deleteConstraintMessage', 'החסימה תוסר מהיומן. לא ניתן לשחזר.'),
+          [
+            { text: t('cancel', 'ביטול'), style: 'cancel' },
+            {
+              text: t('admin.hoursAdmin.deleteConstraintConfirm', 'מחק'),
+              style: 'destructive',
+              onPress: () => {
+                void (async () => {
+                  try {
+                    const ok = await businessConstraintsApi.deleteConstraint(c.id);
+                    if (ok) {
+                      setConstraints((prev) => prev.filter((x) => x.id !== c.id));
+                      onConstraintsChanged?.({ dateMin: c.date, dateMax: c.date });
+                    } else {
+                      Alert.alert(
+                        t('error.generic', 'שגיאה'),
+                        t('admin.hoursAdmin.deleteConstraintFailed', 'לא ניתן למחוק. נסו שוב.'),
+                      );
+                    }
+                  } catch {
+                    Alert.alert(
+                      t('error.generic', 'שגיאה'),
+                      t('admin.hoursAdmin.deleteConstraintFailed', 'לא ניתן למחוק. נסו שוב.'),
+                    );
+                  }
+                })();
+              },
+            },
+          ],
+        );
+      },
+      [t, onConstraintsChanged],
+    );
+
     let cardIdx = 0;
 
     return (
@@ -304,8 +407,8 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
               {grouped.map(({ date, items }) => (
                 <View key={date} style={styles.dateGroup}>
                   <View style={styles.dateGroupHeader}>
-                    <Text style={styles.dateGroupDay}>{getDayLabel(date)}</Text>
                     <Text style={styles.dateGroupDate}>{formatDate(date)}</Text>
+                    <Text style={styles.dateGroupDay}>{getDayLabel(date)}</Text>
                   </View>
 
                   {items.map((c) => {
@@ -314,8 +417,8 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
                       <ConstraintCard
                         key={`${c.id}-${idx}`}
                         constraint={c}
-                        primaryColor={primaryColor}
                         onEdit={onEditConstraint}
+                        onRequestDelete={handleRequestDeleteConstraint}
                       />
                     );
                   })}
@@ -323,12 +426,12 @@ export const ConstraintsManagerBottomSheet = forwardRef<ConstraintsManagerSheetH
               ))}
 
               <TouchableOpacity
-                style={[styles.addMoreBtn, { borderColor: `${primaryColor}50` }]}
+                style={[styles.addMoreBtn, { borderColor: `${addMoreOnSurface}99` }]}
                 onPress={onAddConstraint}
                 activeOpacity={0.8}
               >
-                <Plus size={18} color={primaryColor} strokeWidth={2.5} />
-                <Text style={[styles.addMoreText, { color: primaryColor }]}>הוסף אילוץ נוסף</Text>
+                <Plus size={18} color={addMoreOnSurface} strokeWidth={2.5} />
+                <Text style={[styles.addMoreText, { color: addMoreOnSurface }]}>הוסף אילוץ נוסף</Text>
               </TouchableOpacity>
             </BottomSheetScrollView>
           )}
@@ -470,18 +573,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: UI.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   dateGroupDate: {
     fontSize: 13,
     fontWeight: '500',
     color: UI.textSecondary,
-    textAlign: 'left',
+    textAlign: 'right',
     writingDirection: 'ltr',
   },
   constraintCard: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: UI.surface,
     borderRadius: 16,
     padding: 14,
@@ -494,30 +598,41 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  constraintIconWrap: {
+  /** Time/reason tap opens edit; trash and pencil are separate targets. */
+  constraintCardLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 2,
+  },
+  deleteIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    backgroundColor: '#DC2626',
   },
   constraintTextCol: {
-    flex: 1,
-    alignItems: 'flex-end',
+    flexShrink: 1,
+    alignItems: 'flex-start',
     gap: 3,
+    maxWidth: '100%',
+  },
+  constraintTextColRtl: {
+    alignItems: 'flex-end',
   },
   constraintTime: {
     fontSize: 16,
     fontWeight: '700',
     color: UI.text,
-    textAlign: 'right',
   },
   constraintReason: {
     fontSize: 12,
     fontWeight: '500',
     color: UI.textSecondary,
-    textAlign: 'right',
   },
   editBadge: {
     width: 32,

@@ -59,7 +59,6 @@ import {
 import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
 import { ADMIN_CALENDAR_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
-import ConstraintEditModal from '@/components/ConstraintEditModal';
 import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
@@ -1064,6 +1063,20 @@ export default function AdminAppointmentsScreen() {
   const [showConstraintsManager, setShowConstraintsManager] = useState(false);
   const [constraintToEdit, setConstraintToEdit] = useState<BusinessConstraint | null>(null);
 
+  const constraintsSheetOpen = useMemo(
+    () => showConstraintsModal || constraintToEdit !== null,
+    [showConstraintsModal, constraintToEdit],
+  );
+
+  const closeConstraintsSheet = useCallback(() => {
+    setShowConstraintsModal(false);
+    setConstraintToEdit(null);
+  }, []);
+
+  const openAddConstraintsSheet = useCallback(() => {
+    setConstraintToEdit(null);
+    setShowConstraintsModal(true);
+  }, []);
 
   const [reminderEditorEditing, setReminderEditorEditing] = useState<CalendarReminder | null>(null);
 
@@ -2335,13 +2348,13 @@ export default function AdminAppointmentsScreen() {
 
   useEffect(() => {
     if (
-      (!showCalendarFabSheet && !showConstraintsModal && !showConstraintsManager && !showReminderEditor && !constraintToEdit) ||
+      (!showCalendarFabSheet && !constraintsSheetOpen && !showConstraintsManager && !showReminderEditor) ||
       Platform.OS !== 'android'
     )
       return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (constraintToEdit) {
-        setConstraintToEdit(null);
+      if (constraintsSheetOpen) {
+        closeConstraintsSheet();
         return true;
       }
       if (showReminderEditor) {
@@ -2354,27 +2367,22 @@ export default function AdminAppointmentsScreen() {
         return true;
       }
       closeReminderModal();
-      setShowConstraintsModal(false);
       return true;
     });
     return () => sub.remove();
   }, [
     showCalendarFabSheet,
-    showConstraintsModal,
+    constraintsSheetOpen,
+    closeConstraintsSheet,
     showConstraintsManager,
     showReminderEditor,
-    constraintToEdit,
     closeReminderModal,
     closeReminderEditor,
   ]);
 
   const reminderFabTabPress = useCallback(() => {
-    if (constraintToEdit) {
-      setConstraintToEdit(null);
-      return;
-    }
-    if (showConstraintsModal) {
-      setShowConstraintsModal(false);
+    if (constraintsSheetOpen) {
+      closeConstraintsSheet();
       return;
     }
     if (showConstraintsManager) {
@@ -2396,10 +2404,10 @@ export default function AdminAppointmentsScreen() {
     }
   }, [
     showCalendarFabSheet,
-    showConstraintsModal,
+    constraintsSheetOpen,
+    closeConstraintsSheet,
     showConstraintsManager,
     showReminderEditor,
-    constraintToEdit,
     closeReminderModal,
     closeReminderEditor,
   ]);
@@ -2408,19 +2416,17 @@ export default function AdminAppointmentsScreen() {
     setReminderFabRegistration({
       isOpen:
         showCalendarFabSheet ||
-        showConstraintsModal ||
+        constraintsSheetOpen ||
         showConstraintsManager ||
-        showReminderEditor ||
-        !!constraintToEdit,
+        showReminderEditor,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
   }, [
     showCalendarFabSheet,
-    showConstraintsModal,
+    constraintsSheetOpen,
     showConstraintsManager,
     showReminderEditor,
-    constraintToEdit,
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
@@ -3248,8 +3254,9 @@ export default function AdminAppointmentsScreen() {
         ref={constraintsManagerSheetRef}
         primaryColor={calendarPrimary}
         onDismiss={() => setShowConstraintsManager(false)}
-        onAddConstraint={() => setShowConstraintsModal(true)}
+        onAddConstraint={openAddConstraintsSheet}
         onEditConstraint={(c) => setConstraintToEdit(c)}
+        onConstraintsChanged={onCalendarConstraintsChanged}
       />
 
       <CalendarReminderEditorModal
@@ -3261,16 +3268,10 @@ export default function AdminAppointmentsScreen() {
       />
 
       <BusinessConstraintsModal
-        visible={showConstraintsModal}
-        onClose={() => setShowConstraintsModal(false)}
+        visible={constraintsSheetOpen}
+        editingConstraint={constraintToEdit}
+        onClose={closeConstraintsSheet}
         onConstraintsChanged={onCalendarConstraintsChanged}
-      />
-
-      <ConstraintEditModal
-        visible={constraintToEdit !== null}
-        constraint={constraintToEdit}
-        onClose={() => setConstraintToEdit(null)}
-        onSaved={onCalendarConstraintsChanged}
       />
     </View>
     </View>

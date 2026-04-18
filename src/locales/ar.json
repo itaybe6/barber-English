@@ -1630,6 +1630,14 @@
       "saved": "تم حفظ القيود بنجاح",
       "saveFailed": "فشل في حفظ القيود",
       "constraintConflictsWithAppointments": "توجد بالفعل مواعيد للعملاء في هذا النطاق الزمني. قم بإلغاء هذه المواعيد أو نقلها أولاً، ثم يمكنك إضافة هذه المجموعة.",
+      "constraintConflictSheetTitle": "توجد مواعيد عملاء تتداخل مع هذا الحظر",
+      "constraintConflictSheetBody": "وجدنا {{count}} مواعيد محجوزة للعملاء في الوقت الذي اخترته.",
+      "constraintConflictSheetHint": "إذا أكدت، ستُزال هذه المواعيد من التقويم. سيصل لكل عميل رقم هاتفه مسجل في النظام إشعار في التطبيق ورسالة SMS بإلغاء الموعد.",
+      "constraintConflictCancel": "رجوع",
+      "constraintConflictConfirm": "تأكيد وإلغاء المواعيد",
+      "constraintCancelAppointmentsFailed": "تعذر إلغاء جميع المواعيد. حاول مرة أخرى.",
+      "appointmentCancelledByConstraintTitle": "تم إلغاء الموعد",
+      "appointmentCancelledByConstraintBody": "{{service}} · {{date}} · {{time}} — تم الإلغاء بسبب تحديث الجدول في النشاط التجاري.",
       "optionalReason": "السبب (اختياري)",
       "reasonExamples": "على سبيل المثال، الإجازة، المهمات، الإغلاق المؤقت",
       "successAnimatedHeadline": "تم حفظ القيد",
@@ -1640,14 +1648,18 @@
       "whatToBlock": "ماذا تريد حظره؟",
       "modeHint": {
         "hours": "حظر نافذة زمنية في يوم واحد",
-        "singleDay": "مغلق طوال اليوم - اختر تاريخًا واحدًا",
-        "multiDays": "اختر البداية والنهاية - كل يوم بينهما مغلق"
+        "singleDay": "مغلق طوال اليوم\nتاريخ واحد",
+        "multiDays": "تاريخان في التقويم\nكل ما بينهما مغلق"
       },
       "tapToEditHours": "انقر لتعيين ساعات العمل",
       "rangeHelp": "النقرة الأولى: تاريخ البدء. النقر الثاني: تاريخ الانتهاء.",
       "reasonHelper": "للرجوع إليها فقط - تساعدك على تذكر سبب وجود هذه الكتلة.",
       "openConstraintsManager": "إدارة القيود",
-      "emptyListHint": "تظهر الكتل المحفوظة هنا حتى تتمكن من إزالتها في أي وقت."
+      "emptyListHint": "تظهر الكتل المحفوظة هنا حتى تتمكن من إزالتها في أي وقت.",
+      "deleteConstraintTitle": "حذف هذا القيد؟",
+      "deleteConstraintMessage": "سيتم إزالته من التقويم. لا يمكن التراجع.",
+      "deleteConstraintConfirm": "حذف",
+      "deleteConstraintFailed": "تعذر الحذف. حاول مرة أخرى."
     },
     "hours": {
       "title": "ساعات العمل",

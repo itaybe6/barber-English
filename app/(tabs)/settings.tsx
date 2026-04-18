@@ -304,6 +304,20 @@ export default function SettingsScreen() {
   const [homeHeaderTitleFontDraft, setHomeHeaderTitleFontDraft] = useState<'system' | HomeHeaderGoogleFontId>('system');
   /** Preview + font strip + save: collapsed by default to save vertical space. */
   const [homeHeaderNoLogoFontEditorOpen, setHomeHeaderNoLogoFontEditorOpen] = useState(false);
+  /** Design tab: home hero + home logo pickers stay compact until expanded. */
+  const [designHomeHeroExpanded, setDesignHomeHeroExpanded] = useState(false);
+  const [designHomeLogoExpanded, setDesignHomeLogoExpanded] = useState(false);
+  const designHomeHeroSummaryLabel = useMemo(() => {
+    const mode = normalizeHomeHeroMode(profile?.home_hero_mode);
+    return mode === 'marquee'
+      ? t('settings.profile.homeHeroModeMarquee', 'Animated photos')
+      : t('settings.profile.homeHeroModeSingle', 'Image or video');
+  }, [profile?.home_hero_mode, t]);
+  const designHomeLogoSummaryLabel = useMemo(() => {
+    return profile?.home_header_show_logo === false
+      ? t('settings.profile.homeHeaderModeTextLabel', 'English name only')
+      : t('settings.profile.homeHeaderModeLogoLabel', 'Logo image');
+  }, [profile?.home_header_show_logo, t]);
   const [profileAddress, setProfileAddress] = useState('');
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
@@ -845,9 +859,55 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setRequireClientApproval(isClientApprovalRequired(updated));
+      if (!next) {
+        const bulkOk = await usersApi.approveAllUnapprovedClients();
+        if (!bulkOk) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'settings.policies.requireClientApprovalBulkApproveFailed',
+              'The setting was saved, but some clients could not be auto-approved. Try again or approve them manually.',
+            ),
+          );
+        }
+      }
     } finally {
       setIsSavingProfile(false);
     }
+  };
+
+  /** When turning off client approval: confirm if anyone is still in the pending-approval queue. */
+  const onRequireClientApprovalValueChange = (next: boolean) => {
+    if (!canSeeAddEmployee) return;
+    if (next) {
+      void handleRequireClientApprovalToggle(true);
+      return;
+    }
+    void (async () => {
+      const pending = await usersApi.getPendingClients();
+      if (pending.length === 0) {
+        void handleRequireClientApprovalToggle(false);
+        return;
+      }
+      Alert.alert(
+        t('settings.policies.requireClientApprovalTurnOffPendingTitle', 'Clients still waiting'),
+        t('settings.policies.requireClientApprovalTurnOffPendingMessage', {
+          count: pending.length,
+          defaultValue:
+            'You still have clients waiting for approval. Turning this off will approve all of them automatically. Continue?',
+        }),
+        [
+          { text: t('cancel', 'Cancel'), style: 'cancel' },
+          {
+            text: t(
+              'settings.policies.requireClientApprovalTurnOffPendingConfirmBtn',
+              'Turn off and approve all',
+            ),
+            onPress: () => void handleRequireClientApprovalToggle(false),
+          },
+        ],
+      );
+    })();
   };
 
   const handleHomeFixedMessageToggle = async (next: boolean) => {
@@ -2120,6 +2180,26 @@ export default function SettingsScreen() {
     setExpandedServiceId(prev => (prev === id ? null : id));
   }, [expandedServiceId]);
 
+  const toggleDesignHomeHeroExpanded = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 240,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+    });
+    setDesignHomeHeroExpanded((v) => !v);
+  }, []);
+
+  const toggleDesignHomeLogoExpanded = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 240,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+    });
+    setDesignHomeLogoExpanded((v) => !v);
+  }, []);
+
   const dismissRecurringHubAndGoToAdd = useCallback(() => {
     pendingNavigateToAddRecurringRef.current = true;
     setShowManageRecurringModal(false);
@@ -2542,7 +2622,7 @@ export default function SettingsScreen() {
                   </View>
                   <Switch
                     value={requireClientApproval}
-                    onValueChange={handleRequireClientApprovalToggle}
+                    onValueChange={onRequireClientApprovalValueChange}
                     disabled={isSavingProfile}
                     trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
                     thumbColor={
@@ -3292,126 +3372,185 @@ export default function SettingsScreen() {
                 />
               </View>
               <View style={styles.settingDivider} />
-              <View style={styles.homeHeroModeBlock}>
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.profile.homeHeroModeTitle', 'Home top background')}
-                </Text>
-                <View style={styles.homeHeroModeCardsRow}>
-                  {([
-                    {
-                      mode: 'marquee',
-                      icon: 'images-outline',
-                      label: t('settings.profile.homeHeroModeMarquee', 'Animated photos'),
-                      sub: t('settings.profile.homeHeroModeMarqueeSub', 'Scrolling grid of photos'),
-                    },
-                    {
-                      mode: 'single_fullbleed',
-                      icon: 'film-outline',
-                      label: t('settings.profile.homeHeroModeSingle', 'Image or video'),
-                      sub: t('settings.profile.homeHeroModeSingleSub', 'One full-screen file'),
-                    },
-                  ] as const).map(({ mode, icon, label, sub }) => {
-                    const selected = normalizeHomeHeroMode(profile?.home_hero_mode) === mode;
-                    return (
-                      <TouchableOpacity
-                        key={mode}
-                        activeOpacity={0.82}
-                        disabled={isSavingProfile}
-                        style={[
-                          styles.homeHeroModeCard,
-                          selected
-                            ? {
-                                backgroundColor: `${businessColors.primary}12`,
-                                borderColor: businessColors.primary,
-                                borderWidth: 2,
-                              }
-                            : {
-                                backgroundColor: '#FFFFFF',
-                                borderColor: 'rgba(60,60,67,0.16)',
-                                borderWidth: StyleSheet.hairlineWidth,
-                              },
-                        ]}
-                        onPress={() => void handleHomeHeroModeSelect(mode)}
-                      >
-                        <View
-                          style={[
-                            styles.homeHeroModeCardIcon,
-                            {
-                              backgroundColor: selected
-                                ? `${businessColors.primary}20`
-                                : 'rgba(60,60,67,0.06)',
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name={icon as any}
-                            size={22}
-                            color={selected ? businessColors.primary : Colors.subtext}
-                          />
-                        </View>
-                        <Text
-                          style={[
-                            styles.homeHeroModeCardLabel,
-                            selected && { color: businessColors.primary },
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {label}
-                        </Text>
-                        <Text style={styles.homeHeroModeCardSub} numberOfLines={2}>
-                          {sub}
-                        </Text>
-                        {selected && (
-                          <View
-                            style={[
-                              styles.homeHeroModeCardCheck,
-                              { backgroundColor: businessColors.primary },
-                            ]}
-                          >
-                            <Ionicons name="checkmark" size={11} color="#fff" />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+              <TouchableOpacity
+                style={styles.settingItemLTR}
+                onPress={toggleDesignHomeHeroExpanded}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: designHomeHeroExpanded }}
+                accessibilityLabel={`${t('settings.profile.homeHeroModeTitle', 'Home top background')}. ${designHomeHeroSummaryLabel}`}
+              >
+                <View style={styles.settingIconLTR}>
+                  <Ionicons name="images-outline" size={20} color={primaryOnSurface} />
                 </View>
-              </View>
-              <View style={styles.settingDivider} />
-              {normalizeHomeHeroMode(profile?.home_hero_mode) === 'marquee'
-                ? renderSettingItemLTR(
-                    <Ionicons name="images-outline" size={20} color={primaryOnSurface} />,
-                    t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
-                    t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
-                    undefined,
-                    () =>
-                      router.push({
-                        pathname: '/(tabs)/edit-home-hero',
-                        params: { returnSettingsTab: 'design' },
-                      }),
-                    false,
-                    false,
-                  )
-                : renderSettingItemLTR(
-                    <Ionicons name="image-outline" size={20} color={primaryOnSurface} />,
-                    t('settings.profile.homeHeroSingleRowTitle', 'Single background'),
-                    t(
-                      'settings.profile.homeHeroSingleRowSubtitle',
-                      'Upload one image or one short video for the top of the home screen',
-                    ),
-                    undefined,
-                    () =>
-                      router.push({
-                        pathname: '/(tabs)/edit-home-hero-single',
-                        params: { returnSettingsTab: 'design' },
-                      }),
-                    false,
-                    false,
+                <View style={styles.settingContentLTR}>
+                  <Text style={styles.settingTitleLTR}>
+                    {t('settings.profile.homeHeroModeTitle', 'Home top background')}
+                  </Text>
+                  {!designHomeHeroExpanded ? (
+                    <Text style={styles.settingSubtitleLTR} numberOfLines={2}>
+                      {designHomeHeroSummaryLabel}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.settingChevronLTR}>
+                  {designHomeHeroExpanded ? (
+                    <ChevronUp size={20} color={primaryOnSurface} strokeWidth={2.2} />
+                  ) : (
+                    <ChevronDown size={20} color={primaryOnSurface} strokeWidth={2.2} />
                   )}
-              <View style={styles.homeLogoDesignBlock}>
-                <View style={styles.homeHeroModeBlock}>
+                </View>
+              </TouchableOpacity>
+              {designHomeHeroExpanded ? (
+                <>
+                  <View style={[styles.homeHeroModeBlock, { paddingTop: 6 }]}>
+                    <View style={styles.homeHeroModeCardsRow}>
+                      {([
+                        {
+                          mode: 'marquee',
+                          icon: 'images-outline',
+                          label: t('settings.profile.homeHeroModeMarquee', 'Animated photos'),
+                          sub: t('settings.profile.homeHeroModeMarqueeSub', 'Scrolling grid of photos'),
+                        },
+                        {
+                          mode: 'single_fullbleed',
+                          icon: 'film-outline',
+                          label: t('settings.profile.homeHeroModeSingle', 'Image or video'),
+                          sub: t('settings.profile.homeHeroModeSingleSub', 'One full-screen file'),
+                        },
+                      ] as const).map(({ mode, icon, label, sub }) => {
+                        const selected = normalizeHomeHeroMode(profile?.home_hero_mode) === mode;
+                        return (
+                          <TouchableOpacity
+                            key={mode}
+                            activeOpacity={0.82}
+                            disabled={isSavingProfile}
+                            style={[
+                              styles.homeHeroModeCard,
+                              selected
+                                ? {
+                                    backgroundColor: `${businessColors.primary}12`,
+                                    borderColor: businessColors.primary,
+                                    borderWidth: 2,
+                                  }
+                                : {
+                                    backgroundColor: '#FFFFFF',
+                                    borderColor: 'rgba(60,60,67,0.16)',
+                                    borderWidth: StyleSheet.hairlineWidth,
+                                  },
+                            ]}
+                            onPress={() => void handleHomeHeroModeSelect(mode)}
+                          >
+                            <View
+                              style={[
+                                styles.homeHeroModeCardIcon,
+                                {
+                                  backgroundColor: selected
+                                    ? `${businessColors.primary}20`
+                                    : 'rgba(60,60,67,0.06)',
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name={icon as any}
+                                size={22}
+                                color={selected ? businessColors.primary : Colors.subtext}
+                              />
+                            </View>
+                            <Text
+                              style={[
+                                styles.homeHeroModeCardLabel,
+                                selected && { color: businessColors.primary },
+                              ]}
+                              numberOfLines={2}
+                            >
+                              {label}
+                            </Text>
+                            <Text style={styles.homeHeroModeCardSub} numberOfLines={2}>
+                              {sub}
+                            </Text>
+                            {selected && (
+                              <View
+                                style={[
+                                  styles.homeHeroModeCardCheck,
+                                  { backgroundColor: businessColors.primary },
+                                ]}
+                              >
+                                <Ionicons name="checkmark" size={11} color="#fff" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  <View style={styles.settingDivider} />
+                  {normalizeHomeHeroMode(profile?.home_hero_mode) === 'marquee'
+                    ? renderSettingItemLTR(
+                        <Ionicons name="images-outline" size={20} color={primaryOnSurface} />,
+                        t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                        t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
+                        undefined,
+                        () =>
+                          router.push({
+                            pathname: '/(tabs)/edit-home-hero',
+                            params: { returnSettingsTab: 'design' },
+                          }),
+                        false,
+                        false,
+                      )
+                    : renderSettingItemLTR(
+                        <Ionicons name="image-outline" size={20} color={primaryOnSurface} />,
+                        t('settings.profile.homeHeroSingleRowTitle', 'Single background'),
+                        t(
+                          'settings.profile.homeHeroSingleRowSubtitle',
+                          'Upload one image or one short video for the top of the home screen',
+                        ),
+                        undefined,
+                        () =>
+                          router.push({
+                            pathname: '/(tabs)/edit-home-hero-single',
+                            params: { returnSettingsTab: 'design' },
+                          }),
+                        false,
+                        false,
+                      )}
+                </>
+              ) : (
+                <View style={styles.settingDivider} />
+              )}
+              <TouchableOpacity
+                style={styles.settingItemLTR}
+                onPress={toggleDesignHomeLogoExpanded}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: designHomeLogoExpanded }}
+                accessibilityLabel={`${t('settings.profile.homeHeaderShowLogoTitle', 'Show logo on home')}. ${designHomeLogoSummaryLabel}`}
+              >
+                <View style={styles.settingIconLTR}>
+                  <Ionicons name="image-outline" size={20} color={primaryOnSurface} />
+                </View>
+                <View style={styles.settingContentLTR}>
                   <Text style={styles.settingTitleLTR}>
                     {t('settings.profile.homeHeaderShowLogoTitle', 'Show logo on home')}
                   </Text>
+                  {!designHomeLogoExpanded ? (
+                    <Text style={styles.settingSubtitleLTR} numberOfLines={2}>
+                      {designHomeLogoSummaryLabel}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.settingChevronLTR}>
+                  {designHomeLogoExpanded ? (
+                    <ChevronUp size={20} color={primaryOnSurface} strokeWidth={2.2} />
+                  ) : (
+                    <ChevronDown size={20} color={primaryOnSurface} strokeWidth={2.2} />
+                  )}
+                </View>
+              </TouchableOpacity>
+              {designHomeLogoExpanded ? (
+              <View style={styles.homeLogoDesignBlock}>
+                <View style={[styles.homeHeroModeBlock, { paddingTop: 6 }]}>
                   <View style={styles.homeHeroModeCardsRow}>
                     {(
                       [
@@ -3691,6 +3830,9 @@ export default function SettingsScreen() {
                   </>
                 ) : null}
               </View>
+              ) : (
+                <View style={styles.settingDivider} />
+              )}
           </View>
         </View>
           </GHScrollView>

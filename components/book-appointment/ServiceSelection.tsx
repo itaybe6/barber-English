@@ -303,15 +303,28 @@ const ServiceRow = React.memo(function ServiceRow(
         }
       </View>
 
-      {/* Middle: name + duration */}
-      <View style={[styles.rowMid, { alignItems: rtl ? 'flex-end' : 'flex-start' }]}>
+      {/* Middle: name + duration — stretch full flex slot so wrapped RTL lines stay anchored to the icon side */}
+      <View style={styles.rowMid}>
         <Text
-          style={[styles.rowName, { color: isSelected ? primaryColor : '#111827' }]}
+          style={[
+            styles.rowName,
+            {
+              color: isSelected ? primaryColor : '#111827',
+              textAlign: rtl ? 'right' : 'left',
+              writingDirection: rtl ? 'rtl' : 'ltr',
+            },
+          ]}
           numberOfLines={2}
         >
           {name}
         </Text>
-        <Text style={styles.rowDuration} numberOfLines={1}>
+        <Text
+          style={[
+            styles.rowDuration,
+            { textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' },
+          ]}
+          numberOfLines={1}
+        >
           {duration} {t('booking.min', "דק'")}
         </Text>
       </View>
@@ -447,18 +460,22 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
     minWidth: 0,
+    alignSelf: 'stretch',
+    alignItems: 'stretch',
   },
   rowName: {
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.25,
     lineHeight: 21,
+    width: '100%',
   },
   rowDuration: {
     fontSize: 13,
     fontWeight: '500',
     color: '#9CA3AF',
     letterSpacing: -0.1,
+    width: '100%',
   },
   rowPricePill: {
     borderRadius: 999,

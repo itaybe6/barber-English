@@ -15,8 +15,8 @@ type DaysProps = {
   cellSize: number;
   primaryColor: string;
   onDayPress: (date: Date) => void;
-  /** `availability` = green tint (booking). `count` = admin pills with counts. */
-  displayMode?: 'availability' | 'count';
+  /** `availability` = green tint + dots (booking). `count` = admin pills. `plain` = date only (e.g. reminders). */
+  displayMode?: 'availability' | 'count' | 'plain';
   /** Show Hebrew calendar date below the Gregorian number — admin iPhone style */
   showHebrewDates?: boolean;
   /** Thin horizontal line under each week row (iOS month list) */
@@ -174,7 +174,7 @@ type DayCellProps = {
   holidayLabel?: string | null;
   cellSize: number;
   primaryColor: string;
-  displayMode: 'availability' | 'count';
+  displayMode: 'availability' | 'count' | 'plain';
   showHebrewDates: boolean;
   formatAppointmentBadge?: (count: number) => string;
   constraintPillLabel?: string;
@@ -209,8 +209,14 @@ const DayCell = React.memo(function DayCell({
     displayMode === 'availability' && inRange && hasAvail && !isSel && !isToday;
   const showAvailGreen = showBookingGreen;
 
-  // Today = filled primary circle; selected (not today) = filled black circle
-  const circleColor = isToday ? primaryColor : isSel ? '#1C1C1E' : 'transparent';
+  // Today = primary; booking selected = black; plain (reminders) = primary ring fill
+  const circleColor = isToday
+    ? primaryColor
+    : isSel
+      ? displayMode === 'plain'
+        ? primaryColor
+        : '#1C1C1E'
+      : 'transparent';
 
   const textColor =
     isToday ? '#FFFFFF' : isSel ? '#FFFFFF' : inRange ? '#1C1C1E' : '#C7C7CC';
@@ -244,8 +250,8 @@ const DayCell = React.memo(function DayCell({
     displayMode === 'count' && hasConstraint && constraintPillLabel ? constraintPillLabel : null;
   const hasHolidayLabel = !!holidayLabel;
 
-  // Closed days can't be pressed; fully-booked days CAN be pressed (to trigger waitlist)
-  const isDisabled = !inRange || isClosed;
+  // Closed days can't be pressed (booking); plain = any in-range day is tappable
+  const isDisabled = !inRange || (displayMode !== 'plain' && isClosed);
 
   return (
     <Pressable
@@ -350,7 +356,9 @@ const DayCell = React.memo(function DayCell({
               ? (badgeLabel && constraintLabel ? 48 : 26)
               : hasHolidayLabel
                 ? 16
-              : STATUS_DOT_SIZE + 4,
+                : displayMode === 'plain'
+                  ? 2
+                  : STATUS_DOT_SIZE + 4,
           justifyContent: 'center',
           alignItems: 'center',
           marginTop: hasHolidayLabel ? 1 : 2,

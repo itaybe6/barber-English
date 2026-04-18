@@ -83,10 +83,9 @@ interface SlotGridProps {
   selectedTime: string | null;
   primaryColor: string;
   onSelectTime: (time: string) => void;
-  baseDelay: number;
 }
 
-function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }: SlotGridProps) {
+function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime }: SlotGridProps) {
   const rows: string[][] = [];
   for (let i = 0; i < slots.length; i += 3) {
     rows.push(slots.slice(i, i + 3));
@@ -96,15 +95,10 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
     <View style={gridStyles.container}>
       {rows.map((row, rowIdx) => (
         <View key={`row-${rowIdx}`} style={gridStyles.row}>
-          {row.map((slot, colIdx) => {
+          {row.map((slot) => {
             const selected = selectedTime === slot;
-            const delay = baseDelay + rowIdx * 3 + colIdx;
             return (
-              <Animated.View
-                key={slot}
-                entering={bookingTimeRowEntering(delay)}
-                style={gridStyles.cellWrap}
-              >
+              <View key={slot} style={gridStyles.cellWrap}>
                 <Pressable
                   onPress={() => onSelectTime(slot)}
                   accessibilityRole="button"
@@ -126,7 +120,7 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
                     {slot}
                   </Text>
                 </Pressable>
-              </Animated.View>
+              </View>
             );
           })}
           {row.length < 3 &&
@@ -222,7 +216,6 @@ export default function TimeSelection({
                     selectedTime={selectedTime}
                     primaryColor={primaryColor}
                     onSelectTime={onSelectTime}
-                    baseDelay={sectionDelay + 1}
                   />
                 </Animated.View>
               );

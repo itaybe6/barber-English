@@ -1,15 +1,15 @@
 import { Easing, FadeInUp } from 'react-native-reanimated';
 
-export const BOOKING_STEP_ROW_ENTER_BASE_MS = 200;
-export const BOOKING_STEP_ROW_STAGGER_MS = 150;
-export const BOOKING_STEP_ROW_ENTER_DURATION_MS = 720;
-export const BOOKING_STEP_ROW_DRIFT_PX = 10;
+export const BOOKING_STEP_ROW_ENTER_BASE_MS = 60;
+export const BOOKING_STEP_ROW_STAGGER_MS = 80;
+export const BOOKING_STEP_ROW_ENTER_DURATION_MS = 340;
+export const BOOKING_STEP_ROW_DRIFT_PX = 8;
 
-/** Time step: many cells — keep stagger/duration short so the grid does not take several seconds. */
-const BOOKING_TIME_ROW_ENTER_BASE_MS = 55;
-const BOOKING_TIME_ROW_STAGGER_MS = 28;
-const BOOKING_TIME_ROW_ENTER_DURATION_MS = 340;
-const BOOKING_TIME_ROW_DRIFT_PX = 9;
+/** Time step section headers — short delay so the grid appears quickly. */
+const BOOKING_TIME_ROW_ENTER_BASE_MS = 30;
+const BOOKING_TIME_ROW_STAGGER_MS = 50;
+const BOOKING_TIME_ROW_ENTER_DURATION_MS = 260;
+const BOOKING_TIME_ROW_DRIFT_PX = 6;
 
 /** Fade + short drift down from above — staff / service step lists. */
 export function bookingStepRowEntering(index: number) {
@@ -22,7 +22,10 @@ export function bookingStepRowEntering(index: number) {
     });
 }
 
-/** Same motion as {@link bookingStepRowEntering}, tuned for dense time-slot grids. */
+/**
+ * Same motion as {@link bookingStepRowEntering}, tuned for time UI.
+ * Use on section/header rows only — never on every slot cell (large slot counts stall the UI thread).
+ */
 export function bookingTimeRowEntering(index: number) {
   return FadeInUp.duration(BOOKING_TIME_ROW_ENTER_DURATION_MS)
     .easing(Easing.out(Easing.cubic))

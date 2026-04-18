@@ -2,28 +2,26 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
-import {
-  initialWindowMetrics,
-  SafeAreaProvider,
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
+import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarReminder } from '@/lib/supabase';
@@ -43,7 +41,6 @@ LocaleConfig.locales['en'] = {
   today: 'Today',
   direction: 'ltr',
 };
-
 LocaleConfig.locales['he'] = {
   monthNames: ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'],
   monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
@@ -52,8 +49,9 @@ LocaleConfig.locales['he'] = {
   today: 'היום',
   direction: 'rtl',
 };
-
 LocaleConfig.defaultLocale = 'en';
+
+// ─── design tokens ────────────────────────────────────────────────────────────
 
 const UI = {
   bg: '#F2F4F8',
@@ -62,6 +60,8 @@ const UI = {
   textSecondary: '#636366',
   textTertiary: '#8E8E93',
   border: 'rgba(60, 60, 67, 0.12)',
+  borderSoft: 'rgba(60, 60, 67, 0.08)',
+  fieldBg: 'rgba(60, 60, 67, 0.045)',
   danger: '#FF3B30',
 };
 
@@ -77,6 +77,37 @@ const REMINDER_PALETTE: Record<string, { bar: string; bg: string }> = {
 function reminderPalette(key: string | null | undefined) {
   return REMINDER_PALETTE[key || 'blue'] || REMINDER_PALETTE.blue;
 }
+
+function buildCalendarTheme(primary: string) {
+  return {
+    backgroundColor: UI.surface,
+    calendarBackground: UI.surface,
+    textSectionTitleColor: UI.text,
+    textDayHeaderFontWeight: '700',
+    textDayFontWeight: '600',
+    textMonthFontWeight: '800',
+    textDayFontSize: 15,
+    textMonthFontSize: 17,
+    arrowColor: primary,
+    selectedDayBackgroundColor: primary,
+    todayTextColor: primary,
+    dayTextColor: UI.text,
+    textDisabledColor: UI.textTertiary,
+    monthTextColor: UI.text,
+    'stylesheet.calendar.header': {
+      week: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4 },
+      dayHeader: { textAlign: 'center', color: UI.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+    },
+    'stylesheet.day.basic': {
+      base: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    },
+    'stylesheet.calendar.main': {
+      week: { marginTop: 6, marginBottom: 6, flexDirection: 'row', justifyContent: 'space-around' },
+    },
+  } as const;
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function toLocalISODate(d: Date) {
   const y = d.getFullYear();
@@ -108,7 +139,6 @@ function minutesBetweenStartEnd(start: Date, end: Date): number {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
 }
 
-/** 15 דק׳ — מספיק לרוב הלוחות; ערכים שאינם על הרשת נשמרים ברשימה */
 const TIME_SLOT_STEP_MINUTES = 15;
 
 function buildTimeSlots(stepMinutes: number): string[] {
@@ -130,22 +160,13 @@ function mergeHHMMIntoSortedSlots(slots: string[], hhmm: string): string[] {
 function calendarReminderSaveErrorHint(raw: string, tHe: (key: string, fb: string) => string): string {
   const s = raw.toLowerCase();
   if (s.includes('does not exist') || s.includes('schema cache') || s.includes('could not find the table')) {
-    return tHe(
-      'admin.calendarReminder.errTableMissing',
-      'טבלת התזכורות לא קיימת או לא מסונכרנת בשרת. יש להריץ מיגרציות Supabase (כולל יצירת calendar_reminders והרשאות).'
-    );
+    return tHe('admin.calendarReminder.errTableMissing', 'טבלת התזכורות לא קיימת או לא מסונכרנת בשרת. יש להריץ מיגרציות Supabase (כולל יצירת calendar_reminders והרשאות).');
   }
   if (s.includes('permission denied') || s.includes('42501')) {
-    return tHe(
-      'admin.calendarReminder.errPermission',
-      'אין הרשאה לכתוב לטבלת התזכורות. בדקו הרשאות anon/authenticated על calendar_reminders ב-Supabase.'
-    );
+    return tHe('admin.calendarReminder.errPermission', 'אין הרשאה לכתוב לטבלת התזכורות. בדקו הרשאות anon/authenticated על calendar_reminders ב-Supabase.');
   }
   if (s.includes('foreign key') || s.includes('23503') || s.includes('violates foreign key')) {
-    return tHe(
-      'admin.calendarReminder.errFkUser',
-      'המזהה של המשתמש לא תואם לרשומה בטבלת users — נסו להתנתק ולהתחבר מחדש.'
-    );
+    return tHe('admin.calendarReminder.errFkUser', 'המזהה של המשתמש לא תואם לרשומה בטבלת users — נסו להתנתק ולהתחבר מחדש.');
   }
   return raw;
 }
@@ -160,81 +181,29 @@ function parseISODateToLocalDay(iso: string): Date {
   return d;
 }
 
+// ─── sub-components ───────────────────────────────────────────────────────────
+
 function CardSectionHeader({
   icon,
   label,
-  layoutRtl,
   primary,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
-  layoutRtl: boolean;
   primary: string;
 }) {
-  if (layoutRtl) {
-    return (
-      <View style={{ direction: 'ltr', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, width: '100%' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: UI.text, textAlign: 'right' }} numberOfLines={3}>
-            {label}
-          </Text>
-        </View>
-        <Ionicons name={icon} size={20} color={primary} />
-      </View>
-    );
-  }
   return (
-    <View style={styles.cardHeader}>
-      <Ionicons name={icon} size={20} color={primary} />
-      <Text style={[styles.cardTitle, styles.cardTitleFlex]}>{label}</Text>
+    <View style={styles.cardSectionRow}>
+      <View style={styles.cardSectionLabelWrap}>
+        <Text style={styles.cardSectionLabel} numberOfLines={3}>
+          {label}
+        </Text>
+      </View>
+      <View style={[styles.cardIconWrap, { backgroundColor: `${primary}12` }]}>
+        <Ionicons name={icon} size={17} color={primary} />
+      </View>
     </View>
   );
-}
-
-function buildCalendarTheme(primary: string, layoutRtl: boolean) {
-  const weekDir = layoutRtl ? ('row-reverse' as const) : ('row' as const);
-  return {
-    backgroundColor: UI.surface,
-    calendarBackground: UI.surface,
-    textSectionTitleColor: UI.text,
-    textDayHeaderFontWeight: '700',
-    textDayFontWeight: '600',
-    textMonthFontWeight: '800',
-    textDayFontSize: 15,
-    textMonthFontSize: 17,
-    arrowColor: primary,
-    selectedDayBackgroundColor: primary,
-    todayTextColor: primary,
-    dayTextColor: UI.text,
-    textDisabledColor: UI.textTertiary,
-    monthTextColor: UI.text,
-    'stylesheet.calendar.header': {
-      ...(layoutRtl
-        ? {
-            header: {
-              flexDirection: 'row-reverse',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingLeft: 10,
-              paddingRight: 10,
-              marginTop: 6,
-            },
-            monthText: {
-              textAlign: 'right',
-              writingDirection: 'rtl',
-            },
-          }
-        : {}),
-      week: { flexDirection: weekDir, justifyContent: 'space-around', paddingVertical: 4 },
-      dayHeader: { textAlign: 'center', color: UI.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
-    },
-    'stylesheet.day.basic': {
-      base: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-    },
-    'stylesheet.calendar.main': {
-      week: { marginTop: 6, marginBottom: 6, flexDirection: weekDir, justifyContent: 'space-around' },
-    },
-  } as const;
 }
 
 function TimeSlotPickerSheet({
@@ -243,7 +212,6 @@ function TimeSlotPickerSheet({
   options,
   selectedHHMM,
   primary,
-  layoutRtl,
   formatOptionLabel,
   onSelect,
   onClose,
@@ -254,7 +222,6 @@ function TimeSlotPickerSheet({
   options: string[];
   selectedHHMM: string;
   primary: string;
-  layoutRtl: boolean;
   formatOptionLabel: (hhmm: string) => string;
   onSelect: (hhmm: string) => void;
   onClose: () => void;
@@ -267,16 +234,15 @@ function TimeSlotPickerSheet({
         style={styles.timeSheetBackdrop}
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel={layoutRtl ? 'סגור' : 'Close'}
+        accessibilityLabel="סגור"
       />
       <View style={[styles.timeSheetCard, { paddingBottom: Math.max(insetBottom, 16) }]}>
-        <Text style={[styles.timeSheetTitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={1}>
-          {title}
-        </Text>
+        <View style={styles.timeSheetDragHandle} />
+        <Text style={styles.timeSheetTitle} numberOfLines={1}>{title}</Text>
         <ScrollView
           style={styles.timeSheetList}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator
+          showsVerticalScrollIndicator={false}
           bounces={false}
         >
           {options.map((item) => {
@@ -284,24 +250,16 @@ function TimeSlotPickerSheet({
             return (
               <TouchableOpacity
                 key={item}
-                style={[styles.timeSheetRow, layoutRtl && styles.timeSheetRowRtl, on && { backgroundColor: `${primary}18` }]}
-                onPress={() => {
-                  onSelect(item);
-                  onClose();
-                }}
+                style={[styles.timeSheetRow, styles.timeSheetRowRtl, on && { backgroundColor: `${primary}12` }]}
+                onPress={() => { onSelect(item); onClose(); }}
                 activeOpacity={0.72}
               >
-                <Text
-                  style={[
-                    styles.timeSheetRowText,
-                    { writingDirection: 'ltr' },
-                    layoutRtl && { textAlign: 'right' },
-                    on && { color: primary, fontWeight: '800' },
-                  ]}
-                >
+                <Text style={[styles.timeSheetRowText, { writingDirection: 'ltr', textAlign: 'right' }, on && { color: primary, fontWeight: '800' }]}>
                   {formatOptionLabel(item)}
                 </Text>
-                {on ? <Ionicons name="checkmark-circle" size={22} color={primary} /> : <View style={{ width: 22 }} />}
+                {on
+                  ? <Ionicons name="checkmark-circle" size={22} color={primary} />
+                  : <View style={{ width: 22 }} />}
               </TouchableOpacity>
             );
           })}
@@ -311,6 +269,8 @@ function TimeSlotPickerSheet({
   );
 }
 
+// ─── props ────────────────────────────────────────────────────────────────────
+
 export interface CalendarReminderEditorModalProps {
   visible: boolean;
   onClose: () => void;
@@ -319,18 +279,21 @@ export interface CalendarReminderEditorModalProps {
   defaultDate: Date;
 }
 
-function CalendarReminderEditorModalInner({
+// ─── main component ───────────────────────────────────────────────────────────
+
+export default function CalendarReminderEditorModal({
   visible,
   onClose,
   onSaved,
   editingReminder,
   defaultDate,
 }: CalendarReminderEditorModalProps) {
+  const sheetRef = useRef<BottomSheetModal>(null);
   const insets = useSafeAreaInsets();
-  const gutterHorizontal = useMemo(() => ({ marginHorizontal: 16 }), []);
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
   const { i18n } = useTranslation();
+
   const tHe = useCallback(
     (key: string, fallback: string) => String(i18n.t(key, { lng: 'he', defaultValue: fallback })),
     [i18n]
@@ -339,16 +302,14 @@ function CalendarReminderEditorModalInner({
   const rawLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
   const isHebrew = rawLang.startsWith('he') || rawLang.startsWith('iw');
   const calendarLocale = isHebrew ? 'he' : 'en';
-  /** Modal copy is loaded with `lng: 'he'` (tHe) — always RTL layout for labels and fields */
-  const layoutRtl = true;
-
-  if (visible) {
-    LocaleConfig.defaultLocale = calendarLocale;
-  }
+  const rtl = true;
 
   const primary = businessColors.primary || '#1A73E8';
-  const calendarTheme = useMemo(() => buildCalendarTheme(primary, layoutRtl), [primary, layoutRtl]);
+  const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
+  /** Taller sheet so more form (calendar + time) fits without feeling cramped */
+  const snapPoints = useMemo(() => ['90%'], []);
 
+  // ── form state ──────────────────────────────────────────────────────────────
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [eventDateISO, setEventDateISO] = useState(() => toLocalISODate(defaultDate));
@@ -359,6 +320,19 @@ function CalendarReminderEditorModalInner({
   const [deleting, setDeleting] = useState(false);
   const [timePickerWhich, setTimePickerWhich] = useState<'start' | 'end' | null>(null);
 
+  const animationConfigs = useAdminCalendarSheetTimingConfig();
+
+  // ── present / dismiss based on visible prop ─────────────────────────────────
+  useEffect(() => {
+    if (visible) {
+      if (calendarLocale) LocaleConfig.defaultLocale = calendarLocale;
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [visible, calendarLocale]);
+
+  // ── reset form when opening ─────────────────────────────────────────────────
   const resetFromProps = useCallback(() => {
     if (editingReminder) {
       const day = parseISODateToLocalDay(editingReminder.event_date || '');
@@ -390,20 +364,42 @@ function CalendarReminderEditorModalInner({
     }
   }, [visible, resetFromProps]);
 
+  // ── time helpers ────────────────────────────────────────────────────────────
   const formatTimeLabel = useCallback((d: Date) => {
     try {
-      const fmt = new Intl.DateTimeFormat(isHebrew ? 'he-IL' : 'en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-      });
-      return fmt.format(d);
+      return new Intl.DateTimeFormat(isHebrew ? 'he-IL' : 'en-US', {
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).format(d);
     } catch {
       return dateToHHMM(d);
     }
   }, [isHebrew]);
 
   const reminderDay = useMemo(() => parseISODateToLocalDay(eventDateISO), [eventDateISO]);
+
+  const reminderMarkedDates = useMemo(
+    () => ({ [eventDateISO]: { selected: true, selectedColor: primary } }),
+    [eventDateISO, primary],
+  );
+
+  const calendarRenderArrow = useCallback(
+    (direction: string) => {
+      const size = 22;
+      if (rtl) {
+        return direction === 'left' ? (
+          <Ionicons name="chevron-forward" size={size} color={primary} />
+        ) : (
+          <Ionicons name="chevron-back" size={size} color={primary} />
+        );
+      }
+      return direction === 'left' ? (
+        <Ionicons name="chevron-back" size={size} color={primary} />
+      ) : (
+        <Ionicons name="chevron-forward" size={size} color={primary} />
+      );
+    },
+    [primary, rtl],
+  );
 
   const timeSlotOptions = useMemo(() => {
     const base = buildTimeSlots(TIME_SLOT_STEP_MINUTES);
@@ -422,9 +418,7 @@ function CalendarReminderEditorModalInner({
   );
 
   const startTimeRef = useRef(startTimeDate);
-  useEffect(() => {
-    startTimeRef.current = startTimeDate;
-  }, [startTimeDate]);
+  useEffect(() => { startTimeRef.current = startTimeDate; }, [startTimeDate]);
 
   const onStartTimeChange = useCallback((d: Date) => {
     setStartTimeDate(d);
@@ -433,31 +427,9 @@ function CalendarReminderEditorModalInner({
 
   const onEndTimeChange = useCallback((d: Date) => {
     const s = startTimeRef.current;
-    if (d.getTime() <= s.getTime()) {
-      setEndTimeDate(addMinutesToDate(s, 30));
-    } else {
-      setEndTimeDate(d);
-    }
+    if (d.getTime() <= s.getTime()) setEndTimeDate(addMinutesToDate(s, 30));
+    else setEndTimeDate(d);
   }, []);
-
-  const calendarRenderArrow = useCallback(
-    (direction: string) => {
-      const size = 22;
-      if (layoutRtl) {
-        return direction === 'left' ? (
-          <Ionicons name="chevron-forward" size={size} color={primary} />
-        ) : (
-          <Ionicons name="chevron-back" size={size} color={primary} />
-        );
-      }
-      return direction === 'left' ? (
-        <Ionicons name="chevron-back" size={size} color={primary} />
-      ) : (
-        <Ionicons name="chevron-forward" size={size} color={primary} />
-      );
-    },
-    [primary, layoutRtl]
-  );
 
   const onDayPicked = useCallback((dateString: string) => {
     setEventDateISO(dateString);
@@ -466,40 +438,25 @@ function CalendarReminderEditorModalInner({
     setEndTimeDate((prev) => timeOnDate(dateToHHMM(prev), day));
   }, []);
 
+  // ── save / delete ───────────────────────────────────────────────────────────
   const save = async () => {
     const trimmed = title.trim();
     if (!trimmed || !user?.id) {
       Alert.alert(tHe('admin.calendarReminder.validationTitle', 'נא להזין כותרת'));
       return;
     }
-    const uuidRe =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRe.test(String(user.id))) {
-      Alert.alert(
-        tHe('error.generic', 'שגיאה'),
-        tHe(
-          'admin.calendarReminder.errNeedBarberUser',
-          'תזכורות היומן נשמרות למשתמש מנהל רגיל. התחברו כמנהל העסק (לא Super Admin).'
-        )
-      );
+      Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.errNeedBarberUser', 'תזכורות היומן נשמרות למשתמש מנהל רגיל. התחברו כמנהל העסק (לא Super Admin).'));
       return;
     }
     if (endTimeDate.getTime() <= startTimeDate.getTime()) {
-      Alert.alert(
-        tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'),
-        tHe(
-          'admin.calendarReminder.validationTimeRangeHint',
-          'שעת הסיום חייבת להיות אחרי שעת ההתחלה.'
-        )
-      );
+      Alert.alert(tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'), tHe('admin.calendarReminder.validationTimeRangeHint', 'שעת הסיום חייבת להיות אחרי שעת ההתחלה.'));
       return;
     }
     const duration = minutesBetweenStartEnd(startTimeDate, endTimeDate);
     if (duration < 1) {
-      Alert.alert(
-        tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'),
-        tHe('admin.calendarReminder.validationDurationMin', 'בחרו לפחות דקה אחת בין ההתחלה לסיום.')
-      );
+      Alert.alert(tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'), tHe('admin.calendarReminder.validationDurationMin', 'בחרו לפחות דקה אחת בין ההתחלה לסיום.'));
       return;
     }
     const timeStr = dateToHHMM(startTimeDate);
@@ -515,10 +472,7 @@ function CalendarReminderEditorModalInner({
           color_key: colorKey,
         });
         if (!result.ok) {
-          Alert.alert(
-            tHe('error.generic', 'שגיאה'),
-            calendarReminderSaveErrorHint(result.message, tHe)
-          );
+          Alert.alert(tHe('error.generic', 'שגיאה'), calendarReminderSaveErrorHint(result.message, tHe));
         } else {
           await onSaved();
           onClose();
@@ -534,10 +488,7 @@ function CalendarReminderEditorModalInner({
           colorKey,
         });
         if (!result.ok) {
-          Alert.alert(
-            tHe('error.generic', 'שגיאה'),
-            calendarReminderSaveErrorHint(result.message, tHe)
-          );
+          Alert.alert(tHe('error.generic', 'שגיאה'), calendarReminderSaveErrorHint(result.message, tHe));
         } else {
           await onSaved();
           onClose();
@@ -577,55 +528,74 @@ function CalendarReminderEditorModalInner({
     );
   };
 
-  const modalTopInset = Math.max(
-    insets.top,
-    Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
-    16
+  // ── sheet animation & backdrop ──────────────────────────────────────────────
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.45}
+        pressBehavior="close"
+      />
+    ),
+    []
   );
 
-  return (
-    <View style={styles.screenRoot}>
-      <View style={[styles.safeAreaTopStripe, { height: modalTopInset }]} />
-      <SafeAreaView style={styles.bodySafe} edges={['left', 'right', 'bottom']}>
-      <View style={styles.headerSafeWrap}>
-        <View style={[styles.headerRow, layoutRtl && styles.headerRowRtl, styles.headerRowPad]}>
-          <TouchableOpacity
-            onPress={onClose}
-            style={styles.headerIconBtn}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel={tHe('close', 'סגור')}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: UI.surface }]}>
-              <Ionicons name="close" size={22} color={UI.text} />
-            </View>
-          </TouchableOpacity>
-          <View style={[styles.headerTitles, layoutRtl && styles.headerTitlesRtl]}>
-            <Text style={[styles.headerTitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={1}>
-              {editingReminder
-                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')}
-            </Text>
-            <Text style={[styles.headerSubtitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={2}>
-              {tHe(
-                'admin.calendarReminder.hint',
-                'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
-              )}
-            </Text>
-          </View>
-          <View style={{ width: 44 }} />
-        </View>
-      </View>
+  const handleDismiss = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
-      <KeyboardAwareScreenScroll
-        style={styles.scrollFlex}
-        contentContainerStyle={[styles.scrollContent, layoutRtl && styles.scrollContentRtl]}
-        keyboardShouldPersistTaps="handled"
-      >
-          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  return (
+    <BottomSheetModal
+      ref={sheetRef}
+      snapPoints={snapPoints}
+      index={0}
+      enableDynamicSizing={false}
+      onDismiss={handleDismiss}
+      animationConfigs={animationConfigs}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={styles.sheetBg}
+      handleIndicatorStyle={styles.dragHandle}
+      style={styles.sheetShadow}
+      enablePanDownToClose
+      topInset={insets.top}
+      keyboardBehavior="extend"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
+    >
+      <View style={styles.sheetBody}>
+        {/* ── sheet header (no X button) ── */}
+        <View style={styles.sheetHeader}>
+          <View style={styles.sheetHeaderInner}>
+            <View style={styles.sheetTitleBlock}>
+              <Text style={styles.sheetTitle} numberOfLines={1}>
+                {editingReminder
+                  ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
+                  : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')}
+              </Text>
+              <Text style={styles.sheetSubtitle} numberOfLines={2}>
+                {tHe('admin.calendarReminder.hint', 'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום')}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+        </View>
+
+        {/* ── scrollable form ── */}
+        <BottomSheetScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {/* Title + notes (single card) */}
+          <View style={styles.card}>
             <CardSectionHeader
               icon="create-outline"
-              layoutRtl={layoutRtl}
               primary={primary}
               label={tHe('admin.calendarReminder.fieldTitle', 'כותרת')}
             />
@@ -634,103 +604,131 @@ function CalendarReminderEditorModalInner({
               onChangeText={setTitle}
               placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'למשל: טכנאי מגיע')}
               placeholderTextColor={UI.textTertiary}
-              style={[styles.titleInput, layoutRtl && styles.hebrewText, layoutRtl && styles.fieldRtl]}
+              style={[
+                styles.textField,
+                styles.fieldRtl,
+                { borderColor: title.trim() ? `${primary}35` : UI.borderSoft },
+              ]}
+            />
+
+            <View style={styles.fieldDivider} />
+
+            <View style={styles.subSectionHead}>
+              <View style={[styles.subSectionAccent, { backgroundColor: primary }]} />
+              <Text style={styles.subSectionTitle}>
+                {tHe('admin.calendarReminder.fieldNotes', 'הערות (אופציונלי)')}
+              </Text>
+            </View>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder={tHe('admin.calendarReminder.notesPlaceholder', 'פרטים נוספים…')}
+              placeholderTextColor={UI.textTertiary}
+              style={[
+                styles.textField,
+                styles.textFieldMultiline,
+                styles.fieldRtl,
+                { borderColor: notes.trim() ? `${primary}35` : UI.borderSoft },
+              ]}
+              multiline
+              textAlignVertical="top"
             />
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
+          {/* Date card */}
+          <View style={styles.card}>
             <CardSectionHeader
               icon="calendar-outline"
-              layoutRtl={layoutRtl}
               primary={primary}
               label={tHe('admin.hoursAdmin.pickDateShort', 'בחירת תאריך')}
             />
-            <View style={[styles.calendarShell, layoutRtl && styles.calendarShellRtl]}>
-              <RNCalendar
-                key={`reminder-cal-${calendarLocale}`}
-                current={eventDateISO}
-                onDayPress={(d: { dateString: string }) => onDayPicked(d.dateString)}
-                markedDates={{ [eventDateISO]: { selected: true, selectedColor: primary } }}
-                enableSwipeMonths
-                hideDayNames={false}
-                firstDay={0}
-                renderArrow={calendarRenderArrow}
-                style={layoutRtl ? styles.calendarRtl : undefined}
-                theme={calendarTheme as object}
-              />
+            <View style={styles.calendarShell}>
+              <View style={styles.calendarModernBox}>
+                <RNCalendar
+                  key={`reminder-cal-${calendarLocale}`}
+                  current={eventDateISO}
+                  onDayPress={(d: { dateString: string }) => onDayPicked(d.dateString)}
+                  markedDates={reminderMarkedDates}
+                  enableSwipeMonths
+                  hideDayNames={false}
+                  firstDay={0}
+                  renderArrow={calendarRenderArrow}
+                  style={{ direction: rtl ? 'rtl' : 'ltr' }}
+                  theme={calendarTheme as any}
+                />
+              </View>
             </View>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
+          {/* Time range card */}
+          <View style={styles.card}>
             <CardSectionHeader
               icon="time-outline"
-              layoutRtl={layoutRtl}
               primary={primary}
               label={tHe('admin.calendarReminder.fieldTimeRange', 'טווח שעות')}
             />
-            <Text
-              style={[
-                styles.rangeHint,
-                layoutRtl && styles.hebrewTextBlock,
-                { color: rangeDurationMinutes > 0 ? UI.textSecondary : UI.danger },
-              ]}
-            >
-              {rangeDurationMinutes > 0
-                ? `${formatTimeLabel(startTimeDate)} – ${formatTimeLabel(endTimeDate)} · ${rangeDurationMinutes} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`
-                : tHe('admin.calendarReminder.rangeInvalidHint', 'שעת הסיום אחרי שעת ההתחלה')}
-            </Text>
+            <View style={[styles.rangeChip, { backgroundColor: rangeDurationMinutes > 0 ? `${primary}12` : '#FFF1F0', borderColor: rangeDurationMinutes > 0 ? `${primary}30` : `${UI.danger}40` }]}>
+              <Ionicons
+                name={rangeDurationMinutes > 0 ? 'time-outline' : 'warning-outline'}
+                size={15}
+                color={rangeDurationMinutes > 0 ? primary : UI.danger}
+              />
+              <Text style={[styles.rangeChipText, { color: rangeDurationMinutes > 0 ? primary : UI.danger }]}>
+                {rangeDurationMinutes > 0
+                  ? `${formatTimeLabel(startTimeDate)} – ${formatTimeLabel(endTimeDate)} · ${rangeDurationMinutes} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`
+                  : tHe('admin.calendarReminder.rangeInvalidHint', 'שעת הסיום אחרי שעת ההתחלה')}
+              </Text>
+            </View>
 
-            <Text style={[styles.timeSubLabel, layoutRtl && styles.hebrewTextBlock]}>
-              {tHe('admin.calendarReminder.rangeStart', 'התחלה')}
-            </Text>
-            <TouchableOpacity
-              style={styles.timeRow}
-              onPress={() => setTimePickerWhich('start')}
-              activeOpacity={0.88}
-              accessibilityRole="button"
-              accessibilityLabel={tHe('admin.calendarReminder.rangeStart', 'התחלה')}
-            >
-              <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
-                <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                  <Ionicons name="play-outline" size={18} color={primary} />
+            <View style={styles.timeRowsGroup}>
+              <TouchableOpacity
+                style={styles.timeRow}
+                onPress={() => setTimePickerWhich('start')}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+              >
+                <View style={styles.timeRowInner}>
+                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
+                    <Ionicons name="play-outline" size={16} color={primary} />
+                  </View>
+                  <View style={styles.timeRowTexts}>
+                    <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeStart', 'התחלה')}</Text>
+                    <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(startTimeDate)}</Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={18} color={UI.textTertiary} />
                 </View>
-                <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
-                  {formatTimeLabel(startTimeDate)}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={UI.textTertiary} />
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
 
-            <Text style={[styles.timeSubLabel, styles.timeSubLabelSpaced, layoutRtl && styles.hebrewTextBlock]}>
-              {tHe('admin.calendarReminder.rangeEnd', 'סיום')}
-            </Text>
-            <TouchableOpacity
-              style={styles.timeRow}
-              onPress={() => setTimePickerWhich('end')}
-              activeOpacity={0.88}
-              accessibilityRole="button"
-              accessibilityLabel={tHe('admin.calendarReminder.rangeEnd', 'סיום')}
-            >
-              <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
-                <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                  <Ionicons name="stop-outline" size={18} color={primary} />
+              <View style={styles.timeRowDivider} />
+
+              <TouchableOpacity
+                style={styles.timeRow}
+                onPress={() => setTimePickerWhich('end')}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+              >
+                <View style={styles.timeRowInner}>
+                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
+                    <Ionicons name="stop-outline" size={16} color={primary} />
+                  </View>
+                  <View style={styles.timeRowTexts}>
+                    <Text style={styles.timeRowLabel}>{tHe('admin.calendarReminder.rangeEnd', 'סיום')}</Text>
+                    <Text style={[styles.timeRowValue, { color: primary }]}>{formatTimeLabel(endTimeDate)}</Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={18} color={UI.textTertiary} />
                 </View>
-                <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
-                  {formatTimeLabel(endTimeDate)}
-                </Text>
-                <Ionicons name="chevron-down" size={20} color={UI.textTertiary} />
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
+          {/* Color card */}
+          <View style={styles.card}>
             <CardSectionHeader
               icon="color-palette-outline"
-              layoutRtl={layoutRtl}
               primary={primary}
               label={tHe('admin.calendarReminder.fieldColor', 'צבע')}
             />
-            <View style={[styles.colorRow, layoutRtl && styles.colorRowRtl]}>
+            <View style={styles.colorRow}>
               {CALENDAR_REMINDER_COLOR_KEYS.map((k) => {
                 const pal = reminderPalette(k);
                 const on = colorKey === k;
@@ -738,83 +736,54 @@ function CalendarReminderEditorModalInner({
                   <TouchableOpacity
                     key={k}
                     onPress={() => setColorKey(k)}
-                    style={[styles.colorDot, { backgroundColor: pal.bar }, on && { borderColor: primary, borderWidth: 3 }]}
+                    style={[
+                      styles.colorDot,
+                      { backgroundColor: pal.bar },
+                      on && { borderColor: primary, borderWidth: 3, transform: [{ scale: 1.12 }] },
+                    ]}
                     accessibilityRole="button"
                     accessibilityLabel={k}
-                  />
+                  >
+                    {on && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </TouchableOpacity>
                 );
               })}
             </View>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
-            <CardSectionHeader
-              icon="chatbubble-ellipses-outline"
-              layoutRtl={layoutRtl}
-              primary={primary}
-              label={tHe('admin.calendarReminder.fieldNotes', 'הערות (אופציונלי)')}
-            />
-            <View style={[styles.notesShell, { borderColor: notes.trim() ? `${primary}40` : UI.border }]}>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder={tHe('admin.calendarReminder.notesPlaceholder', 'פרטים נוספים…')}
-                placeholderTextColor={UI.textTertiary}
-                style={[
-                  styles.notesInput,
-                  layoutRtl
-                    ? { textAlign: 'right', writingDirection: 'rtl' }
-                    : { textAlign: 'left', writingDirection: 'ltr' },
-                ]}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-      </KeyboardAwareScreenScroll>
-
-        <View style={[styles.footer, styles.footerPad]}>
-          <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
-          <TouchableOpacity
-            style={[
-              styles.saveBtn,
-              layoutRtl && styles.saveBtnRtl,
-              { backgroundColor: primary, shadowColor: primary },
-              saving && styles.saveBtnDisabled,
-            ]}
-            onPress={save}
-            disabled={saving}
-            activeOpacity={0.9}
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={22}
-                  color="#FFFFFF"
-                  style={layoutRtl ? { marginStart: 8 } : { marginEnd: 8 }}
-                />
-                <Text style={styles.saveBtnText}>{tHe('save', 'שמירה')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          {editingReminder ? (
+          {/* ── footer: save + delete ── */}
+          <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.deleteTextBtn}
-              onPress={confirmDelete}
-              disabled={deleting}
+              style={[styles.saveBtn, { backgroundColor: primary, shadowColor: primary }, saving && styles.saveBtnDisabled]}
+              onPress={save}
+              disabled={saving}
+              activeOpacity={0.9}
             >
-              {deleting ? (
-                <ActivityIndicator color={UI.danger} />
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.deleteText}>{tHe('admin.calendarReminder.delete', 'מחיקת תזכורת')}</Text>
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={22} color="#FFFFFF" style={styles.saveBtnIcon} />
+                  <Text style={styles.saveBtnText}>{tHe('save', 'שמור')}</Text>
+                </>
               )}
             </TouchableOpacity>
-          ) : null}
-        </View>
 
+            {editingReminder ? (
+              <TouchableOpacity
+                style={styles.deleteTextBtn}
+                onPress={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator color={UI.danger} />
+                  : <Text style={styles.deleteText}>{tHe('admin.calendarReminder.delete', 'מחיקת תזכורת')}</Text>}
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </BottomSheetScrollView>
+
+        {/* ── time slot picker overlay (inside sheet) ── */}
         <TimeSlotPickerSheet
           visible={timePickerWhich !== null}
           title={
@@ -825,7 +794,6 @@ function CalendarReminderEditorModalInner({
           options={timeSlotOptions}
           selectedHHMM={timePickerWhich === 'end' ? dateToHHMM(endTimeDate) : dateToHHMM(startTimeDate)}
           primary={primary}
-          layoutRtl={layoutRtl}
           formatOptionLabel={formatSlotLabel}
           onSelect={(hhmm) => {
             const d = timeOnDate(hhmm, reminderDay);
@@ -835,130 +803,305 @@ function CalendarReminderEditorModalInner({
           onClose={() => setTimePickerWhich(null)}
           insetBottom={insets.bottom}
         />
-      </SafeAreaView>
-    </View>
+      </View>
+    </BottomSheetModal>
   );
 }
 
-export default function CalendarReminderEditorModal(props: CalendarReminderEditorModalProps) {
-  return (
-    <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose}>
-      <SafeAreaProvider initialMetrics={initialWindowMetrics ?? undefined}>
-        <CalendarReminderEditorModalInner {...props} />
-      </SafeAreaProvider>
-    </Modal>
-  );
-}
+// ─── styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screenRoot: { flex: 1, backgroundColor: UI.bg, direction: 'ltr' },
-  safeAreaTopStripe: { backgroundColor: UI.surface, alignSelf: 'stretch' },
-  bodySafe: { flex: 1, minHeight: 0, backgroundColor: UI.bg },
-  headerSafeWrap: { zIndex: 2, backgroundColor: UI.surface },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 14,
-    gap: 12,
+  // ── sheet chrome ──────────────────────────────────────────────────────────
+  sheetBg: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: UI.surface,
   },
-  /** Physical mirror: כפתור סגירה מימין, כותרות במרכז-שמאל */
-  headerRowRtl: { flexDirection: 'row-reverse' },
-  headerRowPad: { paddingHorizontal: 16 },
-  footerPad: { paddingHorizontal: 16, paddingBottom: 12 },
-  headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: UI.border,
+  sheetShadow: {
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-      android: { elevation: 2 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.12, shadowRadius: 24 },
+      android: { elevation: 28 },
     }),
   },
-  scrollFlex: { flex: 1 },
-  scrollContent: { paddingBottom: 120 },
-  scrollContentRtl: { flexGrow: 1, alignItems: 'stretch' },
-  headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
-  headerTitlesRtl: { alignSelf: 'stretch', alignItems: 'stretch' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
-  headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
-  hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
-  hebrewTextBlock: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C7C7CC',
+    marginTop: 2,
+  },
+  sheetBody: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+
+  // ── header ─────────────────────────────────────────────────────────────────
+  sheetHeader: {
+    paddingTop: 4,
+  },
+  sheetHeaderInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  sheetTitleBlock: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  sheetTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: UI.text,
+    textAlign: 'center',
+    letterSpacing: -0.3,
     alignSelf: 'stretch',
   },
+  sheetSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: UI.textSecondary,
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 17,
+    alignSelf: 'stretch',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: UI.border,
+    marginHorizontal: 0,
+  },
+
+  // ── scroll ────────────────────────────────────────────────────────────────
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+
+  // ── cards ─────────────────────────────────────────────────────────────────
   card: {
-    marginTop: 14,
+    marginBottom: 14,
     backgroundColor: UI.surface,
     borderRadius: 22,
-    padding: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: UI.border,
+    borderColor: UI.borderSoft,
+    alignItems: 'stretch',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.07, shadowRadius: 16 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.05, shadowRadius: 14 },
       android: { elevation: 3 },
     }),
   },
-  cardRtl: { alignItems: 'stretch' },
-  cardHeader: {
+  cardSectionRow: {
+    direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 10,
     width: '100%',
   },
-  cardHeaderRtlExplicit: {
-    alignSelf: 'stretch',
+  cardSectionLabelWrap: {
+    flex: 1,
+  },
+  cardSectionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: UI.text,
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  cardIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  textField: {
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: UI.fieldBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    fontWeight: '600',
+    color: UI.text,
+  },
+  textFieldMultiline: {
+    minHeight: 96,
+    paddingTop: 14,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+  fieldDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: UI.border,
+    marginTop: 4,
+    marginBottom: 2,
+    opacity: 0.85,
+  },
+  subSectionHead: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginTop: 12,
+    marginBottom: 8,
   },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: UI.text },
-  cardTitleFlex: { flex: 1 },
-  cardTitleRtlExplicit: {
+  subSectionAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
+  subSectionTitle: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '800',
-    color: UI.text,
+    fontSize: 13,
+    fontWeight: '700',
+    color: UI.textSecondary,
     textAlign: 'right',
-    writingDirection: 'rtl',
   },
+
+  // ── calendar ──────────────────────────────────────────────────────────────
   calendarShell: {
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: UI.border,
+    borderColor: UI.borderSoft,
+    backgroundColor: UI.fieldBg,
+  },
+  calendarModernBox: {
+    minHeight: 340,
+    borderRadius: 14,
+    overflow: 'hidden',
     backgroundColor: UI.surface,
   },
-  calendarShellRtl: { alignSelf: 'stretch' },
-  calendarRtl: { width: '100%', alignSelf: 'stretch' },
-  timeRow: {
+
+  fieldRtl: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
+
+  // ── time range ─────────────────────────────────────────────────────────────
+  rangeChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    alignSelf: 'stretch',
+  },
+  rangeChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+    writingDirection: 'ltr',
+  },
+  timeRowsGroup: {
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: UI.border,
-    backgroundColor: 'rgba(60,60,67,0.04)',
+    borderWidth: 1,
+    borderColor: UI.borderSoft,
+    backgroundColor: UI.fieldBg,
     overflow: 'hidden',
   },
-  timeRowInner: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  timeRowInnerRtl: { flexDirection: 'row-reverse' },
-  timeBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  timeRowValue: { flex: 1, fontSize: 17, fontWeight: '800', color: UI.text },
-  rangeHint: { fontSize: 14, fontWeight: '600', marginBottom: 14, lineHeight: 20 },
-  timeSubLabel: { fontSize: 13, fontWeight: '700', color: UI.textSecondary, marginBottom: 8 },
-  timeSubLabelSpaced: { marginTop: 4 },
+  timeRow: {},
+  timeRowInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  timeBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeRowTexts: { flex: 1, alignItems: 'flex-end' },
+  timeRowLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: UI.textTertiary,
+    textAlign: 'right',
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  timeRowValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    writingDirection: 'ltr',
+    textAlign: 'right',
+  },
+  timeRowDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: UI.border,
+    marginHorizontal: 14,
+  },
+
+  // ── color picker ──────────────────────────────────────────────────────────
+  colorRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+  colorDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ── footer ────────────────────────────────────────────────────────────────
+  footer: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  saveBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 17,
+    borderRadius: 18,
+    gap: 6,
+    ...Platform.select({
+      ios: { shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.30, shadowRadius: 18 },
+      android: { elevation: 8 },
+    }),
+  },
+  saveBtnDisabled: { opacity: 0.65 },
+  saveBtnIcon: { marginStart: 8 },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  deleteTextBtn: {
+    marginTop: 14,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  deleteText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: UI.danger,
+  },
+
+  // ── time slot picker sheet ────────────────────────────────────────────────
   timeSheetHost: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 200,
   },
   timeSheetBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.40)',
   },
   timeSheetCard: {
     position: 'absolute',
@@ -966,23 +1109,30 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: UI.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '58%',
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: UI.border,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '60%',
+    paddingTop: 12,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 12 },
-      android: { elevation: 16 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.14, shadowRadius: 16 },
+      android: { elevation: 20 },
     }),
   },
+  timeSheetDragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C7C7CC',
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
   timeSheetTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: UI.text,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingBottom: 12,
+    textAlign: 'right',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: UI.border,
   },
@@ -997,62 +1147,5 @@ const styles = StyleSheet.create({
     borderBottomColor: UI.border,
   },
   timeSheetRowRtl: { flexDirection: 'row-reverse' },
-  timeSheetRowText: { fontSize: 17, fontWeight: '600', color: UI.text },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'flex-start', width: '100%' },
-  /** row-reverse + flex-start = התחלה מימין (בלי לסמוך על direction:rtl באנדרואיד) */
-  colorRowRtl: { flexDirection: 'row-reverse', justifyContent: 'flex-start' },
-  colorDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  notesShell: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(60,60,67,0.03)',
-    minHeight: 88,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  notesInput: { fontSize: 16, fontWeight: '600', color: UI.text, minHeight: 72 },
-  titleInput: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: UI.border,
-    backgroundColor: 'rgba(60,60,67,0.04)',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontWeight: '600',
-    color: UI.text,
-  },
-  fieldRtl: { alignSelf: 'stretch' },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: UI.border,
-    backgroundColor: UI.bg,
-  },
-  saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 18,
-    ...Platform.select({
-      ios: { shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
-      android: { elevation: 8 },
-    }),
-  },
-  saveBtnRtl: { flexDirection: 'row-reverse' },
-  saveBtnDisabled: { opacity: 0.65 },
-  saveBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  deleteTextBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 8 },
-  deleteText: { fontSize: 15, fontWeight: '700', color: UI.danger },
+  timeSheetRowText: { fontSize: 16, fontWeight: '600', color: UI.text },
 });

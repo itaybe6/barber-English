@@ -2,6 +2,7 @@ import React, {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useMemo,
   useRef,
 } from 'react';
 import {
@@ -16,10 +17,9 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
-  useBottomSheetSpringConfigs,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useAdminCalendarSheetTimingConfig } from '@/components/admin-calendar/useAdminCalendarSheetTiming';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ban, Calendar, StickyNote } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
@@ -54,40 +54,20 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
     const isRtl = I18nManager.isRTL;
     const colors = useColors();
 
-    // Expose open / close directly — no React state round-trip, zero delay.
+    const animationConfigs = useAdminCalendarSheetTimingConfig();
+
+    /** Fixed height avoids dynamic layout passes during open (smoother than enableDynamicSizing). */
+    const snapPoints = useMemo(() => ['64%'], []);
+
+    // Call present() immediately — Reanimated runs on the UI thread and doesn't need JS to yield first.
     useImperativeHandle(ref, () => ({
       open: () => sheetRef.current?.present(),
       close: () => sheetRef.current?.dismiss(),
     }));
 
-    const animationConfigs = useBottomSheetSpringConfigs({
-      damping: 68,
-      stiffness: 360,
-      mass: 0.85,
-      overshootClamping: false,
-      restDisplacementThreshold: 0.01,
-      restSpeedThreshold: 0.01,
-    });
-
     const handleDismiss = useCallback(() => {
       onDismiss();
     }, [onDismiss]);
-
-    /** Same vertical gradient as `AdminBroadcastComposer` sheet (background → surface). */
-    const renderSheetBackground = useCallback(
-      () => (
-        <View style={styles.sheetGradientHost}>
-          <LinearGradient
-            pointerEvents="none"
-            colors={[colors.background, colors.surface]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-        </View>
-      ),
-      [colors.background, colors.surface],
-    );
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
@@ -107,20 +87,22 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
     return (
       <BottomSheetModal
         ref={sheetRef}
+        snapPoints={snapPoints}
+        index={0}
+        enableDynamicSizing={false}
         onDismiss={handleDismiss}
         animationConfigs={animationConfigs}
         backdropComponent={renderBackdrop}
-        enableDynamicSizing
         enablePanDownToClose
+        topInset={insets.top}
         handleIndicatorStyle={styles.dragHandle}
-        backgroundStyle={[styles.sheetBg, { backgroundColor: 'transparent' }]}
-        backgroundComponent={renderSheetBackground}
+        backgroundStyle={[styles.sheetBg, { backgroundColor: colors.background }]}
         style={styles.sheetShadow}
       >
         <BottomSheetView
           style={[
             styles.container,
-            { paddingBottom: insets.bottom + 28, backgroundColor: 'transparent' },
+            { paddingBottom: insets.bottom + 28 },
           ]}
         >
           {/* Header */}
@@ -222,12 +204,6 @@ const styles = StyleSheet.create({
   sheetBg: {
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-  },
-  sheetGradientHost: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    overflow: 'hidden',
   },
   sheetShadow: {
     ...Platform.select({

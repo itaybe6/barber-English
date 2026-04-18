@@ -19,6 +19,7 @@ import {
   Platform,
   Pressable,
   DeviceEventEmitter,
+  InteractionManager,
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -44,6 +45,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AppointmentActionsBottomSheet } from '@/components/admin-calendar/AppointmentActionsBottomSheet';
 import { MonthDayBottomSheet } from '@/components/admin-calendar/MonthDayBottomSheet';
 import { CalendarAddBottomSheet, type CalendarAddSheetHandle } from '@/components/admin-calendar/CalendarAddBottomSheet';
+import { ConstraintsManagerBottomSheet, type ConstraintsManagerSheetHandle } from '@/components/admin-calendar/ConstraintsManagerBottomSheet';
 import type { AnchorRect } from '@/components/admin-calendar/AppointmentActionsAnchorSheet';
 import { AppointmentsCalendarLoader } from '@/components/admin-calendar/AppointmentsCalendarLoader';
 import type { CalendarViewMode } from '@/components/admin-calendar/calendarViewMode';
@@ -919,6 +921,11 @@ export default function AdminAppointmentsScreen() {
   const setReminderFabRegistration = useAdminCalendarReminderFabRegistration();
   const plusAnchorWindow = useAdminCalendarPlusAnchorWindow();
   const calendarAddSheetRef = useRef<CalendarAddSheetHandle>(null);
+  const constraintsManagerSheetRef = useRef<ConstraintsManagerSheetHandle>(null);
+  /** After choosing "אילוצים" in the + sheet, open the manager only once that sheet has fully dismissed (avoids two sheets animating at once). */
+  const pendingOpenConstraintsManagerAfterAddSheetRef = useRef(false);
+  /** Same pattern for "תזכורת ביומן" → reminder editor (sequential sheets = smooth animation). */
+  const pendingOpenReminderEditorAfterAddSheetRef = useRef(false);
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -1031,6 +1038,7 @@ export default function AdminAppointmentsScreen() {
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
   const [showReminderEditor, setShowReminderEditor] = useState(false);
   const [showConstraintsModal, setShowConstraintsModal] = useState(false);
+  const [showConstraintsManager, setShowConstraintsManager] = useState(false);
   const [constraintToEdit, setConstraintToEdit] = useState<BusinessConstraint | null>(null);
 
 
@@ -2122,8 +2130,27 @@ export default function AdminAppointmentsScreen() {
   ]);
 
   const closeReminderModal = useCallback(() => {
+    pendingOpenConstraintsManagerAfterAddSheetRef.current = false;
+    pendingOpenReminderEditorAfterAddSheetRef.current = false;
     setShowCalendarFabSheet(false);
     calendarAddSheetRef.current?.close();
+  }, []);
+
+  const handleCalendarAddSheetDismiss = useCallback(() => {
+    setShowCalendarFabSheet(false);
+    if (pendingOpenConstraintsManagerAfterAddSheetRef.current) {
+      pendingOpenConstraintsManagerAfterAddSheetRef.current = false;
+      setShowConstraintsManager(true);
+      InteractionManager.runAfterInteractions(() => {
+        requestAnimationFrame(() => {
+          constraintsManagerSheetRef.current?.open();
+        });
+      });
+    } else if (pendingOpenReminderEditorAfterAddSheetRef.current) {
+      pendingOpenReminderEditorAfterAddSheetRef.current = false;
+      // onDismiss runs after the + sheet is already gone — open immediately (no extra timer).
+      setShowReminderEditor(true);
+    }
   }, []);
 
   const closeReminderEditor = useCallback(() => {
@@ -2133,9 +2160,9 @@ export default function AdminAppointmentsScreen() {
 
   const onCalendarFabPickReminder = useCallback(() => {
     setReminderEditorEditing(null);
+    pendingOpenReminderEditorAfterAddSheetRef.current = true;
     setShowCalendarFabSheet(false);
     calendarAddSheetRef.current?.close();
-    setShowReminderEditor(true);
   }, []);
 
   const onCalendarFabPickAppointment = useCallback(() => {
@@ -2148,9 +2175,9 @@ export default function AdminAppointmentsScreen() {
   }, [router, selectedDateStr]);
 
   const onCalendarFabPickConstraints = useCallback(() => {
+    pendingOpenConstraintsManagerAfterAddSheetRef.current = true;
     setShowCalendarFabSheet(false);
     calendarAddSheetRef.current?.close();
-    setShowConstraintsModal(true);
   }, []);
 
   const handleAddAppointmentModalSuccess = useCallback(() => {
@@ -2181,6 +2208,8 @@ export default function AdminAppointmentsScreen() {
       if (!user?.id) return;
       const merged = mergeCalendarRefreshRange(selectedWeekChronoRange, payload);
       void loadAppointmentsForRange(merged.start, merged.end);
+      // refresh the manager sheet list if it's open
+      void constraintsManagerSheetRef.current?.refresh();
     },
     [
       loadAppointmentsForDate,
@@ -2200,7 +2229,7 @@ export default function AdminAppointmentsScreen() {
 
   useEffect(() => {
     if (
-      (!showCalendarFabSheet && !showConstraintsModal && !showReminderEditor && !constraintToEdit) ||
+      (!showCalendarFabSheet && !showConstraintsModal && !showConstraintsManager && !showReminderEditor && !constraintToEdit) ||
       Platform.OS !== 'android'
     )
       return;
@@ -2213,6 +2242,11 @@ export default function AdminAppointmentsScreen() {
         closeReminderEditor();
         return true;
       }
+      if (showConstraintsManager) {
+        constraintsManagerSheetRef.current?.close();
+        setShowConstraintsManager(false);
+        return true;
+      }
       closeReminderModal();
       setShowConstraintsModal(false);
       return true;
@@ -2221,6 +2255,7 @@ export default function AdminAppointmentsScreen() {
   }, [
     showCalendarFabSheet,
     showConstraintsModal,
+    showConstraintsManager,
     showReminderEditor,
     constraintToEdit,
     closeReminderModal,
@@ -2236,6 +2271,11 @@ export default function AdminAppointmentsScreen() {
       setShowConstraintsModal(false);
       return;
     }
+    if (showConstraintsManager) {
+      constraintsManagerSheetRef.current?.close();
+      setShowConstraintsManager(false);
+      return;
+    }
     if (showReminderEditor) {
       closeReminderEditor();
       return;
@@ -2243,12 +2283,15 @@ export default function AdminAppointmentsScreen() {
     if (showCalendarFabSheet) {
       closeReminderModal();
     } else {
-      setShowCalendarFabSheet(true);
+      // open() first so Reanimated gets the earliest possible start on the UI thread,
+      // before the React re-render triggered by setShowCalendarFabSheet.
       calendarAddSheetRef.current?.open();
+      setShowCalendarFabSheet(true);
     }
   }, [
     showCalendarFabSheet,
     showConstraintsModal,
+    showConstraintsManager,
     showReminderEditor,
     constraintToEdit,
     closeReminderModal,
@@ -2260,6 +2303,7 @@ export default function AdminAppointmentsScreen() {
       isOpen:
         showCalendarFabSheet ||
         showConstraintsModal ||
+        showConstraintsManager ||
         showReminderEditor ||
         !!constraintToEdit,
       onPress: reminderFabTabPress,
@@ -2268,6 +2312,7 @@ export default function AdminAppointmentsScreen() {
   }, [
     showCalendarFabSheet,
     showConstraintsModal,
+    showConstraintsManager,
     showReminderEditor,
     constraintToEdit,
     reminderFabTabPress,
@@ -2283,10 +2328,14 @@ export default function AdminAppointmentsScreen() {
 
   const openEditReminderModal = useCallback((r: CalendarReminder) => {
     setReminderEditorEditing(r);
-    setShowCalendarFabSheet(false);
-    calendarAddSheetRef.current?.close();
-    setShowReminderEditor(true);
-  }, []);
+    if (showCalendarFabSheet) {
+      pendingOpenReminderEditorAfterAddSheetRef.current = true;
+      setShowCalendarFabSheet(false);
+      calendarAddSheetRef.current?.close();
+    } else {
+      setShowReminderEditor(true);
+    }
+  }, [showCalendarFabSheet]);
 
   const refreshCalendarRemindersOnly = useCallback(async () => {
     if (!user?.id) return;
@@ -3076,10 +3125,18 @@ export default function AdminAppointmentsScreen() {
       <CalendarAddBottomSheet
         ref={calendarAddSheetRef}
         primaryColor={calendarPrimary}
-        onDismiss={closeReminderModal}
+        onDismiss={handleCalendarAddSheetDismiss}
         onPickAppointment={onCalendarFabPickAppointment}
         onPickReminder={onCalendarFabPickReminder}
         onPickConstraints={onCalendarFabPickConstraints}
+      />
+
+      <ConstraintsManagerBottomSheet
+        ref={constraintsManagerSheetRef}
+        primaryColor={calendarPrimary}
+        onDismiss={() => setShowConstraintsManager(false)}
+        onAddConstraint={() => setShowConstraintsModal(true)}
+        onEditConstraint={(c) => setConstraintToEdit(c)}
       />
 
       <CalendarReminderEditorModal

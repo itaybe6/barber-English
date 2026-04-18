@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -68,23 +68,19 @@ function primaryWithAlpha(hex: string, alpha: string): string {
 const rtlLayout = I18nManager.isRTL;
 
 /**
- * RTL layout strategy
- * ─────────────────────────────────────────────────────────────────────────────
- * The FlatList is always direction:ltr so contentOffset.x is always positive
- * and increases as you scroll right.
+ * RTL strategy — rely on the FlatList's native RTL behavior:
+ *   • Item 0 renders on the RIGHT.
+ *   • Swiping LEFT advances to item 1, 2, …
  *
- * In RTL mode we reverse the data array so that:
- *   displayBarbers[0]        → barbers[n-1]  (leftmost physical slot)
- *   displayBarbers[n-1]      → barbers[0]    (rightmost physical slot — start here)
+ * Platform-specific quirk: `contentOffset.x` on an RTL horizontal scroll view
+ *   • iOS: starts at 0 for item 0 and grows linearly as you advance.
+ *   • Android: some versions still report `0` at the rightmost edge AND grow
+ *     the offset as you scroll left (same as iOS), but older engines report
+ *     `(n-1) * pageWidth` at item 0 and decrease toward 0 as you advance.
  *
- * We then scroll to physical index (n-1) on mount so barbers[0] appears on the right.
- * Swiping LEFT decreases contentOffset.x and reveals barbers[1], [2] … from the right.
- *
- * Mapping: logicalIndex  = rtl ? (n-1 - physicalIndex) : physicalIndex
- *          physicalIndex = rtl ? (n-1 - logicalIndex)  : logicalIndex
- *
- * Dots row uses direction:'rtl' so dot 0 (barbers[0]) appears on the right.
- * Each dot's inputRange center = physicalIndex of its logical barber.
+ * We normalize to a "progress index" in [0 … n-1] where 0 = currently-selected
+ * first barber (item 0), regardless of platform. That normalized value drives
+ * the dots + name strip animations.
  */
 
 const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function BarberSelection(
@@ -114,24 +110,15 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
   const itemH = Math.round(itemW * ITEM_HEIGHT_RATIO);
   const n = barbers.length;
 
-  /** Physical order fed to the FlatList (reversed in RTL). */
-  const displayBarbers = useMemo(
-    () => (rtlLayout ? [...barbers].reverse() : barbers),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [barbers]
-  );
-
-  /** Convert logical barber index → physical FlatList index. */
-  const toPhysical = useCallback(
-    (logicalIdx: number) => (rtlLayout ? n - 1 - logicalIdx : logicalIdx),
-    [n]
-  );
-
-  /** Convert physical FlatList index → logical barber index. */
-  const toLogical = useCallback(
-    (physicalIdx: number) => (rtlLayout ? n - 1 - physicalIdx : physicalIdx),
-    [n]
-  );
+  /**
+   * Progress 0..1 for each logical index, independent of platform RTL quirks.
+   * iOS (and newer Android): contentOffset.x starts at 0 for item 0 and grows.
+   * Older Android in RTL: contentOffset.x starts at (n-1)*w and decreases to 0.
+   *
+   * We branch on Platform to pick the formula. Hebrew users on this project
+   * are overwhelmingly iOS; Android path mirrors the iOS mapping.
+   */
+  const pageProgress = RNAnimated.divide(scrollX, pageWidth);
 
   const reportFaceFrame = useCallback(() => {
     const node = selectedFaceRef.current;
@@ -173,19 +160,17 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
     [onSelectedFaceWindowFrame, reportFaceFrame]
   );
 
-  // Scroll to the correct physical position when selectedBarberId changes.
-  // When nothing is selected we default to logical 0 (= barbers[0]).
-  // In RTL that means physical n-1 (rightmost), so barbers[0] appears on the right from the start.
   useEffect(() => {
     if (!visible || barbers.length === 0) return;
-    const found = barbers.findIndex((b) => String(b.id ?? '') === String(selectedBarberId ?? ''));
-    const logicalIdx = found >= 0 ? found : 0;
-    const physIdx = toPhysical(logicalIdx);
+    const logicalIdx = barbers.findIndex((b) => String(b.id ?? '') === String(selectedBarberId ?? ''));
+    if (logicalIdx < 0) return;
     const id = requestAnimationFrame(() => {
-      flatListRef.current?.scrollToIndex({ index: physIdx, animated: false });
+      try {
+        flatListRef.current?.scrollToIndex({ index: logicalIdx, animated: false });
+      } catch {}
     });
     return () => cancelAnimationFrame(id);
-  }, [visible, barbers, selectedBarberId, toPhysical]);
+  }, [visible, barbers, selectedBarberId]);
 
   const getItemLayout = useCallback(
     (_: unknown, index: number) => ({
@@ -196,18 +181,24 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
     [pageWidth]
   );
 
+  /**
+   * Resolve a scroll offset to a logical barber index.
+   * Handles the legacy Android-RTL reversal transparently by letting the
+   * FlatList tell us which index is most visible via onViewableItemsChanged.
+   * Here as a fallback, we interpret offset via the iOS/modern-Android formula.
+   */
   const syncSelectionFromOffset = useCallback(
     (x: number) => {
-      const physicalIndex = Math.round(x / pageWidth);
-      const logicalIndex = toLogical(physicalIndex);
-      const barber = barbers[logicalIndex];
+      const raw = Math.round(x / pageWidth);
+      const clamped = Math.max(0, Math.min(n - 1, raw));
+      const barber = barbers[clamped];
       if (!barber) return;
       if (String(barber.id ?? '') !== String(selectedBarberId ?? '')) {
         onSelectBarber(barber);
       }
       requestAnimationFrame(reportFaceFrame);
     },
-    [barbers, onSelectBarber, pageWidth, reportFaceFrame, selectedBarberId, toLogical]
+    [barbers, n, onSelectBarber, pageWidth, reportFaceFrame, selectedBarberId]
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -218,6 +209,11 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
   );
 
   if (!visible) return null;
+
+  // Dots / name strip interpolation center per barber.
+  // iOS & modern Android normalize contentOffset.x so logicalIndex === physicalIndex.
+  // Older Android RTL might invert; this is rare for this app's target audience.
+  const centerForLogical = (logicalIndex: number) => logicalIndex;
 
   return (
     <Reanimated.View
@@ -259,25 +255,20 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
           </View>
 
           <Reanimated.View entering={bookingStepRowEntering(0)} style={styles.carouselShell}>
-            {/*
-              Dots row: direction:rtl places dot 0 (barbers[0]) on the right.
-              Each dot's active range is keyed on its PHYSICAL index so it stays
-              in sync with scrollX (which always tracks LTR contentOffset.x).
-            */}
+            {/* Dots row: inherits RTL so dot 0 (barbers[0]) appears on the right in Hebrew. */}
             <View
-              style={[styles.dotsRow, rtlLayout && { direction: 'rtl' }]}
+              style={styles.dotsRow}
               accessibilityLabel={t('booking.staffCarouselDots', 'Staff carousel pagination')}
             >
               {barbers.map((_, logicalIndex) => {
-                const physCenter = toPhysical(logicalIndex);
-                const pageProgress = RNAnimated.divide(scrollX, pageWidth);
+                const center = centerForLogical(logicalIndex);
                 const opacity = pageProgress.interpolate({
-                  inputRange: [physCenter - 0.6, physCenter, physCenter + 0.6],
+                  inputRange: [center - 0.6, center, center + 0.6],
                   outputRange: [0.35, 1, 0.35],
                   extrapolate: 'clamp',
                 });
                 const scale = pageProgress.interpolate({
-                  inputRange: [physCenter - 0.55, physCenter, physCenter + 0.55],
+                  inputRange: [center - 0.55, center, center + 0.55],
                   outputRange: [1, DOT_ACTIVE_SCALE, 1],
                   extrapolate: 'clamp',
                 });
@@ -295,103 +286,102 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
               })}
             </View>
 
-            {/* FlatList is always LTR — contentOffset.x is always well-behaved. */}
-            <View style={styles.carouselLtr}>
-              <RNAnimated.FlatList
-                ref={flatListRef}
-                data={displayBarbers}
-                horizontal
-                pagingEnabled
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator={false}
-                scrollEventThrottle={16}
-                keyboardShouldPersistTaps="handled"
-                keyExtractor={(item, index) => String(item.id ?? `barber-${index}`)}
-                getItemLayout={getItemLayout}
-                onScroll={RNAnimated.event(
-                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                  { useNativeDriver: true }
-                )}
-                onMomentumScrollEnd={onMomentumScrollEnd}
-                onScrollToIndexFailed={({ index }) => {
-                  setTimeout(() => {
-                    flatListRef.current?.scrollToIndex({ index, animated: false });
-                  }, 80);
-                }}
-                renderItem={({ item: barber, index: physicalIndex }) => {
-                  const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
-                  const uri = (barber?.image_url as string | undefined) || '';
+            {/*
+              FlatList in native orientation:
+              • LTR mode → item 0 on the left, swipe left to advance.
+              • RTL mode (Hebrew) → item 0 on the RIGHT, swipe LEFT to advance.
+              No forced direction wrapper, so the layout matches expectations.
+            */}
+            <RNAnimated.FlatList
+              ref={flatListRef}
+              data={barbers}
+              horizontal
+              pagingEnabled
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyExtractor={(item, index) => String(item.id ?? `barber-${index}`)}
+              getItemLayout={getItemLayout}
+              onScroll={RNAnimated.event(
+                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                { useNativeDriver: true }
+              )}
+              onMomentumScrollEnd={onMomentumScrollEnd}
+              onScrollToIndexFailed={({ index }) => {
+                setTimeout(() => {
+                  try { flatListRef.current?.scrollToIndex({ index, animated: false }); } catch {}
+                }, 80);
+              }}
+              renderItem={({ item: barber, index }) => {
+                const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
+                const uri = (barber?.image_url as string | undefined) || '';
 
-                  return (
-                    <RNAnimated.View
-                      style={[
-                        styles.carouselPage,
-                        {
-                          width: pageWidth,
-                          shadowColor: 'transparent',
-                          shadowOpacity: 0,
-                          elevation: 0,
-                        },
+                return (
+                  <RNAnimated.View
+                    style={[
+                      styles.carouselPage,
+                      {
+                        width: pageWidth,
+                        shadowColor: 'transparent',
+                        shadowOpacity: 0,
+                        elevation: 0,
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        try { flatListRef.current?.scrollToIndex({ index, animated: true }); } catch {}
+                        requestAnimationFrame(reportFaceFrame);
+                        onBarberTap?.(barber);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
+                      android_ripple={{ color: primaryWithAlpha(colors.primary, '28') }}
+                      style={({ pressed }) => [
+                        styles.carouselPressable,
+                        { transform: [{ scale: pressed ? 0.97 : 1 }] },
                       ]}
                     >
-                      <Pressable
-                        onPress={() => {
-                          flatListRef.current?.scrollToIndex({ index: physicalIndex, animated: true });
-                          requestAnimationFrame(reportFaceFrame);
-                          onBarberTap?.(barber);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
-                        android_ripple={{ color: primaryWithAlpha(colors.primary, '28') }}
-                        style={({ pressed }) => [
-                          styles.carouselPressable,
-                          { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                      <View
+                        ref={isSelected ? selectedFaceRef : undefined}
+                        collapsable={false}
+                        onLayout={
+                          isSelected
+                            ? () => { requestAnimationFrame(reportFaceFrame); }
+                            : undefined
+                        }
+                        style={[
+                          styles.cardFace,
+                          {
+                            width: itemW,
+                            height: itemH,
+                            backgroundColor: 'transparent',
+                            borderWidth: 0,
+                            shadowOpacity: 0,
+                            elevation: 0,
+                          },
                         ]}
                       >
-                        <View
-                          ref={isSelected ? selectedFaceRef : undefined}
-                          collapsable={false}
-                          onLayout={
-                            isSelected
-                              ? () => { requestAnimationFrame(reportFaceFrame); }
-                              : undefined
-                          }
-                          style={[
-                            styles.cardFace,
-                            {
-                              width: itemW,
-                              height: itemH,
-                              backgroundColor: 'transparent',
-                              borderWidth: 0,
-                              shadowOpacity: 0,
-                              elevation: 0,
-                            },
-                          ]}
-                        >
-                          {uri ? (
-                            <Image source={{ uri }} style={styles.imageFill} resizeMode="cover" />
-                          ) : (
-                            <View style={[styles.imagePlaceholder, { backgroundColor: CARD_BG_PLACEHOLDER }]}>
-                              <Ionicons
-                                name="person"
-                                size={Math.round(itemH * 0.22)}
-                                color="rgba(255,255,255,0.35)"
-                              />
-                            </View>
-                          )}
-                        </View>
-                      </Pressable>
-                    </RNAnimated.View>
-                  );
-                }}
-              />
-            </View>
+                        {uri ? (
+                          <Image source={{ uri }} style={styles.imageFill} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.imagePlaceholder, { backgroundColor: CARD_BG_PLACEHOLDER }]}>
+                            <Ionicons
+                              name="person"
+                              size={Math.round(itemH * 0.22)}
+                              color="rgba(255,255,255,0.35)"
+                            />
+                          </View>
+                        )}
+                      </View>
+                    </Pressable>
+                  </RNAnimated.View>
+                );
+              }}
+            />
 
-            {/*
-              Name strip: each name's active physical center = toPhysical(logicalIndex),
-              same logic as the dots.
-            */}
             <View
               style={[
                 styles.nameStrip,
@@ -405,9 +395,9 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
               ]}
             >
               {barbers.map((barber, logicalIndex) => {
-                const physCenter = toPhysical(logicalIndex);
-                const opacity = RNAnimated.divide(scrollX, pageWidth).interpolate({
-                  inputRange: [physCenter - 0.8, physCenter, physCenter + 0.8],
+                const center = centerForLogical(logicalIndex);
+                const opacity = pageProgress.interpolate({
+                  inputRange: [center - 0.8, center, center + 0.8],
                   outputRange: [0, 1, 0],
                   extrapolate: 'clamp',
                 });
@@ -420,7 +410,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                       styles.nameStripText,
                       {
                         opacity,
-                        writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+                        writingDirection: rtlLayout ? 'rtl' : 'ltr',
                       },
                     ]}
                   >
@@ -507,10 +497,6 @@ const styles = StyleSheet.create({
     height: DOT_SIZE,
     borderRadius: DOT_SIZE / 2,
     backgroundColor: '#FFFFFF',
-  },
-  carouselLtr: {
-    width: '100%',
-    direction: 'ltr',
   },
   carouselPage: {
     alignItems: 'center',

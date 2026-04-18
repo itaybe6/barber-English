@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   View,
   Text,
@@ -13,6 +14,7 @@ import {
   Modal,
   Alert,
   BackHandler,
+  useWindowDimensions,
 } from 'react-native';
 import * as Calendar from 'expo-calendar';
 import BookingSuccessAnimatedOverlay, {
@@ -23,6 +25,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Calendar as CalendarIcon,
@@ -32,6 +35,8 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Check,
+  ClipboardList,
 } from 'lucide-react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
@@ -48,6 +53,8 @@ import {
 } from '@/lib/hooks/useAdminAddAppointmentForm';
 import type { Service } from '@/lib/supabase';
 import { ADMIN_CALENDAR_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
+import { BOOKING_TIME_PERIOD_EMOJI } from '@/constants/bookingTimePeriodEmoji';
+import { bookingTimeRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 LocaleConfig.locales['en'] = {
   monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
@@ -95,7 +102,219 @@ function parseDateParam(raw: string | string[] | undefined): string | null {
   return s;
 }
 
+const TOTAL_WIZARD_STEPS = 5;
+
+type AdminTimePeriod = 'morning' | 'afternoon' | 'evening';
+
+const ADMIN_TIME_PERIODS: {
+  key: AdminTimePeriod;
+  labelKey: string;
+  labelFallback: string;
+  emoji: string;
+  fromHour: number;
+  toHour: number;
+}[] = [
+  {
+    key: 'morning',
+    labelKey: 'booking.timePeriod.morning',
+    labelFallback: 'בוקר',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.morning,
+    fromHour: 0,
+    toHour: 11,
+  },
+  {
+    key: 'afternoon',
+    labelKey: 'booking.timePeriod.afternoon',
+    labelFallback: 'צהריים',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.afternoon,
+    fromHour: 12,
+    toHour: 16,
+  },
+  {
+    key: 'evening',
+    labelKey: 'booking.timePeriod.evening',
+    labelFallback: 'ערב',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.evening,
+    fromHour: 17,
+    toHour: 23,
+  },
+];
+
+function adminGetPeriod(timeStr: string): AdminTimePeriod {
+  const hour = parseInt(timeStr.split(':')[0], 10);
+  if (hour <= 11) return 'morning';
+  if (hour <= 16) return 'afternoon';
+  return 'evening';
+}
+
+/** Max height for admin time list: screen minus header, step intro, glass insets, and floating footer + gap. */
+function computeAdminTimeSlotsMaxHeight(windowHeight: number, topInset: number, bottomInset: number): number {
+  const headerBlock = topInset + 52 + 8;
+  const scrollTop = 4;
+  const progressBlock = 4 + 14;
+  const stepIntroApprox = 6 + 16 + 44 + 10 + 22 * 3 + 8;
+  const glassTop = 18;
+  const topReserve = headerBlock + scrollTop + progressBlock + stepIntroApprox + glassTop;
+
+  const footerBottom = Math.max(bottomInset, 12) + 8;
+  const footerPill = 54;
+  const gapAboveFooter = 22;
+  const glassBottom = 18;
+  const bottomReserve = footerBottom + footerPill + gapAboveFooter + glassBottom;
+
+  return Math.max(200, Math.round(windowHeight - topReserve - bottomReserve));
+}
+
+const adminBookingGridStyles = StyleSheet.create({
+  grid: { gap: 9 },
+  row: { flexDirection: 'row', gap: 9 },
+  cellWrap: { flex: 1 },
+  cellPress: { flex: 1 },
+  cellIdle: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 4,
+    minHeight: 52,
+    borderRadius: 18,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  cellGradient: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 4,
+    minHeight: 52,
+    borderRadius: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.14,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  cellTime: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  cellTimeSelected: { color: '#FFFFFF', fontWeight: '800' },
+  timeSlotsScroll: { alignSelf: 'stretch' },
+  timeSlotsScrollInner: { gap: 16, paddingBottom: 14 },
+  timeSection: { gap: 10 },
+  /** `direction: 'ltr'` + [line][label][emoji] keeps period title flush to the card’s visual end (right in Hebrew RTL). */
+  sectionLabelRow: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    gap: 7,
+  },
+  sectionEmoji: { fontSize: 15, lineHeight: 20 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
+  sectionLine: { flex: 1, height: StyleSheet.hairlineWidth, opacity: 0.55 },
+});
+
+type AdminBookingTimeGridProps = {
+  slots: string[];
+  selectedTime: string | null;
+  primary: string;
+  secondary: string;
+  fieldBorder: string;
+  fieldBg: string;
+  innerText: string;
+  i18nLang?: string;
+  onSelectTime: (time: string) => void;
+  baseDelay: number;
+};
+
+function AdminBookingTimeGrid({
+  slots,
+  selectedTime,
+  primary,
+  secondary,
+  fieldBorder,
+  fieldBg,
+  innerText,
+  i18nLang,
+  onSelectTime,
+  baseDelay,
+}: AdminBookingTimeGridProps) {
+  const rows: string[][] = [];
+  for (let i = 0; i < slots.length; i += 3) {
+    rows.push(slots.slice(i, i + 3));
+  }
+  return (
+    <View style={adminBookingGridStyles.grid}>
+      {rows.map((row, rowIdx) => (
+        <View key={`admin-time-row-${rowIdx}`} style={adminBookingGridStyles.row}>
+          {row.map((slot, colIdx) => {
+            const selected = selectedTime === slot;
+            const delay = baseDelay + rowIdx * 3 + colIdx;
+            return (
+              <Animated.View
+                key={slot}
+                entering={bookingTimeRowEntering(delay)}
+                style={adminBookingGridStyles.cellWrap}
+              >
+                <Pressable
+                  onPress={() => onSelectTime(slot)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={({ pressed }) => [
+                    adminBookingGridStyles.cellPress,
+                    pressed && { opacity: 0.82, transform: [{ scale: 0.97 }] },
+                  ]}
+                >
+                  {selected ? (
+                    <LinearGradient
+                      colors={[primary, secondary]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={adminBookingGridStyles.cellGradient}
+                    >
+                      <Text style={[adminBookingGridStyles.cellTime, adminBookingGridStyles.cellTimeSelected]}>
+                        {formatBookingTimeLabel(slot, i18nLang)}
+                      </Text>
+                    </LinearGradient>
+                  ) : (
+                    <View style={[adminBookingGridStyles.cellIdle, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
+                      <Text style={[adminBookingGridStyles.cellTime, { color: innerText }]}>
+                        {formatBookingTimeLabel(slot, i18nLang)}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              </Animated.View>
+            );
+          })}
+          {row.length < 3
+            ? Array.from({ length: 3 - row.length }).map((_, i) => (
+                <View key={`admin-time-ph-${rowIdx}-${i}`} style={adminBookingGridStyles.cellWrap} />
+              ))
+            : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function AddAppointmentScreen() {
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ date?: string | string[] }>();
   const initialDateKey = parseDateParam(params.date);
@@ -103,17 +322,6 @@ export default function AddAppointmentScreen() {
   const goBackToAppointments = useCallback(() => {
     router.replace('/(tabs)/appointments');
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== 'android') return undefined;
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        goBackToAppointments();
-        return true;
-      });
-      return () => sub.remove();
-    }, [goBackToAppointments])
-  );
 
   const onBookedSuccess = useCallback(() => {
     DeviceEventEmitter.emit(ADMIN_CALENDAR_APPOINTMENTS_CHANGED);
@@ -136,11 +344,38 @@ export default function AddAppointmentScreen() {
     onSuccess: onBookedSuccess,
   });
 
+  const [wizardStep, setWizardStep] = useState(1);
+
+  useFocusEffect(
+    useCallback(() => {
+      form.reset();
+      setWizardStep(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (wizardStep > 1) {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setWizardStep((s) => Math.max(1, s - 1));
+          return true;
+        }
+        goBackToAppointments();
+        return true;
+      });
+      return () => sub.remove();
+    }, [goBackToAppointments, wizardStep])
+  );
+
   const { colors: businessColors } = useBusinessColors();
   const { t, i18n } = useTranslation();
-  /** Align with real layout RTL (not only i18n) — avoids titles stuck on wrong edge */
   const layoutRtl = I18nManager.isRTL;
   const isHeCopy = i18n.language?.startsWith('he') ?? true;
+  /** True when the UI should behave RTL — either system RTL or Hebrew language. */
+  const rtl = layoutRtl || isHeCopy;
   const primary = businessColors.primary;
   const secondary = businessColors.secondary;
 
@@ -155,9 +390,7 @@ export default function AddAppointmentScreen() {
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
   const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  /** Stronger whites on blue gradient for readability */
   const heroMuted = useLightFg ? 'rgba(255,255,255,0.97)' : 'rgba(0,0,0,0.62)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.28)';
   const glassBg = useLightFg ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.92)';
   const glassBorder = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.08)';
   const fieldBg = useLightFg ? 'rgba(255,255,255,0.18)' : '#F5F5F7';
@@ -165,20 +398,19 @@ export default function AddAppointmentScreen() {
   const innerText = useLightFg ? '#FFFFFF' : businessColors.text;
   const innerMuted = useLightFg ? 'rgba(255,255,255,0.96)' : businessColors.textSecondary;
   const placeholderOnGlass = useLightFg ? 'rgba(255,255,255,0.78)' : undefined;
-  const ctaElevatedBg = useLightFg ? '#FFFFFF' : primary;
-  const ctaElevatedLabel = useLightFg ? '#141414' : '#FFFFFF';
-  /** Lucide icons on glass / gradient — solid white reads clearer than brand primary */
   const iconOnGlass = useLightFg ? heroText : primary;
   const iconOnField = useLightFg ? heroText : innerMuted;
 
   const dateLocale = isHeCopy ? 'he-IL' : 'en-US';
-  /** `start` follows writingDirection — reliable with forced RTL mirroring */
-  const textAlignPrimary = (layoutRtl ? 'start' : 'left') as 'start' | 'left';
-  /** Placeholders on Android often ignore `start`; explicit `right` keeps hint + value on the correct edge */
-  const inputTextAlign = (layoutRtl ? 'right' : 'left') as 'right' | 'left';
-  /** Custom placeholder layer when RTL or Hebrew copy — native hint often stays LTR-left */
-  const useRtlInputPlaceholder = layoutRtl || isHeCopy;
-  const writingDir = (layoutRtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
+  const textAlignPrimary = (rtl ? 'right' : 'left') as 'right' | 'left';
+  const inputTextAlign = (rtl ? 'right' : 'left') as 'right' | 'left';
+  const useRtlInputPlaceholder = rtl;
+  const writingDir = (rtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
+  // aliases kept for readability where used in new-client / service / summary blocks
+  const newClientFieldsRtl = rtl;
+  const newClientInputTextAlign = inputTextAlign;
+  const newClientWritingDir = writingDir;
+  const newClientUseRtlPlaceholder = useRtlInputPlaceholder;
   const titleShadowStyle = useMemo(
     () =>
       useLightFg
@@ -190,6 +422,30 @@ export default function AddAppointmentScreen() {
         : {},
     [useLightFg],
   );
+
+  const adminTimeSlotsMaxHeight = useMemo(
+    () => computeAdminTimeSlotsMaxHeight(windowHeight, insets.top, insets.bottom),
+    [windowHeight, insets.top, insets.bottom],
+  );
+
+  const adminTimeSections = useMemo(() => {
+    const grouped: Record<AdminTimePeriod, string[]> = {
+      morning: [],
+      afternoon: [],
+      evening: [],
+    };
+    for (const slot of form.availableTimes) {
+      grouped[adminGetPeriod(slot)].push(slot);
+    }
+    const activePeriods = ADMIN_TIME_PERIODS.filter((p) => grouped[p.key].length > 0);
+    let runningDelay = 1;
+    return activePeriods.map((period) => {
+      const slots = grouped[period.key];
+      const sectionDelay = runningDelay;
+      runningDelay += Math.ceil(slots.length / 3) * 3 + 2;
+      return { period, slots, sectionDelay };
+    });
+  }, [form.availableTimes]);
 
   const adminBookingSuccessLines = useMemo((): SuccessLine[] => {
     if (!showSuccessModal || !successSnapshot) return [];
@@ -307,7 +563,151 @@ export default function AddAppointmentScreen() {
   );
   const canSubmit = summaryReady && !form.isSubmitting;
 
-  const bottomPad = Math.max(insets.bottom, 20) + 72;
+  const newClientPhoneDigits = useMemo(
+    () => form.newClientPhone.replace(/\D/g, ''),
+    [form.newClientPhone],
+  );
+
+  const canAdvanceFromStep = useMemo(() => {
+    switch (wizardStep) {
+      case 1:
+        if (form.clientEntryMode === 'existing') {
+          return !!form.selectedClient;
+        }
+        return form.newClientFullName.trim().length >= 2 && newClientPhoneDigits.length >= 9;
+      case 2:
+        return !!form.selectedService;
+      case 3:
+        return !!form.selectedDate;
+      case 4:
+        return !!form.selectedTime;
+      default:
+        return false;
+    }
+  }, [
+    wizardStep,
+    form.clientEntryMode,
+    form.selectedClient,
+    form.newClientFullName,
+    newClientPhoneDigits,
+    form.selectedService,
+    form.selectedDate,
+    form.selectedTime,
+  ]);
+
+  const footerPrimaryEnabled =
+    wizardStep === TOTAL_WIZARD_STEPS
+      ? canSubmit
+      : canAdvanceFromStep && !form.isFinalizingClientStep;
+
+  const onHeaderBack = useCallback(() => {
+    if (wizardStep > 1) {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setWizardStep((s) => Math.max(1, s - 1));
+    } else {
+      goBackToAppointments();
+    }
+  }, [wizardStep, goBackToAppointments]);
+
+  const onFooterPrimary = useCallback(() => {
+    if (!footerPrimaryEnabled || form.isSubmitting) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+    if (wizardStep < TOTAL_WIZARD_STEPS) {
+      void (async () => {
+        if (wizardStep === 1) {
+          const ok = await form.finalizeClientStepIfNeeded();
+          if (!ok) return;
+        }
+        form.setShowClientDropdown(false);
+        form.setShowServiceDropdown(false);
+        setWizardStep((s) => Math.min(TOTAL_WIZARD_STEPS, s + 1));
+      })();
+    } else {
+      void form.submit();
+    }
+  }, [footerPrimaryEnabled, form, wizardStep]);
+
+  const stepTitle = useMemo(() => {
+    switch (wizardStep) {
+      case 1:
+        return t('settings.recurring.wizardStepTitleClient', 'Client');
+      case 2:
+        return t('settings.recurring.wizardStepTitleService', 'Service');
+      case 3:
+        return t('booking.field.date', 'Date');
+      case 4:
+        return t('settings.recurring.wizardStepTitleTime', 'Time');
+      default:
+        return t('settings.recurring.wizardStepTitleSummary', 'Summary');
+    }
+  }, [wizardStep, t]);
+
+  const stepSubtitle = useMemo(() => {
+    switch (wizardStep) {
+      case 1:
+        return form.clientEntryMode === 'existing'
+          ? t('admin.appointmentsAdmin.pickClient', 'Pick the client for this appointment')
+          : t(
+              'admin.appointmentsAdmin.newClientStepHint',
+              'Enter details — the client can sign in later with this phone number.',
+            );
+      case 2:
+        return t('admin.appointmentsAdmin.pickService', 'Choose the service to perform');
+      case 3:
+        return t('admin.appointmentsAdmin.pickDate', 'Select the date for this appointment');
+      case 4:
+        return !form.selectedDate || !form.selectedService
+          ? t('admin.appointmentsAdmin.selectDateAndServiceFirst', 'בחרו תאריך ושירות כדי לראות שעות פנויות')
+          : t('admin.appointmentsAdmin.pickTime', 'Pick an available time slot');
+      default:
+        return t('settings.recurring.wizardStepSubtitleSummary', 'Review the details before saving');
+    }
+  }, [wizardStep, t, form.selectedDate, form.selectedService, form.clientEntryMode]);
+
+  const scrollBottomPad = Math.max(insets.bottom, 20) + 88;
+
+  const newClientNameInputSlot = (
+    <View style={styles.fieldInputSlot}>
+      <TextInput
+        style={[
+          styles.fieldInput,
+          {
+            color: innerText,
+            textAlign: newClientInputTextAlign,
+            writingDirection: newClientWritingDir,
+          },
+        ]}
+        value={form.newClientFullName}
+        onChangeText={form.setNewClientFullName}
+        placeholder={newClientUseRtlPlaceholder ? '' : t('admin.appointmentsAdmin.newClientNamePh', 'Enter full name')}
+        placeholderTextColor={placeholderOnGlass ?? innerMuted}
+        textAlignVertical="center"
+        autoCapitalize="words"
+        accessibilityLabel={t('admin.appointmentsAdmin.newClientFullName', 'Full name')}
+      />
+      {newClientUseRtlPlaceholder && !form.newClientFullName.trim() ? (
+        <Text
+          pointerEvents="none"
+          numberOfLines={1}
+          style={[
+            styles.inputPlaceholderOverlay,
+            {
+              color: placeholderOnGlass ?? innerMuted,
+              textAlign: newClientInputTextAlign,
+              writingDirection: newClientWritingDir,
+            },
+          ]}
+        >
+          {t('admin.appointmentsAdmin.newClientNamePh', 'הזן שם מלא')}
+        </Text>
+      ) : null}
+    </View>
+  );
+  const newClientNameIconSlot = (
+    <View style={styles.labeledFieldIconSlot}>
+      <User size={18} color={innerMuted} />
+    </View>
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: gradientEnd }]}>
@@ -326,12 +726,21 @@ export default function AddAppointmentScreen() {
       <SafeAreaView style={styles.safeTop} edges={['top']}>
         <View style={styles.headerRow}>
           <Pressable
-            onPress={goBackToAppointments}
-            style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.75 }]}
+            onPress={onHeaderBack}
+            style={({ pressed }) => [
+              styles.headerBackCircle,
+              {
+                backgroundColor: useLightFg ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.95)',
+                borderColor: useLightFg ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.08)',
+                opacity: pressed ? 0.82 : 1,
+              },
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={t('back', 'Back')}
+            accessibilityLabel={
+              wizardStep > 1 ? t('settings.recurring.wizardBackStep', 'Previous step') : t('back', 'Back')
+            }
           >
-            <Ionicons name="arrow-forward" size={26} color={heroText} />
+            <Ionicons name="arrow-forward" size={20} color={heroText} />
           </Pressable>
           <View style={styles.headerTitles}>
             <Text
@@ -340,16 +749,6 @@ export default function AddAppointmentScreen() {
             >
               {t('admin.appointmentsAdmin.addAppointment', 'Add appointment')}
             </Text>
-            <Text
-              style={[
-                styles.headerSubtitle,
-                titleShadowStyle,
-                { color: heroMuted, textAlign: 'center', writingDirection: writingDir },
-              ]}
-              numberOfLines={2}
-            >
-              {t('admin.appointmentsAdmin.addPageSubtitle', 'מלאו את הפרטים — הכל בעמוד אחד')}
-            </Text>
           </View>
           <View style={styles.headerIconBtn} />
         </View>
@@ -357,11 +756,69 @@ export default function AddAppointmentScreen() {
 
       <KeyboardAwareScreenScroll
         style={styles.scrollFlex}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPad }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.progressRow}>
+          {Array.from({ length: TOTAL_WIZARD_STEPS }, (_, i) => {
+            const done = i < wizardStep;
+            const segBg = useLightFg
+              ? done
+                ? '#FFFFFF'
+                : 'rgba(255,255,255,0.22)'
+              : done
+                ? primary
+                : 'rgba(0,0,0,0.08)';
+            return <View key={i} style={[styles.progressSegment, { backgroundColor: segBg }]} />;
+          })}
+        </View>
+
+        <View style={styles.stepIntroWrap}>
+          <Animated.View key={wizardStep} entering={FadeIn.duration(220)} style={styles.stepIntroInner}>
+            <View style={[styles.stepIntroTitleRow, { flexDirection: newClientFieldsRtl ? 'row-reverse' : 'row' }]}>
+              <View style={[styles.stepIntroIconWrap, { backgroundColor: `${primary}40` }]}>
+                {wizardStep === 1 ? (
+                  <User size={22} color={heroText} strokeWidth={2} />
+                ) : wizardStep === 2 ? (
+                  <CalendarIcon size={22} color={heroText} strokeWidth={2} />
+                ) : wizardStep === 3 ? (
+                  <CalendarDays size={22} color={heroText} strokeWidth={2} />
+                ) : wizardStep === 4 ? (
+                  <Clock size={22} color={heroText} strokeWidth={2} />
+                ) : (
+                  <ClipboardList size={22} color={heroText} strokeWidth={2} />
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.stepIntroTitle,
+                  titleShadowStyle,
+                  {
+                    color: heroText,
+                    textAlign: textAlignPrimary,
+                    writingDirection: writingDir,
+                  },
+                ]}
+                numberOfLines={2}
+              >
+                {stepTitle}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.stepIntroSubtitle,
+                titleShadowStyle,
+                { color: heroMuted, textAlign: 'center', writingDirection: writingDir },
+              ]}
+              numberOfLines={3}
+            >
+              {stepSubtitle}
+            </Text>
+          </Animated.View>
+        </View>
+
         <View
           style={[
             styles.glassCard,
@@ -371,66 +828,257 @@ export default function AddAppointmentScreen() {
             },
           ]}
         >
+          <Animated.View key={wizardStep} entering={FadeIn.duration(280)}>
           {/* Client */}
+          {wizardStep === 1 ? (
           <View style={styles.section}>
-            <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
-              <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <User size={18} color={iconOnGlass} strokeWidth={2} />
-              </View>
-              <View style={styles.sectionTitleWrap}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    titleShadowStyle,
-                    { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                  ]}
-                >
-                  {t('admin.appointmentsAdmin.client', 'Client')}
-                </Text>
-              </View>
-            </View>
-            <Text
+            {/* Segmented control — tab itself becomes white pill when selected, no absolute positioning */}
+            <View
               style={[
-                styles.sectionHint,
-                styles.hintBlock,
-                titleShadowStyle,
-                { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
+                styles.segContainer,
+                {
+                  backgroundColor: useLightFg ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)',
+                },
               ]}
             >
-              {t('admin.appointmentsAdmin.pickClient', 'Pick the client for this appointment')}
-            </Text>
+              <Pressable
+                onPress={() => form.applyClientEntryMode('existing')}
+                style={[
+                  styles.segTab,
+                  form.clientEntryMode === 'existing' && styles.segTabActive,
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.segTabText,
+                    {
+                      color: form.clientEntryMode === 'existing'
+                        ? primary
+                        : (useLightFg ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.42)'),
+                      fontWeight: form.clientEntryMode === 'existing' ? '800' : '600',
+                      writingDirection: writingDir,
+                    },
+                  ]}
+                >
+                  {t('admin.appointmentsAdmin.clientModeExisting', 'Existing client')}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => form.applyClientEntryMode('new')}
+                style={[
+                  styles.segTab,
+                  form.clientEntryMode === 'new' && styles.segTabActive,
+                ]}
+                accessibilityRole="button"
+              >
+                <Text
+                  style={[
+                    styles.segTabText,
+                    {
+                      color: form.clientEntryMode === 'new'
+                        ? primary
+                        : (useLightFg ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.42)'),
+                      fontWeight: form.clientEntryMode === 'new' ? '800' : '600',
+                      writingDirection: writingDir,
+                    },
+                  ]}
+                >
+                  {t('admin.appointmentsAdmin.clientModeNew', 'New client')}
+                </Text>
+              </Pressable>
+            </View>
 
-            {!form.selectedClient ? (
+            {form.clientEntryMode === 'existing' ? (
+              !form.selectedClient ? (
+                <>
+                  <View
+                    style={[
+                      styles.fieldShell,
+                      { backgroundColor: fieldBg, borderColor: fieldBorder },
+                      rtl && styles.fieldShellVisualRtl,
+                    ]}
+                  >
+                    <View style={styles.fieldInputSlot}>
+                      <TextInput
+                        style={[
+                          styles.fieldInput,
+                          {
+                            color: innerText,
+                            textAlign: newClientInputTextAlign,
+                            writingDirection: newClientWritingDir,
+                          },
+                        ]}
+                        value={form.clientSearch}
+                        onChangeText={form.setClientSearch}
+                        placeholder={
+                          useRtlInputPlaceholder
+                            ? ''
+                            : t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')
+                        }
+                        placeholderTextColor={placeholderOnGlass ?? innerMuted}
+                        onFocus={() => form.setShowClientDropdown(true)}
+                        textAlignVertical="center"
+                      />
+                      {useRtlInputPlaceholder && !form.clientSearch.trim() ? (
+                        <Text
+                          pointerEvents="none"
+                          numberOfLines={1}
+                          style={[
+                            styles.inputPlaceholderOverlay,
+                            {
+                              color: placeholderOnGlass ?? innerMuted,
+                              textAlign: newClientInputTextAlign,
+                              writingDirection: newClientWritingDir,
+                            },
+                          ]}
+                        >
+                          {t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Search size={18} color={innerMuted} />
+                  </View>
+                  {form.showClientDropdown ? (
+                    <View style={[styles.dropdown, { borderColor: fieldBorder, backgroundColor: glassBg }]}>
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                        {form.filteredClients.slice(0, 60).map((client) => (
+                          <Pressable
+                            key={client.id ?? client.phone}
+                            style={({ pressed }) => [
+                              styles.dropdownRow,
+                              rtl && styles.fieldShellVisualRtl,
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={() => form.onPickClient(client)}
+                          >
+                            <LinearGradient
+                              colors={[primary, secondary]}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={styles.avatarSm}
+                            >
+                              <Text style={styles.avatarSmText}>{client.name.charAt(0).toUpperCase()}</Text>
+                            </LinearGradient>
+                            <View style={styles.dropdownRowText}>
+                              <Text
+                                style={[
+                                  styles.dropdownName,
+                                  { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {client.name}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.dropdownSub,
+                                  { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {client.phone}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        ))}
+                        {form.filteredClients.length === 0 ? (
+                          <Text
+                            style={[
+                              styles.emptyTxt,
+                              styles.hintBlock,
+                              { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
+                            ]}
+                          >
+                            {t('common.noResults', 'No results')}
+                          </Text>
+                        ) : null}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <View
+                  style={[
+                    styles.selectedRow,
+                    { borderColor: fieldBorder, backgroundColor: fieldBg },
+                    rtl && styles.fieldShellVisualRtl,
+                  ]}
+                >
+                  <LinearGradient colors={[primary, secondary]} style={styles.avatarSm}>
+                    <Text style={styles.avatarSmText}>{form.selectedClient.name.charAt(0).toUpperCase()}</Text>
+                  </LinearGradient>
+                  <View style={styles.selectedRowMid}>
+                    <Text
+                      style={[
+                        styles.dropdownName,
+                        { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {form.selectedClient.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dropdownSub,
+                        { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {form.selectedClient.phone}
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => form.setSelectedClient(null)} hitSlop={12}>
+                    <Text style={[styles.changeLink, { color: primary }]}>{t('common.change', 'Change')}</Text>
+                  </Pressable>
+                </View>
+              )
+            ) : !form.selectedClient ? (
               <>
                 <View
                   style={[
                     styles.fieldShell,
+                    { backgroundColor: fieldBg, borderColor: fieldBorder, marginBottom: 12 },
+                  ]}
+                >
+                  {newClientFieldsRtl ? (
+                    <>
+                      {newClientNameInputSlot}
+                      {newClientNameIconSlot}
+                    </>
+                  ) : (
+                    <>
+                      {newClientNameIconSlot}
+                      {newClientNameInputSlot}
+                    </>
+                  )}
+                </View>
+
+                <View
+                  style={[
+                    styles.fieldShell,
                     { backgroundColor: fieldBg, borderColor: fieldBorder },
-                    layoutRtl && styles.fieldShellVisualRtl,
                   ]}
                 >
                   <View style={styles.fieldInputSlot}>
                     <TextInput
-                      style={[
-                        styles.fieldInput,
-                        {
-                          color: innerText,
-                          textAlign: inputTextAlign,
-                          writingDirection: writingDir,
-                        },
-                      ]}
-                      value={form.clientSearch}
-                      onChangeText={form.setClientSearch}
-                      placeholder={
-                        useRtlInputPlaceholder
-                          ? ''
-                          : t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')
-                      }
+                        style={[
+                          styles.fieldInput,
+                          {
+                            color: innerText,
+                            textAlign: newClientInputTextAlign,
+                            writingDirection: newClientWritingDir,
+                          },
+                        ]}
+                      value={form.newClientPhone}
+                      onChangeText={form.setNewClientPhone}
+                      placeholder={newClientUseRtlPlaceholder ? '' : t('admin.appointmentsAdmin.newClientPhonePh', 'Enter mobile phone number')}
                       placeholderTextColor={placeholderOnGlass ?? innerMuted}
-                      onFocus={() => form.setShowClientDropdown(true)}
+                      keyboardType="phone-pad"
                       textAlignVertical="center"
+                      accessibilityLabel={t('admin.appointmentsAdmin.newClientPhone', 'Mobile phone')}
                     />
-                    {useRtlInputPlaceholder && !form.clientSearch.trim() ? (
+                    {newClientUseRtlPlaceholder && !form.newClientPhone.trim() ? (
                       <Text
                         pointerEvents="none"
                         numberOfLines={1}
@@ -438,73 +1086,25 @@ export default function AddAppointmentScreen() {
                           styles.inputPlaceholderOverlay,
                           {
                             color: placeholderOnGlass ?? innerMuted,
-                            textAlign: inputTextAlign,
-                            writingDirection: writingDir,
+                            textAlign: newClientInputTextAlign,
+                            writingDirection: newClientWritingDir,
                           },
                         ]}
                       >
-                        {t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
+                        {t('admin.appointmentsAdmin.newClientPhonePh', 'הזן מספר טלפון נייד')}
                       </Text>
                     ) : null}
                   </View>
-                  <Search size={18} color={innerMuted} />
                 </View>
-                {form.showClientDropdown ? (
-                  <View style={[styles.dropdown, { borderColor: fieldBorder, backgroundColor: glassBg }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                      {form.filteredClients.slice(0, 60).map((client) => (
-                        <Pressable
-                          key={client.phone}
-                          style={({ pressed }) => [styles.dropdownRow, pressed && { opacity: 0.85 }]}
-                          onPress={() => form.onPickClient(client)}
-                        >
-                          <LinearGradient
-                            colors={[primary, secondary]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.avatarSm}
-                          >
-                            <Text style={styles.avatarSmText}>{client.name.charAt(0).toUpperCase()}</Text>
-                          </LinearGradient>
-                          <View style={styles.dropdownRowText}>
-                            <Text
-                              style={[
-                                styles.dropdownName,
-                                { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {client.name}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.dropdownSub,
-                                { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {client.phone}
-                            </Text>
-                          </View>
-                        </Pressable>
-                      ))}
-                      {form.filteredClients.length === 0 ? (
-                        <Text
-                          style={[
-                            styles.emptyTxt,
-                            styles.hintBlock,
-                            { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                          ]}
-                        >
-                          {t('common.noResults', 'No results')}
-                        </Text>
-                      ) : null}
-                    </ScrollView>
-                  </View>
-                ) : null}
               </>
             ) : (
-              <View style={[styles.selectedRow, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
+              <View
+                style={[
+                  styles.selectedRow,
+                  { borderColor: fieldBorder, backgroundColor: fieldBg },
+                  rtl && styles.fieldShellVisualRtl,
+                ]}
+              >
                 <LinearGradient colors={[primary, secondary]} style={styles.avatarSm}>
                   <Text style={styles.avatarSmText}>{form.selectedClient.name.charAt(0).toUpperCase()}</Text>
                 </LinearGradient>
@@ -534,42 +1134,15 @@ export default function AddAppointmentScreen() {
               </View>
             )}
           </View>
+          ) : null}
 
-          <View style={[styles.divider, { backgroundColor: fieldBorder }]} />
-
-          {/* Service */}
+          {wizardStep === 2 ? (
           <View style={styles.section}>
-            <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
-              <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <CalendarIcon size={18} color={iconOnGlass} strokeWidth={2} />
-              </View>
-              <View style={styles.sectionTitleWrap}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    titleShadowStyle,
-                    { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                  ]}
-                >
-                  {t('booking.field.service', 'Service')}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.sectionHint,
-                styles.hintBlock,
-                titleShadowStyle,
-                { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-              ]}
-            >
-              {t('admin.appointmentsAdmin.pickService', 'Choose the service to perform')}
-            </Text>
             <Pressable
               style={({ pressed }) => [
                 styles.fieldShell,
                 { backgroundColor: fieldBg, borderColor: fieldBorder },
-                layoutRtl && styles.fieldShellVisualRtl,
+                rtl && styles.fieldShellVisualRtl,
                 pressed && { opacity: 0.92 },
               ]}
               onPress={() => form.setShowServiceDropdown(!form.showServiceDropdown)}
@@ -581,8 +1154,8 @@ export default function AddAppointmentScreen() {
                   {
                     flex: 1,
                     color: form.selectedService ? innerText : innerMuted,
-                    textAlign: inputTextAlign,
-                    writingDirection: writingDir,
+                    textAlign: newClientInputTextAlign,
+                    writingDirection: newClientWritingDir,
                   },
                 ]}
                 numberOfLines={2}
@@ -607,67 +1180,67 @@ export default function AddAppointmentScreen() {
                       {t('booking.noServices', 'No services available')}
                     </Text>
                   ) : (
-                    form.services.map((service: Service) => (
-                      <Pressable
-                        key={service.id}
-                        style={({ pressed }) => [styles.serviceRow, pressed && { opacity: 0.88 }]}
-                        onPress={() => form.onPickService(service)}
-                      >
+                    form.services.map((service: Service) => {
+                      const showPrice = (service.price ?? 0) > 0;
+                      const priceEl = showPrice ? (
                         <Text
+                          key="p"
+                          style={[styles.servicePriceInline, { color: innerText, flexShrink: 0 }]}
+                          numberOfLines={1}
+                        >
+                          {`₪${service.price}`}
+                        </Text>
+                      ) : null;
+                      const nameEl = (
+                        <Text
+                          key="n"
                           style={[
                             styles.serviceRowText,
-                            styles.hintBlock,
                             {
+                              flex: 1,
+                              minWidth: 0,
                               color: innerText,
-                              textAlign: inputTextAlign,
-                              writingDirection: writingDir,
+                              textAlign: rtl ? 'right' : 'left',
+                              writingDirection: newClientWritingDir,
                             },
                           ]}
                           numberOfLines={2}
                         >
                           {service.name}
-                          <Text style={[styles.servicePriceInline, { color: innerText }]}>
-                            {` · ₪${service.price}`}
-                          </Text>
                         </Text>
-                      </Pressable>
-                    ))
+                      );
+                      return (
+                        <Pressable
+                          key={service.id}
+                          style={({ pressed }) => [styles.serviceRow, pressed && { opacity: 0.88 }]}
+                          onPress={() => form.onPickService(service)}
+                        >
+                          {/* `direction: 'ltr'` avoids double-mirror with RN RTL so [price,name] stays price-left / name-right */}
+                          <View style={styles.serviceRowInner}>
+                            {rtl ? (
+                              <>
+                                {priceEl}
+                                {nameEl}
+                              </>
+                            ) : (
+                              <>
+                                {nameEl}
+                                {priceEl}
+                              </>
+                            )}
+                          </View>
+                        </Pressable>
+                      );
+                    })
                   )}
                 </ScrollView>
               </View>
             ) : null}
           </View>
+          ) : null}
 
-          <View style={[styles.divider, { backgroundColor: fieldBorder }]} />
-
-          {/* Date */}
+          {wizardStep === 3 ? (
           <View style={styles.section}>
-            <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
-              <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <CalendarDays size={18} color={iconOnGlass} strokeWidth={2} />
-              </View>
-              <View style={styles.sectionTitleWrap}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    titleShadowStyle,
-                    { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                  ]}
-                >
-                  {t('booking.field.date', 'Date')}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.sectionHint,
-                styles.hintBlock,
-                titleShadowStyle,
-                { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-              ]}
-            >
-              {t('admin.appointmentsAdmin.pickDate', 'Select the date for this appointment')}
-            </Text>
             <View style={[styles.calWrap, { borderColor: fieldBorder }]}>
               <RNCalendar
                 key={`add-appt-${calendarLocale}`}
@@ -699,39 +1272,10 @@ export default function AddAppointmentScreen() {
               />
             </View>
           </View>
+          ) : null}
 
-          <View style={[styles.divider, { backgroundColor: fieldBorder }]} />
-
-          {/* Time */}
+          {wizardStep === 4 ? (
           <View style={[styles.section, styles.sectionLast]}>
-            <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
-              <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <Clock size={18} color={iconOnGlass} strokeWidth={2} />
-              </View>
-              <View style={styles.sectionTitleWrap}>
-                <Text
-                  style={[
-                    styles.sectionTitle,
-                    titleShadowStyle,
-                    { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                  ]}
-                >
-                  {t('booking.field.time', 'Time')}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.sectionHint,
-                styles.hintBlock,
-                titleShadowStyle,
-                { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-              ]}
-            >
-              {!form.selectedDate || !form.selectedService
-                ? t('admin.appointmentsAdmin.selectDateAndServiceFirst', 'בחרו תאריך ושירות כדי לראות שעות פנויות')
-                : t('admin.appointmentsAdmin.pickTime', 'Pick an available time slot')}
-            </Text>
             {form.selectedDate && form.selectedService ? (
               form.isLoadingTimes ? (
                 <View style={styles.timesLoading}>
@@ -762,156 +1306,222 @@ export default function AddAppointmentScreen() {
                   {t('selectTime.noTimes', 'No available times for this day')}
                 </Text>
               ) : (
-                <View style={[styles.chipsWrap, layoutRtl && styles.chipsWrapRtl]}>
-                  {form.availableTimes.map((time) => {
-                    const sel = form.selectedTime === time;
-                    return (
-                      <Pressable key={time} onPress={() => form.onPickTime(time)} style={styles.chipPress}>
-                        {sel ? (
-                          <LinearGradient
-                            colors={[primary, secondary]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.chipActive}
-                          >
-                            <Text style={styles.chipActiveTxt}>{formatBookingTimeLabel(time, i18n.language)}</Text>
-                          </LinearGradient>
-                        ) : (
-                          <View style={[styles.chipIdle, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
-                            <Text style={[styles.chipIdleTxt, { color: innerText }]}>
-                              {formatBookingTimeLabel(time, i18n.language)}
+                <ScrollView
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  style={[adminBookingGridStyles.timeSlotsScroll, { maxHeight: adminTimeSlotsMaxHeight }]}
+                  contentContainerStyle={adminBookingGridStyles.timeSlotsScrollInner}
+                >
+                  {adminTimeSections.map(({ period, slots, sectionDelay }) => (
+                    <Animated.View
+                      key={period.key}
+                      entering={bookingTimeRowEntering(sectionDelay)}
+                      style={adminBookingGridStyles.timeSection}
+                    >
+                      <View style={adminBookingGridStyles.sectionLabelRow}>
+                        {rtl ? (
+                          <>
+                            <View style={[adminBookingGridStyles.sectionLine, { backgroundColor: fieldBorder }]} />
+                            <Text style={[adminBookingGridStyles.sectionLabel, { color: innerText }]}>
+                              {t(period.labelKey, period.labelFallback)}
                             </Text>
-                          </View>
+                            <Text style={adminBookingGridStyles.sectionEmoji}>{period.emoji}</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={adminBookingGridStyles.sectionEmoji}>{period.emoji}</Text>
+                            <Text style={[adminBookingGridStyles.sectionLabel, { color: innerText }]}>
+                              {t(period.labelKey, period.labelFallback)}
+                            </Text>
+                            <View style={[adminBookingGridStyles.sectionLine, { backgroundColor: fieldBorder }]} />
+                          </>
                         )}
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                      </View>
+                      <AdminBookingTimeGrid
+                        slots={slots}
+                        selectedTime={form.selectedTime}
+                        primary={primary}
+                        secondary={secondary}
+                        fieldBorder={fieldBorder}
+                        fieldBg={fieldBg}
+                        innerText={innerText}
+                        i18nLang={i18n.language}
+                        onSelectTime={form.onPickTime}
+                        baseDelay={sectionDelay + 1}
+                      />
+                    </Animated.View>
+                  ))}
+                </ScrollView>
               )
             ) : null}
           </View>
+          ) : null}
+
+          {wizardStep === 5 && summaryReady ? (
+            <>
+              <View style={[styles.summaryDivider, { backgroundColor: fieldBorder }]} />
+              <View style={[styles.summaryBlock, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
+                <Text
+                  style={[
+                    styles.summaryBlockTitle,
+                    styles.hintBlock,
+                    { color: innerMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
+                  ]}
+                >
+                  {t('admin.appointmentsAdmin.summary', 'Appointment Summary')}
+                </Text>
+
+                <View style={[styles.summaryRow, { flexDirection: newClientFieldsRtl ? 'row-reverse' : 'row' }]}>
+                  <View style={[styles.summaryRowIcon, { backgroundColor: `${primary}22` }]}>
+                    <User size={18} color={iconOnGlass} strokeWidth={2} />
+                  </View>
+                  <View style={[styles.summaryRowBody, { alignItems: newClientFieldsRtl ? 'flex-end' : 'flex-start' }]}>
+                    <Text style={[styles.summaryRowLbl, { color: innerMuted, writingDirection: writingDir }]}>
+                      {t('admin.appointmentsAdmin.client', 'Client')}
+                    </Text>
+                    <Text
+                      style={[styles.summaryRowVal, { color: innerText, writingDirection: writingDir }]}
+                      numberOfLines={1}
+                    >
+                      {form.selectedClient?.name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.summaryDivider, { backgroundColor: fieldBorder }]} />
+
+                <View style={[styles.summaryRow, { flexDirection: newClientFieldsRtl ? 'row-reverse' : 'row' }]}>
+                  <View style={[styles.summaryRowIcon, { backgroundColor: `${primary}22` }]}>
+                    <CalendarIcon size={18} color={iconOnGlass} strokeWidth={2} />
+                  </View>
+                  <View style={[styles.summaryRowBody, { alignItems: newClientFieldsRtl ? 'flex-end' : 'flex-start' }]}>
+                    <Text style={[styles.summaryRowLbl, { color: innerMuted, writingDirection: writingDir }]}>
+                      {t('booking.field.service', 'Service')}
+                    </Text>
+                    <Text
+                      style={[styles.summaryRowVal, { color: innerText, writingDirection: writingDir }]}
+                      numberOfLines={2}
+                    >
+                      {form.selectedService?.name}
+                      {form.selectedService?.price ? (
+                        <Text style={{ fontWeight: '800' }}>{` · ₪${form.selectedService.price}`}</Text>
+                      ) : null}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.summaryDivider, { backgroundColor: fieldBorder }]} />
+
+                <View style={[styles.summaryRow, { flexDirection: newClientFieldsRtl ? 'row-reverse' : 'row' }]}>
+                  <View style={[styles.summaryRowIcon, { backgroundColor: `${primary}22` }]}>
+                    <CalendarDays size={18} color={iconOnGlass} strokeWidth={2} />
+                  </View>
+                  <View style={[styles.summaryRowBody, { alignItems: newClientFieldsRtl ? 'flex-end' : 'flex-start' }]}>
+                    <Text style={[styles.summaryRowLbl, { color: innerMuted, writingDirection: writingDir }]}>
+                      {t('booking.field.date', 'Date')}
+                    </Text>
+                    <Text style={[styles.summaryRowVal, { color: innerText, writingDirection: writingDir }]}>
+                      {form.selectedDate
+                        ? form.selectedDate.toLocaleDateString(dateLocale, {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                          })
+                        : ''}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.summaryDivider, { backgroundColor: fieldBorder }]} />
+
+                <View style={[styles.summaryRow, styles.summaryRowLast, { flexDirection: newClientFieldsRtl ? 'row-reverse' : 'row' }]}>
+                  <View style={[styles.summaryRowIcon, { backgroundColor: `${primary}22` }]}>
+                    <Clock size={18} color={iconOnGlass} strokeWidth={2} />
+                  </View>
+                  <View style={[styles.summaryRowBody, { alignItems: newClientFieldsRtl ? 'flex-end' : 'flex-start', flex: 1 }]}>
+                    <Text style={[styles.summaryRowLbl, { color: innerMuted, writingDirection: writingDir }]}>
+                      {t('booking.field.time', 'Time')}
+                    </Text>
+                    <View
+                      style={[
+                        styles.summaryTimePill,
+                        { backgroundColor: `${primary}22`, alignSelf: newClientFieldsRtl ? 'flex-end' : 'flex-start' },
+                      ]}
+                    >
+                      <Text style={[styles.summaryTimePillText, { color: innerText }]}>
+                        {form.selectedTime ? formatBookingTimeLabel(form.selectedTime, i18n.language) : ''}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : null}
+          </Animated.View>
         </View>
-
-        {summaryReady ? (
-          <View style={[styles.summaryCard, { borderColor: glassBorder, backgroundColor: glassBg }]}>
-            <Text
-              style={[
-                styles.summaryTitle,
-                styles.hintBlock,
-                titleShadowStyle,
-                { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
-              ]}
-            >
-              {t('admin.appointmentsAdmin.summary', 'Appointment Summary')}
-            </Text>
-            <View style={styles.summaryGrid}>
-              <Text
-                style={[
-                  styles.summaryLbl,
-                  styles.hintBlock,
-                  { color: heroMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-              >
-                {t('admin.appointmentsAdmin.client', 'Client')}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryVal,
-                  styles.hintBlock,
-                  { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-                numberOfLines={2}
-              >
-                {form.selectedClient?.name}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryLbl,
-                  styles.hintBlock,
-                  { color: heroMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-              >
-                {t('booking.field.service', 'Service')}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryVal,
-                  styles.hintBlock,
-                  { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-                numberOfLines={2}
-              >
-                {form.selectedService?.name}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryLbl,
-                  styles.hintBlock,
-                  { color: heroMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-              >
-                {t('booking.field.date', 'Date')}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryVal,
-                  styles.hintBlock,
-                  { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-                numberOfLines={2}
-              >
-                {form.selectedDate
-                  ? form.selectedDate.toLocaleDateString(dateLocale, {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                    })
-                  : ''}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryLbl,
-                  styles.hintBlock,
-                  { color: heroMuted, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-              >
-                {t('booking.field.time', 'Time')}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryVal,
-                  styles.hintBlock,
-                  { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
-                ]}
-              >
-                {form.selectedTime ? formatBookingTimeLabel(form.selectedTime, i18n.language) : ''}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
-        <Pressable
-          onPress={() => void form.submit()}
-          disabled={!canSubmit}
-          style={({ pressed }) => [
-            styles.cta,
-            {
-              backgroundColor: ctaElevatedBg,
-              opacity: !canSubmit ? 0.45 : pressed ? 0.92 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSubmit }}
-        >
-          {form.isSubmitting ? (
-            <ActivityIndicator color={ctaElevatedLabel} />
-          ) : (
-            <Text style={[styles.ctaText, { color: ctaElevatedLabel }]}>
-              {t('admin.appointmentsAdmin.saveAppointment', 'שמירת תור')}
-            </Text>
-          )}
-        </Pressable>
       </KeyboardAwareScreenScroll>
+
+      <View
+        pointerEvents="box-none"
+        style={[styles.footerAnchor, { bottom: Math.max(insets.bottom, 12) + 8 }]}
+      >
+        <View style={[styles.footerBarInner, { direction: 'ltr' }]}>
+          <Pressable
+            onPress={onFooterPrimary}
+            disabled={!footerPrimaryEnabled || form.isSubmitting || form.isFinalizingClientStep}
+            accessibilityRole="button"
+            accessibilityState={{
+              disabled: !footerPrimaryEnabled || form.isSubmitting || form.isFinalizingClientStep,
+            }}
+            style={({ pressed }) => [
+              styles.footerPrimaryPill,
+              styles.footerPrimaryShadow,
+              {
+                opacity:
+                  !footerPrimaryEnabled || form.isSubmitting || form.isFinalizingClientStep ? 0.5 : pressed ? 0.88 : 1,
+              },
+            ]}
+          >
+            {form.isFinalizingClientStep && wizardStep === 1 ? (
+              <ActivityIndicator color={primary} />
+            ) : form.isSubmitting && wizardStep === TOTAL_WIZARD_STEPS ? (
+              <ActivityIndicator color={primary} />
+            ) : wizardStep === TOTAL_WIZARD_STEPS ? (
+              <View style={styles.footerPrimaryFill}>
+                <Text style={[styles.footerPrimaryText, { color: primary }]}>
+                  {t('admin.appointmentsAdmin.saveAppointment', 'שמירת תור')}
+                </Text>
+                <Check size={20} color={primary} strokeWidth={2.6} />
+              </View>
+            ) : (
+              <View style={styles.footerPrimaryFill}>
+                {rtl ? (
+                  <ChevronLeft
+                    size={20}
+                    color={footerPrimaryEnabled ? primary : '#c4c7cf'}
+                    strokeWidth={2.5}
+                  />
+                ) : (
+                  <ChevronRight
+                    size={20}
+                    color={footerPrimaryEnabled ? primary : '#c4c7cf'}
+                    strokeWidth={2.5}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.footerPrimaryText,
+                    { color: footerPrimaryEnabled ? primary : '#c4c7cf' },
+                  ]}
+                >
+                  {t('booking.continue', 'Continue')}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+      </View>
 
       {showSuccessModal ? (
         <Modal
@@ -1011,15 +1621,24 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   headerIconBtn: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerBackCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   headerTitles: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 8,
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 21,
@@ -1027,13 +1646,54 @@ const styles = StyleSheet.create({
     letterSpacing: -0.35,
     textAlign: 'center',
   },
-  headerSubtitle: {
+  progressRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+    alignSelf: 'stretch',
+  },
+  progressSegment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 3,
+  },
+  stepIntroWrap: {
+    marginTop: 6,
+    marginBottom: 16,
+    alignSelf: 'stretch',
+  },
+  stepIntroInner: {
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  stepIntroTitleRow: {
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  stepIntroIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepIntroTitle: {
+    fontSize: 26,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    flexShrink: 1,
+    maxWidth: 280,
+  },
+  stepIntroSubtitle: {
     fontSize: 15,
-    marginTop: 5,
-    textAlign: 'center',
-    lineHeight: 21,
-    maxWidth: 300,
+    lineHeight: 22,
     fontWeight: '700',
+    maxWidth: 340,
+    alignSelf: 'center',
   },
   scrollFlex: {
     flex: 1,
@@ -1049,6 +1709,41 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 16,
     overflow: 'hidden',
+  },
+  segContainer: {
+    flexDirection: 'row',
+    borderRadius: 18,
+    padding: 4,
+    marginBottom: 20,
+    alignSelf: 'stretch',
+    minHeight: 52,
+    alignItems: 'stretch',
+    gap: 0,
+  },
+  segTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  segTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  segTabText: {
+    fontSize: 15,
+    letterSpacing: -0.2,
+  },
+  labeledFieldIconSlot: {
+    width: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   section: {
     marginBottom: 4,
@@ -1202,12 +1897,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
+  serviceRowInner: {
+    direction: 'ltr',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'stretch',
+  },
   serviceRowText: {
     fontSize: 16,
     fontWeight: '600',
   },
   servicePriceInline: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
   divider: {
@@ -1221,41 +1923,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingBottom: 4,
   },
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
-    alignSelf: 'stretch',
-  },
-  chipsWrapRtl: {
-    direction: 'ltr',
-    justifyContent: 'flex-end',
-  },
-  chipPress: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  chipActive: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-  },
-  chipActiveTxt: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  chipIdle: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  chipIdleTxt: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
   timesLoading: {
     alignItems: 'center',
     paddingVertical: 20,
@@ -1265,49 +1932,111 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     fontSize: 14,
   },
-  summaryCard: {
-    marginTop: 18,
-    borderRadius: 22,
+  summaryBlock: {
+    marginTop: 4,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 18,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 10,
+    overflow: 'hidden',
   },
-  summaryTitle: {
-    fontSize: 15,
+  summaryBlockTitle: {
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: 'uppercase',
-    marginBottom: 14,
-    opacity: 1,
+    marginBottom: 10,
+    opacity: 0.85,
   },
-  summaryGrid: {
-    gap: 6,
+  summaryRow: {
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 2,
   },
-  summaryLbl: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginTop: 8,
+  summaryRowLast: {
+    paddingBottom: 4,
   },
-  summaryVal: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cta: {
-    marginTop: 22,
-    minHeight: 56,
-    borderRadius: 28,
+  summaryRowIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 6,
+    flexShrink: 0,
   },
-  ctaText: {
+  summaryRowBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  summaryRowLbl: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    opacity: 0.75,
+  },
+  summaryRowVal: {
     fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: -0.1,
+  },
+  summaryDivider: {
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.5,
+    marginHorizontal: 2,
+  },
+  summaryTimePill: {
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginTop: 2,
+  },
+  summaryTimePillText: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
+  footerAnchor: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    zIndex: 50,
+  },
+  footerBarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerPrimaryPill: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F1F1F1',
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  footerPrimaryShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  footerPrimaryFill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  footerPrimaryText: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

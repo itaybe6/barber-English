@@ -88,6 +88,11 @@ export const AdminFloatingTabBar: React.FC = () => {
     return () => cancelAnimationFrame(id);
   }, [currentTab, measurePlusInWindow, windowWidth, windowHeight]);
 
+  /** Full-screen flows: no dock (matches immersive add-recurring / add-appointment UX). */
+  if (currentTab === "add-appointment" || currentTab === "add-recurring-appointment") {
+    return null;
+  }
+
   if (isActive("appointments")) {
     return (
       <View

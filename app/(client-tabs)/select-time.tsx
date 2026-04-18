@@ -501,8 +501,16 @@ export default function SelectTimeScreen() {
         setShowSuccessModal(true);
         void usersApi.ensureClientApprovedAfterBooking(user?.id);
         try {
-          const title = t('selectTime.adminNotifyTitle', 'New appointment booked');
-          const content = t('selectTime.adminNotifyContent', '{{name}} ({{phone}}) booked an appointment for "{{service}}" on {{date}} at {{time}}', { name: user?.name || 'Client', phone: user?.phone || '', service: serviceName, date: selectedDate, time: formatTime12Hour(selectedTime) });
+          // Admin inbox is Hebrew-first: always Hebrew + 24h time so DB rows parse reliably.
+          const tAdmin = i18n.getFixedT('he');
+          const title = tAdmin('selectTime.adminNotifyTitle', 'נקבע תור חדש');
+          const content = tAdmin('selectTime.adminNotifyContent', '{{name}} ({{phone}}) קבע/ה תור ל־"{{service}}" בתאריך {{date}} בשעה {{time}}', {
+            name: (user?.name || '').trim() || tAdmin('common.client', 'לקוח'),
+            phone: user?.phone || '',
+            service: serviceName,
+            date: selectedDate,
+            time: selectedTime,
+          });
           const assignedAdminId = params.barberId as string | undefined;
           const newAptId = success?.id ? String(success.id) : null;
           if (assignedAdminId) {

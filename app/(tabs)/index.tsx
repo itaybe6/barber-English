@@ -93,12 +93,20 @@ import { useAdminWaitlistSheetStore } from '@/stores/adminWaitlistSheetStore';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 import { usersApi } from '@/lib/api/users';
+import Svg, { Line } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-/** Admin home — products row (must match `productAdminTile` width + content `gap`) */
-const ADMIN_PRODUCT_TILE_WIDTH = 160;
-const ADMIN_PRODUCT_TILE_GAP = 14;
+/** Admin home — products row: exactly 2 tiles visible, no partial tile.
+ *  Available inner width = SCREEN_WIDTH
+ *   - scrollContent paddingHorizontal (16×2 = 32)
+ *   - galleryProductsCard marginHorizontal (4×2 = 8)
+ *   - carousel paddingHorizontal (12×2 = 24)
+ *   - one gap between tiles (10)
+ *  → tile = (SCREEN_WIDTH - 74) / 2
+ */
+const ADMIN_PRODUCT_TILE_GAP = 10;
+const ADMIN_PRODUCT_TILE_WIDTH = Math.floor((SCREEN_WIDTH - 74) / 2);
 const ADMIN_PRODUCT_CAROUSEL_STRIDE = ADMIN_PRODUCT_TILE_WIDTH + ADMIN_PRODUCT_TILE_GAP;
 /** Top band above marquee — must cover safe area + full logo; floor so short phones still clear “BARBERSHOP” row */
 const HERO_TOP_SCHEDULE_BAND_HEIGHT = Math.round(
@@ -155,7 +163,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ openPendingClients?: string }>();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const designsFromStore = useDesignsStore((state) => state.designs);
   const isLoadingDesigns = useDesignsStore((state) => state.isLoading);
   const fetchDesigns = useDesignsStore((state) => state.fetchDesigns);
@@ -198,6 +206,11 @@ export default function HomeScreen() {
       'rgba(0,0,0,0)',
     ],
     []
+  );
+  /** scrollContent (16×2) + galleryProductsCard margin (4×2) + separator margin (20×2) */
+  const galleryProductsDividerWidth = useMemo(
+    () => Math.max(48, Math.floor(windowWidth - 32 - 8 - 40)),
+    [windowWidth]
   );
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
@@ -1538,68 +1551,54 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* ── GALLERY SECTION ── */}
+        {/* ── GALLERY + PRODUCTS (admin) — single card so the white bg is continuous ── */}
         {isAdmin && (
-          <View style={styles.galleryCard}>
-            {(designsFromStore?.length ?? 0) > 0 ? (
-              <View style={styles.galleryCardHeader}>
-                {adminSectionTitleOnRight ? (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
-                      activeOpacity={0.82}
-                      onPress={() => router.push('/(tabs)/edit-gallery')}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
-                    >
-                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
-                      </View>
-                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
-                        {t('admin.gallery.homeSectionEdit', 'עריכה')}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text
-                      style={[
-                        styles.galleryCardTitle,
-                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'right' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t('admin.gallery.title', 'גלרייה')}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.galleryCardTitle,
-                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'left' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t('admin.gallery.title', 'גלרייה')}
-                    </Text>
-                    <TouchableOpacity
-                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
-                      activeOpacity={0.82}
-                      onPress={() => router.push('/(tabs)/edit-gallery')}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
-                    >
-                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
-                      </View>
-                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
-                        {t('admin.gallery.homeSectionEdit', 'עריכה')}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+          <View style={styles.galleryProductsCard}>
+
+            {/* ── Gallery ── */}
+            <View style={[styles.gallerySectionHeader, { direction: 'ltr' }]}>
+              <TouchableOpacity
+                style={[styles.galleryEditPill, { backgroundColor: colors.primary }]}
+                activeOpacity={0.78}
+                onPress={() => router.push('/(tabs)/edit-gallery')}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
+              >
+                <Pencil size={13} color={onPrimary} strokeWidth={2.4} />
+                <Text style={[styles.galleryEditPillText, { color: onPrimary }]}>
+                  {t('admin.gallery.homeSectionEdit', 'עריכה')}
+                </Text>
+              </TouchableOpacity>
+              <View
+                style={[
+                  styles.gallerySectionTextColumn,
+                  adminSectionTitleOnRight ? styles.gallerySectionTextColumnEnd : styles.gallerySectionTextColumnStart,
+                ]}
+              >
+                <View style={[styles.gallerySectionTitleRow, { flexDirection: adminSectionTitleOnRight ? 'row' : 'row-reverse' }]}>
+                  <Text style={[styles.gallerySectionTitle, { color: colors.text }]} numberOfLines={1}>
+                    {t('admin.gallery.title', 'גלרייה')}
+                  </Text>
+                  <View style={[styles.gallerySectionTitleDot, { backgroundColor: colors.primary }]} />
+                </View>
+                <View style={styles.gallerySectionSubtextOuterInHeader}>
+                  <Text
+                    style={[
+                      styles.gallerySectionSubtext,
+                      {
+                        color: colors.textSecondary,
+                        textAlign: adminSectionTitleOnRight ? 'right' : 'left',
+                      },
+                    ]}
+                  >
+                    {t('admin.gallery.homeSectionSubtitle', 'העלו או ערכו את הגלריה שלכם')}
+                  </Text>
+                </View>
               </View>
-            ) : null}
+            </View>
+
             {isLoadingDesigns ? (
-              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 18 }} />
             ) : (designsFromStore?.length ?? 0) === 0 ? (
               <View style={styles.galleryEmpty}>
                 <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
@@ -1625,71 +1624,67 @@ export default function HomeScreen() {
             ) : (
               <DesignCarousel designs={designsFromStore as any} showHeader={false} />
             )}
-          </View>
-        )}
 
-        {/* ── PRODUCTS SECTION (admin) ── */}
-        {isAdmin && (
-          <View style={styles.galleryCard}>
-            {(productsFromStore?.length ?? 0) > 0 ? (
-              <View style={styles.galleryCardHeader}>
-                {adminSectionTitleOnRight ? (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
-                      activeOpacity={0.82}
-                      onPress={() => router.push('/(tabs)/edit-products')}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
-                    >
-                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
-                      </View>
-                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
-                        {t('admin.products.homeSectionEdit', 'עריכה')}
-                      </Text>
-                    </TouchableOpacity>
-                    <Text
-                      style={[
-                        styles.galleryCardTitle,
-                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'right' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t('admin.products.homeTitle', 'מוצרים')}
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.galleryCardTitle,
-                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'left' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t('admin.products.homeTitle', 'מוצרים')}
-                    </Text>
-                    <TouchableOpacity
-                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
-                      activeOpacity={0.82}
-                      onPress={() => router.push('/(tabs)/edit-products')}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
-                    >
-                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
-                      </View>
-                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
-                        {t('admin.products.homeSectionEdit', 'עריכה')}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+            {/* ── Divider (dashed) ── */}
+            <View style={styles.gallerySectionSeparatorWrap} pointerEvents="none">
+              <Svg width={galleryProductsDividerWidth} height={3}>
+                <Line
+                  x1={0}
+                  y1={1.5}
+                  x2={galleryProductsDividerWidth}
+                  y2={1.5}
+                  stroke={colors.border}
+                  strokeWidth={1}
+                  strokeOpacity={0.55}
+                  strokeDasharray="6 5"
+                />
+              </Svg>
+            </View>
+
+            {/* ── Products ── */}
+            <View style={[styles.gallerySectionHeader, { direction: 'ltr' }]}>
+              <TouchableOpacity
+                style={[styles.galleryEditPill, { backgroundColor: colors.primary }]}
+                activeOpacity={0.78}
+                onPress={() => router.push('/(tabs)/edit-products')}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
+              >
+                <Pencil size={13} color={onPrimary} strokeWidth={2.4} />
+                <Text style={[styles.galleryEditPillText, { color: onPrimary }]}>
+                  {t('admin.products.homeSectionEdit', 'עריכה')}
+                </Text>
+              </TouchableOpacity>
+              <View
+                style={[
+                  styles.gallerySectionTextColumn,
+                  adminSectionTitleOnRight ? styles.gallerySectionTextColumnEnd : styles.gallerySectionTextColumnStart,
+                ]}
+              >
+                <View style={[styles.gallerySectionTitleRow, { flexDirection: adminSectionTitleOnRight ? 'row' : 'row-reverse' }]}>
+                  <Text style={[styles.gallerySectionTitle, { color: colors.text }]} numberOfLines={1}>
+                    {t('admin.products.homeTitle', 'מוצרים')}
+                  </Text>
+                  <View style={[styles.gallerySectionTitleDot, { backgroundColor: colors.primary }]} />
+                </View>
+                <View style={styles.gallerySectionSubtextOuterInHeader}>
+                  <Text
+                    style={[
+                      styles.gallerySectionSubtext,
+                      {
+                        color: colors.textSecondary,
+                        textAlign: adminSectionTitleOnRight ? 'right' : 'left',
+                      },
+                    ]}
+                  >
+                    {t('admin.products.homeSectionSubtitle', 'העלו או ערכו את המוצרים שלכם')}
+                  </Text>
+                </View>
               </View>
-            ) : null}
+            </View>
+
             {isLoadingProducts ? (
-              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 18 }} />
             ) : (productsFromStore?.length ?? 0) === 0 ? (
               <View style={styles.galleryEmpty}>
                 <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
@@ -1713,7 +1708,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={{ paddingBottom: 12 }}>
+              <View style={styles.productAdminCarouselWrap}>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -1753,23 +1748,20 @@ export default function HomeScreen() {
                           )}
                           <LinearGradient
                             pointerEvents="none"
-                            colors={['rgba(0,0,0,0.5)', 'transparent']}
-                            locations={[0, 0.65]}
-                            style={styles.productAdminOverlayGradientTop}
-                          />
-                          <LinearGradient
-                            pointerEvents="none"
-                            colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.88)']}
-                            locations={[0.15, 0.55, 1]}
+                            colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.9)']}
+                            locations={[0.3, 0.65, 1]}
                             style={styles.productAdminOverlayGradient}
                           />
-                          <View style={styles.productAdminPricePillWrap} pointerEvents="none">
+                          <View style={[styles.productAdminPricePillWrap, adminSectionTitleOnRight ? { right: 10, left: undefined } : { left: 10, right: undefined }]} pointerEvents="none">
                             <View style={[styles.productAdminPricePill, { backgroundColor: colors.primary }]}>
                               <Text style={[styles.productAdminPrice, { color: onPrimary }]}>{priceStr}</Text>
                             </View>
                           </View>
-                          <View style={styles.productAdminNameWrap} pointerEvents="none">
-                            <Text style={styles.productAdminNameOverlay} numberOfLines={2}>
+                          <View style={[styles.productAdminNameWrap, adminSectionTitleOnRight ? { right: 10, left: 10 } : { left: 10, right: 10 }]} pointerEvents="none">
+                            <Text
+                              style={[styles.productAdminNameOverlay, { textAlign: adminSectionTitleOnRight ? 'right' : 'left' }]}
+                              numberOfLines={2}
+                            >
                               {product.name}
                             </Text>
                           </View>
@@ -1786,11 +1778,15 @@ export default function HomeScreen() {
                 />
               </View>
             )}
+
           </View>
         )}
 
         {/* ── PRODUCTS SECTION (non-admin only) ── */}
         {!isAdmin && <ProductsSection />}
+
+        {/* Admin bottom spacer — extends the white contentWrapper background below the last card */}
+        {isAdmin && <View style={styles.adminBottomSpacer} />}
           </View>
         </View>
       </Animated.ScrollView>
@@ -2253,6 +2249,7 @@ export default function HomeScreen() {
           onOpenChange={setShowBroadcast}
           renderTrigger={false}
           ensureCanBroadcast={ensureCanBroadcast}
+          homeLogoUrl={homeLogoUrl}
         />
       )}
       <BroadcastOwnerOnlyModal
@@ -2485,19 +2482,20 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   quickTile: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     paddingVertical: 18,
     paddingHorizontal: 8,
     alignItems: 'center',
     gap: 10,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
+        borderCurve: 'continuous' as const,
+        shadowColor: '#1e293b',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
       },
-      android: { elevation: 2 },
+      android: { elevation: 5 },
     }),
   },
   quickTileIconWrap: {
@@ -2548,62 +2546,168 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     fontSize: 10,
     fontWeight: '800',
   },
-  /* ─── Gallery Card ─── */
-  galleryCard: {
-    marginTop: 20,
+  /* ─── Gallery + products (admin home) — single card so bottom bg is continuous ─── */
+  galleryProductsCard: {
+    marginTop: 16,
+    marginHorizontal: 4,
+    paddingBottom: 36,
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingTop: 16,
-    paddingBottom: 8,
-    paddingHorizontal: 16,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     ...Platform.select({
       ios: {
-        shadowColor: '#64748B',
-        shadowOffset: { width: 0, height: 4 },
+        borderCurve: 'continuous' as const,
+        shadowColor: '#1e253b',
         shadowOpacity: 0.11,
         shadowRadius: 14,
+        /* negative Y → shadow cast upward only; bottom edge stays flush & invisible */
+        shadowOffset: { width: 0, height: -5 },
       },
-      android: { elevation: 5 },
+      android: { elevation: 4 },
     }),
+  },
+  /* kept for any remaining references */
+  gallerySection: {
+    marginTop: 16,
+    marginHorizontal: 4,
+    paddingBottom: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
+    ...Platform.select({
+      ios: {
+        borderCurve: 'continuous' as const,
+        shadowColor: '#1e253b',
+        shadowOpacity: 0.11,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: -5 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  gallerySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    marginBottom: 12,
+  },
+  /** Title + subtitle stack; edit pill aligns vertically to this block via header `alignItems: 'center'`. */
+  gallerySectionTextColumn: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'column',
+  },
+  gallerySectionTextColumnEnd: {
+    alignItems: 'flex-end',
+  },
+  gallerySectionTextColumnStart: {
+    alignItems: 'flex-start',
+  },
+  /** LTR bar so `textAlign: right` is physical right under app RTL (inside header — no extra horizontal padding). */
+  gallerySectionSubtextOuterInHeader: {
+    alignSelf: 'stretch',
+    marginTop: 4,
+    direction: 'ltr',
+  },
+  gallerySectionSubtext: {
+    width: '100%',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    letterSpacing: -0.1,
+  },
+  gallerySectionTitleRow: {
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    maxWidth: '100%',
+  },
+  gallerySectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    flexShrink: 1,
+  },
+  gallerySectionTitleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    flexShrink: 0,
+  },
+  galleryEditPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 22,
+    flexShrink: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.14,
+        shadowRadius: 4,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  galleryEditPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  gallerySectionSeparatorWrap: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 4,
+    height: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /* kept for backward compat references below — can be cleaned up later */
+  galleryCard: {
+    marginTop: 20,
+    paddingBottom: 4,
   },
   galleryCardHeader: {
     flexDirection: 'row',
-    direction: 'ltr',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingHorizontal: 20,
     width: '100%',
     alignSelf: 'stretch',
   },
   galleryCardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   galleryEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 20,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 22,
   },
   galleryEditIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#FFFFFF',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   galleryEditBtnText: {
     fontSize: 13,
     fontWeight: '700',
+    letterSpacing: -0.1,
   },
   galleryEmpty: {
     alignItems: 'center',
     paddingVertical: 28,
-    paddingHorizontal: 12,
+    paddingHorizontal: 28,
   },
   galleryEmptyIconWrap: {
     width: 76,
@@ -2643,27 +2747,30 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     fontWeight: '700',
   },
   /* ─── Admin Products Carousel ─── */
+  productAdminCarouselWrap: {
+    paddingBottom: 12,
+  },
   productAdminCarousel: {},
   productAdminCarouselContent: {
-    paddingHorizontal: 16,
-    gap: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: ADMIN_PRODUCT_TILE_GAP,
+    paddingVertical: 4,
     paddingBottom: 8,
   },
   productAdminTile: {
-    width: 160,
-    height: 160,
-    borderRadius: 18,
+    width: ADMIN_PRODUCT_TILE_WIDTH,
+    height: ADMIN_PRODUCT_TILE_WIDTH,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#ECECEF',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.14,
+        shadowRadius: 14,
       },
-      android: { elevation: 4 },
+      android: { elevation: 5 },
     }),
   },
   productAdminImageWrap: {
@@ -2693,43 +2800,38 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     left: 0,
     right: 0,
     bottom: 0,
-    height: '72%' as const,
+    height: '78%' as const,
   },
   productAdminPricePillWrap: {
     position: 'absolute' as const,
-    top: 8,
-    right: 8,
+    top: 10,
     zIndex: 2,
   },
   productAdminNameWrap: {
     position: 'absolute' as const,
-    bottom: 8,
-    left: 8,
-    right: 52,
+    bottom: 10,
     zIndex: 2,
-    alignItems: 'flex-start' as const,
   },
   productAdminNameOverlay: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     letterSpacing: -0.15,
-    lineHeight: 17,
-    textAlign: 'left' as const,
-    textShadowColor: 'rgba(0,0,0,0.45)',
+    lineHeight: 18,
+    textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
   productAdminPricePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
     borderRadius: 999,
   },
   productAdminPrice: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700' as const,
-    letterSpacing: -0.25,
+    fontWeight: '800' as const,
+    letterSpacing: -0.3,
   },
   /* ─── Content Sections (kept for products) ─── */
   contentSection: {
@@ -2950,6 +3052,9 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 0,
+  },
+  adminBottomSpacer: {
+    height: 25,
   },
   featuredImageContainer: {
     position: 'relative',

@@ -140,13 +140,14 @@ export const useWaitlistStore = create<WaitlistStore>((set) => ({
           isLoading: false,
         }));
         try {
+          const tAdmin = i18n.getFixedT('he');
           const displayService =
             serviceName === 'General service'
-              ? i18n.t('waitlist.anyService', 'Any available service')
+              ? tAdmin('waitlist.anyService', 'כל שירות פנוי')
               : serviceName;
-          const title = i18n.t('admin.notify.waitlistJoinTitle', 'New client joined the waitlist');
+          const title = tAdmin('admin.notify.waitlistJoinTitle', 'לקוח חדש ברשימת ההמתנה');
           const periodLabel = formatJoinedPeriodLabels(toInsert);
-          const content = i18n.t('admin.notify.waitlistJoinBody', {
+          const content = tAdmin('admin.notify.waitlistJoinBody', {
             clientName,
             clientPhone,
             serviceName: displayService,

@@ -4,6 +4,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { darkenHex, lightenHex } from '@/lib/colorContrast';
+import { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
 
 interface MonthlyInsightsCardProps {
   appointmentsThisMonth: number;
@@ -203,11 +204,12 @@ export default function MonthlyInsightsCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     padding: 20,
     marginTop: 16,
     ...Platform.select({
       ios: {
+        borderCurve: 'continuous' as const,
         shadowColor: '#64748B',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.13,

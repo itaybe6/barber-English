@@ -332,7 +332,7 @@ serve(async (req) => {
           const clientLabel = String(row.client_name ?? "לקוח").trim() || "לקוח";
           const title = "תזכורת לתור קרוב";
           const content =
-            `Reminder: ${clientLabel} · ${serviceName} · ${dateLabel} ${timeLabel}`;
+            `תזכורת: ${clientLabel} · ${serviceName} · ${dateLabel} ${timeLabel}`;
 
           const { error: insErr } = await admin.from("notifications").insert({
             title,

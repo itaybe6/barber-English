@@ -17,7 +17,7 @@ const stepSlideUp = FadeIn.duration(290)
   .withInitialValues({ opacity: 0, transform: [{ translateY: 42 }] });
 
 import { BOOKING_TIME_PERIOD_EMOJI } from '@/constants/bookingTimePeriodEmoji';
-import { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
+import { getBookingStepBarTopFromBottomNoTabBar } from '@/components/book-appointment/BookingStepTabs';
 import { bookingTimeRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 export interface TimeSelectionProps {
@@ -153,7 +153,7 @@ export default function TimeSelection({
   onWaitlist,
 }: TimeSelectionProps) {
   const insets = useSafeAreaInsets();
-  const barBottom = getBookingStepBarTopFromBottom(insets.bottom);
+  const barBottom = getBookingStepBarTopFromBottomNoTabBar(insets.bottom);
 
   const grouped = useMemo(() => {
     const map: Record<TimePeriod, string[]> = { morning: [], afternoon: [], evening: [] };
@@ -182,7 +182,7 @@ export default function TimeSelection({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               localStyles.scrollContent,
-              { paddingBottom: Math.max(listBottomPadding, 32) },
+              { paddingBottom: Math.max(listBottomPadding, 16) },
             ]}
           >
             {/* Title + subtitle – same pattern as other steps */}

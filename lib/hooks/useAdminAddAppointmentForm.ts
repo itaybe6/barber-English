@@ -4,8 +4,12 @@ import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
+import { usersApi } from '@/lib/api/users';
 import type { Service } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+
+export type AdminClientPick = { id?: string; name: string; phone: string };
+export type AdminClientEntryMode = 'existing' | 'new';
 
 export function formatDateToLocalString(date: Date): string {
   const year = date.getFullYear();
@@ -66,7 +70,7 @@ function triggerMediumHaptic() {
 }
 
 export interface AdminBookingSaveSuccessPayload {
-  client: { name: string; phone: string };
+  client: { name: string; phone: string; id?: string };
   service: Service;
   date: Date;
   /** `HH:MM` */
@@ -88,20 +92,37 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);
+  const [selectedClient, setSelectedClient] = useState<AdminClientPick | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
 
-  const [clients, setClients] = useState<Array<{ name: string; phone: string }>>([]);
+  const [clients, setClients] = useState<AdminClientPick[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [isLoadingTimes, setIsLoadingTimes] = useState(false);
 
   const [clientSearch, setClientSearch] = useState('');
-  const [filteredClients, setFilteredClients] = useState<Array<{ name: string; phone: string }>>([]);
+  const [filteredClients, setFilteredClients] = useState<AdminClientPick[]>([]);
+
+  const [clientEntryMode, setClientEntryModeState] = useState<AdminClientEntryMode>('existing');
+
+  const applyClientEntryMode = useCallback((mode: AdminClientEntryMode) => {
+    setClientEntryModeState(mode);
+    setSelectedClient(null);
+    if (mode === 'existing') {
+      setNewClientFullName('');
+      setNewClientPhone('');
+    } else {
+      setClientSearch('');
+      setShowClientDropdown(false);
+    }
+  }, []);
+  const [newClientFullName, setNewClientFullName] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [isFinalizingClientStep, setIsFinalizingClientStep] = useState(false);
 
   const appliedInitialDateRef = useRef<string | null>(null);
 
@@ -110,7 +131,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
       const businessId = getBusinessId();
       const { data, error } = await supabase
         .from('users')
-        .select('name, phone')
+        .select('id, name, phone')
         .eq('user_type', 'client')
         .eq('business_id', businessId)
         .order('name');
@@ -119,7 +140,8 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
 
       const validClients = (data || [])
         .filter((client: { phone?: string }) => client.phone && client.phone.trim() !== '')
-        .map((client: { name?: string; phone: string }) => ({
+        .map((client: { id?: string; name?: string; phone: string }) => ({
+          id: typeof client.id === 'string' ? client.id : undefined,
           name: client.name || t('admin.appointmentsAdmin.client', 'Client'),
           phone: client.phone,
         }));
@@ -335,11 +357,65 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     }
   }, [selectedDate, selectedService, loadAvailableTimesForDate]);
 
-  const onPickClient = useCallback((client: { name: string; phone: string }) => {
+  const onPickClient = useCallback((client: AdminClientPick) => {
     setSelectedClient(client);
     setShowClientDropdown(false);
     setClientSearch('');
   }, []);
+
+  const finalizeClientStepIfNeeded = useCallback(async (): Promise<boolean> => {
+    if (clientEntryMode === 'existing') {
+      return !!selectedClient;
+    }
+    const name = newClientFullName.trim();
+    const phone = newClientPhone.trim();
+    const digits = phone.replace(/\D/g, '');
+    if (name.length < 2 || digits.length < 9) {
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('admin.appointmentsAdmin.newClientFieldsInvalid', 'Please enter full name and a valid phone number.')
+      );
+      return false;
+    }
+    if (selectedClient?.id && selectedClient.name === name && selectedClient.phone === phone) {
+      return true;
+    }
+    setIsFinalizingClientStep(true);
+    try {
+      const res = await usersApi.createClientForAdminBooking({ name, phone });
+      if (!res.ok) {
+        if (res.code === 'duplicate_phone') {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'admin.appointmentsAdmin.newClientDuplicate',
+              'This phone number is already registered. Choose an existing client or use a different number.'
+            )
+          );
+        } else if (res.code === 'validation') {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.appointmentsAdmin.newClientFieldsInvalid', 'Please enter full name and a valid phone number.')
+          );
+        } else {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.appointmentsAdmin.newClientCreateFailed', 'Could not create the client. Please try again.')
+          );
+        }
+        return false;
+      }
+      setSelectedClient({
+        id: res.user.id,
+        name: res.user.name,
+        phone: res.user.phone,
+      });
+      void loadClients();
+      return true;
+    } finally {
+      setIsFinalizingClientStep(false);
+    }
+  }, [clientEntryMode, selectedClient, newClientFullName, newClientPhone, t, loadClients]);
 
   const onPickService = useCallback((service: Service) => {
     setSelectedService(service);
@@ -354,6 +430,23 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
   const onPickTime = useCallback((time: string) => {
     setSelectedTime(time);
   }, []);
+
+  const reset = useCallback(() => {
+    appliedInitialDateRef.current = null;
+    setSelectedClient(null);
+    setSelectedService(null);
+    setSelectedTime(null);
+    setSelectedDate(null);
+    setClientSearch('');
+    setShowClientDropdown(false);
+    setShowServiceDropdown(false);
+    setAvailableTimes([]);
+    setFilteredClients(clients);
+    setClientEntryModeState('existing');
+    setNewClientFullName('');
+    setNewClientPhone('');
+    setIsFinalizingClientStep(false);
+  }, [clients]);
 
   const submit = useCallback(async () => {
     if (!selectedDate || !selectedClient || !selectedService || !selectedTime) {
@@ -389,7 +482,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     triggerMediumHaptic();
 
     try {
-      const { error } = await supabase.from('appointments').insert({
+      const insertRow: Record<string, unknown> = {
         business_id: businessId,
         slot_date: dateString,
         slot_time: `${selectedTime}:00`,
@@ -400,13 +493,22 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
         service_name: selectedService.name,
         user_id: user.id,
         barber_id: user.id,
-      });
+      };
+      if (selectedClient.id) {
+        insertRow.client_user_id = selectedClient.id;
+      }
+
+      const { error } = await supabase.from('appointments').insert(insertRow);
 
       if (error) throw error;
 
       if (onSaveSuccess) {
         onSaveSuccess({
-          client: { name: selectedClient.name, phone: selectedClient.phone },
+          client: {
+            name: selectedClient.name,
+            phone: selectedClient.phone,
+            ...(selectedClient.id ? { id: selectedClient.id } : {}),
+          },
           service: selectedService,
           date: selectedDate,
           time: selectedTime,
@@ -455,5 +557,14 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     onPickDate,
     onPickTime,
     submit,
+    reset,
+    clientEntryMode,
+    applyClientEntryMode,
+    newClientFullName,
+    setNewClientFullName,
+    newClientPhone,
+    setNewClientPhone,
+    finalizeClientStepIfNeeded,
+    isFinalizingClientStep,
   };
 }

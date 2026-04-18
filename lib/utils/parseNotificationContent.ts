@@ -79,11 +79,18 @@ function tryParseEnglishWaitlist(text: string): ParsedNotificationFields | null 
   };
 }
 
-/** Hebrew new appointment (book-appointment.tsx) */
+/** Hebrew new appointment (book-appointment.tsx / select-time Hebrew admin template) */
 function tryParseHebrewNewAppointment(text: string, lang: string): ParsedNotificationFields | null {
-  const m = text.trim().match(
-    /^([\s\S]+?)\s*\((0\d{8,10})\)\s*קבע\/ה תור ל"([^"]+)"\s*בתאריך\s+(\d{4}-\d{2}-\d{2})\s*בשעה\s+(\d{2}:\d{2})(?::\d{2})?/u
-  );
+  const trimmed = text.trim();
+  const patterns = [
+    /^([\s\S]+?)\s*\((0\d{8,10})\)\s*קבע\/ה תור ל־"([^"]+)"\s*בתאריך\s+(\d{4}-\d{2}-\d{2})\s*בשעה\s+(\d{2}:\d{2})(?::\d{2})?/u,
+    /^([\s\S]+?)\s*\((0\d{8,10})\)\s*קבע\/ה תור ל"([^"]+)"\s*בתאריך\s+(\d{4}-\d{2}-\d{2})\s*בשעה\s+(\d{2}:\d{2})(?::\d{2})?/u,
+  ];
+  let m: RegExpMatchArray | null = null;
+  for (const re of patterns) {
+    m = trimmed.match(re);
+    if (m) break;
+  }
   if (!m) return null;
   return {
     primary: '',
@@ -118,11 +125,17 @@ function tryParseHebrewCancel(text: string, lang: string): ParsedNotificationFie
   return null;
 }
 
+/** English time after "at " — 24h HH:MM or 12h with AM/PM (client locale) */
+const EN_BOOKING_TIME =
+  '(\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s*[AP]\\.?M\\.?)?)';
+
 /** English booking (select-time admin template) */
 function tryParseEnglishBooked(text: string, lang: string): ParsedNotificationFields | null {
-  const m = text.trim().match(
-    /^([\s\S]+?)\s*\((0\d{8,10})\)\s*booked an appointment for "([^"]+)" on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2})(?::\d{2})?/i
+  const re = new RegExp(
+    `^([\\s\\S]+?)\\s*\\((0\\d{8,10})\\)\\s*booked an appointment for "([^"]+)" on (\\d{4}-\\d{2}-\\d{2}) at ${EN_BOOKING_TIME}`,
+    'i',
   );
+  const m = text.trim().match(re);
   if (!m) return null;
   return {
     primary: '',
@@ -130,15 +143,17 @@ function tryParseEnglishBooked(text: string, lang: string): ParsedNotificationFi
     phone: m[2],
     service: m[3],
     datePretty: formatIsoDatePretty(m[4], lang),
-    timePretty: timeFromHhMm(m[5]),
+    timePretty: timeFromHhMm(stripAmPmFromTimeToken(m[5])),
   };
 }
 
 /** English cancellation */
 function tryParseEnglishCancel(text: string, lang: string): ParsedNotificationFields | null {
-  const m = text.trim().match(
-    /^([\s\S]+?)\s*\((0\d{8,10})\)\s*canceled an appointment for "([^"]+)" on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2})(?::\d{2})?/i
+  const re = new RegExp(
+    `^([\\s\\S]+?)\\s*\\((0\\d{8,10})\\)\\s*canceled an appointment for "([^"]+)" on (\\d{4}-\\d{2}-\\d{2}) at ${EN_BOOKING_TIME}`,
+    'i',
   );
+  const m = text.trim().match(re);
   if (!m) return null;
   return {
     primary: '',
@@ -146,7 +161,41 @@ function tryParseEnglishCancel(text: string, lang: string): ParsedNotificationFi
     phone: m[2],
     service: m[3],
     datePretty: formatIsoDatePretty(m[4], lang),
-    timePretty: timeFromHhMm(m[5]),
+    timePretty: timeFromHhMm(stripAmPmFromTimeToken(m[5])),
+  };
+}
+
+function stripAmPmFromTimeToken(s: string): string {
+  return String(s || '')
+    .replace(/\s*(?:AM|PM)\b\.?/gi, '')
+    .trim();
+}
+
+/** Admin appointment reminder: "Reminder: Name · Service · date time" (edge function legacy) */
+function tryParseEnglishAdminReminderBullet(text: string): ParsedNotificationFields | null {
+  const m = text
+    .trim()
+    .match(/^Reminder:\s*(.+?)\s*·\s*(.+?)\s*·\s*(.+)$/is);
+  if (!m) return null;
+  return {
+    primary: '',
+    name: m[1].trim(),
+    service: m[2].trim(),
+    datePretty: m[3].trim(),
+  };
+}
+
+/** Hebrew admin reminder from appointment-reminders */
+function tryParseHebrewAdminReminderBullet(text: string): ParsedNotificationFields | null {
+  const m = text
+    .trim()
+    .match(/^תזכורת:\s*(.+?)\s*·\s*(.+?)\s*·\s*(.+)$/u);
+  if (!m) return null;
+  return {
+    primary: '',
+    name: m[1].trim(),
+    service: m[2].trim(),
+    datePretty: m[3].trim(),
   };
 }
 
@@ -203,6 +252,8 @@ export function parseNotificationContent(title: string, content: string, lang: s
   return (
     tryParseHebrewWaitlist(raw) ||
     tryParseEnglishWaitlist(raw) ||
+    tryParseHebrewAdminReminderBullet(raw) ||
+    tryParseEnglishAdminReminderBullet(raw) ||
     tryParseHebrewNewAppointment(raw, lang) ||
     tryParseHebrewCancel(raw, lang) ||
     tryParseEnglishBooked(raw, lang) ||

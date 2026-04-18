@@ -19,8 +19,10 @@ import {
   useBottomSheetSpringConfigs,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ban, Calendar, StickyNote } from 'lucide-react-native';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 // ─── public handle ────────────────────────────────────────────────────────────
 
@@ -50,6 +52,7 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
     const sheetRef = useRef<BottomSheetModal>(null);
     const insets = useSafeAreaInsets();
     const isRtl = I18nManager.isRTL;
+    const colors = useColors();
 
     // Expose open / close directly — no React state round-trip, zero delay.
     useImperativeHandle(ref, () => ({
@@ -69,6 +72,22 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
     const handleDismiss = useCallback(() => {
       onDismiss();
     }, [onDismiss]);
+
+    /** Same vertical gradient as `AdminBroadcastComposer` sheet (background → surface). */
+    const renderSheetBackground = useCallback(
+      () => (
+        <View style={styles.sheetGradientHost}>
+          <LinearGradient
+            pointerEvents="none"
+            colors={[colors.background, colors.surface]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </View>
+      ),
+      [colors.background, colors.surface],
+    );
 
     const renderBackdrop = useCallback(
       (props: BottomSheetBackdropProps) => (
@@ -94,10 +113,16 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
         enableDynamicSizing
         enablePanDownToClose
         handleIndicatorStyle={styles.dragHandle}
-        backgroundStyle={styles.sheetBg}
+        backgroundStyle={[styles.sheetBg, { backgroundColor: 'transparent' }]}
+        backgroundComponent={renderSheetBackground}
         style={styles.sheetShadow}
       >
-        <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom + 28 }]}>
+        <BottomSheetView
+          style={[
+            styles.container,
+            { paddingBottom: insets.bottom + 28, backgroundColor: 'transparent' },
+          ]}
+        >
           {/* Header */}
           <View style={styles.headerBlock}>
             <Text style={[styles.title, { textAlign: isRtl ? 'right' : 'left' }]}>
@@ -110,62 +135,79 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
 
           {/* Options */}
           <View style={styles.optionList}>
-            {/* Appointment */}
-            <Pressable
-              style={({ pressed }) => [styles.optionRow, { flexDirection: rowDir }, pressed && styles.optionPressed]}
-              onPress={onPickAppointment}
-              accessibilityRole="button"
-            >
-              <View style={[styles.iconWrap, { backgroundColor: primaryColor + '15' }]}>
-                <Calendar size={26} color={primaryColor} />
-              </View>
-              <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                <Text style={styles.optionTitle}>תור</Text>
-                <Text style={styles.optionHint}>קביעת תור ללקוח לפי שירות ושעה</Text>
-              </View>
-              <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
-                <Text style={[styles.chevron, { color: primaryColor }]}>›</Text>
-              </View>
+            {/* Appointment — white fill on inner View so it paints reliably over the sheet gradient */}
+            <Pressable onPress={onPickAppointment} accessibilityRole="button">
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.optionCard,
+                    styles.optionRow,
+                    { flexDirection: rowDir },
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <View style={[styles.iconWrap, { backgroundColor: primaryColor + '15' }]}>
+                    <Calendar size={26} color={primaryColor} />
+                  </View>
+                  <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
+                    <Text style={styles.optionTitle}>תור</Text>
+                    <Text style={styles.optionHint}>קביעת תור ללקוח לפי שירות ושעה</Text>
+                  </View>
+                  <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
+                    <Text style={[styles.chevron, { color: primaryColor }]}>›</Text>
+                  </View>
+                </View>
+              )}
             </Pressable>
-
-            <View style={styles.separator} />
 
             {/* Reminder */}
-            <Pressable
-              style={({ pressed }) => [styles.optionRow, { flexDirection: rowDir }, pressed && styles.optionPressed]}
-              onPress={onPickReminder}
-              accessibilityRole="button"
-            >
-              <View style={[styles.iconWrap, { backgroundColor: '#F1F3F4' }]}>
-                <StickyNote size={26} color="#5F6368" />
-              </View>
-              <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                <Text style={styles.optionTitle}>תזכורת ביומן</Text>
-                <Text style={styles.optionHint}>תזכורת לעצמך — לא חוסמת משבצות</Text>
-              </View>
-              <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
-                <Text style={[styles.chevron, { color: '#9CA3AF' }]}>›</Text>
-              </View>
+            <Pressable onPress={onPickReminder} accessibilityRole="button">
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.optionCard,
+                    styles.optionRow,
+                    { flexDirection: rowDir },
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <View style={[styles.iconWrap, { backgroundColor: '#F1F3F4' }]}>
+                    <StickyNote size={26} color="#5F6368" />
+                  </View>
+                  <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
+                    <Text style={styles.optionTitle}>תזכורת ביומן</Text>
+                    <Text style={styles.optionHint}>תזכורת לעצמך — לא חוסמת משבצות</Text>
+                  </View>
+                  <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
+                    <Text style={[styles.chevron, { color: '#9CA3AF' }]}>›</Text>
+                  </View>
+                </View>
+              )}
             </Pressable>
 
-            <View style={styles.separator} />
-
             {/* Constraints */}
-            <Pressable
-              style={({ pressed }) => [styles.optionRow, { flexDirection: rowDir }, pressed && styles.optionPressed]}
-              onPress={onPickConstraints}
-              accessibilityRole="button"
-            >
-              <View style={[styles.iconWrap, { backgroundColor: '#FEF2F2' }]}>
-                <Ban size={26} color="#EF4444" />
-              </View>
-              <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                <Text style={styles.optionTitle}>אילוצים</Text>
-                <Text style={styles.optionHint}>חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור</Text>
-              </View>
-              <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
-                <Text style={[styles.chevron, { color: '#9CA3AF' }]}>›</Text>
-              </View>
+            <Pressable onPress={onPickConstraints} accessibilityRole="button">
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.optionCard,
+                    styles.optionRow,
+                    { flexDirection: rowDir },
+                    pressed && styles.optionPressed,
+                  ]}
+                >
+                  <View style={[styles.iconWrap, { backgroundColor: '#FEF2F2' }]}>
+                    <Ban size={26} color="#EF4444" />
+                  </View>
+                  <View style={[styles.textCol, isRtl ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
+                    <Text style={styles.optionTitle}>אילוצים</Text>
+                    <Text style={styles.optionHint}>חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור</Text>
+                  </View>
+                  <View style={[styles.chevronWrap, { transform: [{ scaleX: isRtl ? 1 : -1 }] }]}>
+                    <Text style={[styles.chevron, { color: '#9CA3AF' }]}>›</Text>
+                  </View>
+                </View>
+              )}
             </Pressable>
           </View>
         </BottomSheetView>
@@ -178,9 +220,14 @@ export const CalendarAddBottomSheet = forwardRef<CalendarAddSheetHandle, Props>(
 
 const styles = StyleSheet.create({
   sheetBg: {
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
+  },
+  sheetGradientHost: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    overflow: 'hidden',
   },
   sheetShadow: {
     ...Platform.select({
@@ -228,26 +275,30 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   optionList: {
+    gap: 10,
+  },
+  optionCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
-    overflow: 'hidden',
-    backgroundColor: '#FAFAFA',
+    overflow: 'visible',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1e293b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: { elevation: 5 },
+    }),
   },
   optionRow: {
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 16,
     gap: 14,
-    backgroundColor: '#FFFFFF',
   },
   optionPressed: {
     backgroundColor: '#F3F4F6',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E7EB',
-    marginLeft: 78,
   },
   iconWrap: {
     width: 52,

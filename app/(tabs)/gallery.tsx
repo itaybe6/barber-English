@@ -627,7 +627,7 @@ export default function GalleryScreen() {
 
               {adminUsers.length > 1 && (
                 <View style={[styles.fieldBlock, { opacity: isCreating ? 0.55 : 1 }]}>
-                  <Text style={[styles.fieldLabel, { color: text }]}>{t('admin.gallery.selectAdmin', 'Select admin')}</Text>
+                  <Text style={[styles.fieldLabel, { color: text }]}>{t('admin.gallery.selectAdmin', 'Choose a team member')}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.adminRow}>
                     {adminUsers.map((user) => (
                       <TouchableOpacity

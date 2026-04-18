@@ -137,6 +137,8 @@ export interface Appointment {
   service_name: string;
   service_id?: string;
   user_id?: string;
+  /** Registered client (`users.id`, `user_type = client`) when set from admin booking flow. */
+  client_user_id?: string | null;
   slot_date: string; // YYYY-MM-DD format
   slot_time: string; // HH:MM format
   is_available: boolean;
@@ -231,7 +233,7 @@ export interface Notification {
   id: string;
   title: string;
   content: string;
-  type: 'appointment_reminder' | 'client_reminder' | 'admin_reminder' | 'promotion' | 'general' | 'system' | 'finance_monthly_review';
+  type: 'appointment_reminder' | 'client_reminder' | 'admin_reminder' | 'promotion' | 'general' | 'home_broadcast' | 'system' | 'finance_monthly_review';
   recipient_name: string;
   recipient_phone: string;
   // Target user for admin/manager notifications (optional)

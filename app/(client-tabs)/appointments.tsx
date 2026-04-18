@@ -667,13 +667,20 @@ export default function ClientAppointmentsScreen() {
         setUserAppointments(prev => prev.filter(apt => apt.id !== selectedAppointment.id));
 
         // Create admin notification about the cancellation (target specific assigned barber if available)
-        const canceledBy = user?.name || selectedAppointment.client_name || t('common.client', 'Client');
+        const tAdmin = i18n.getFixedT('he');
+        const canceledBy =
+          (user?.name || selectedAppointment.client_name || '').trim() || tAdmin('common.client', 'לקוח');
         const canceledPhone = user?.phone || selectedAppointment.client_phone || '';
-        const serviceName = selectedAppointment.service_name || t('booking.field.service', 'Service');
+        const serviceName =
+          (selectedAppointment.service_name || '').trim() || tAdmin('booking.field.service', 'שירות');
         const date = selectedAppointment.slot_date;
         const time = selectedAppointment.slot_time;
-        const title = t('appointments.cancelled.title', 'Appointment Cancellation');
-        const content = t('appointments.cancelled.content', '{{name}} ({{phone}}) canceled an appointment for "{{service}}" on {{date}} at {{time}}', { name: canceledBy, phone: canceledPhone, service: serviceName, date, time });
+        const title = tAdmin('appointments.cancelled.title', 'ביטול תור');
+        const content = tAdmin(
+          'appointments.cancelled.content',
+          '{{name}} ({{phone}}) ביטל/ה תור ל־"{{service}}" בתאריך {{date}} בשעה {{time}}',
+          { name: canceledBy, phone: canceledPhone, service: serviceName, date, time },
+        );
         // If the appointment has a specific barber/admin, notify only them
         const assignedAdminId = (selectedAppointment as any)?.barber_id || (selectedAppointment as any)?.user_id;
         if (assignedAdminId) {

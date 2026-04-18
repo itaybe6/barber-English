@@ -1,7 +1,8 @@
 // @ts-nocheck
 /**
  * Triggered on INSERT into public.notifications (Database Webhook).
- * For recipients who are clients (users.user_type = 'client'): sends Expo push + Pulseem SMS.
+ * For recipients who are clients (users.user_type = 'client'): sends Expo push + Pulseem SMS
+ * (SMS skipped for type `home_broadcast` — admin home screen broadcast).
  * Admin-targeted rows are skipped (no SMS, no push from this function).
  *
  * Invoked by DB trigger (pg_net) on INSERT into notifications — see migration
@@ -588,6 +589,10 @@ serve(async (req) => {
           console.error("[notification-push-sms] push_sent update", updErr);
         }
       }
+    }
+
+    if (nType === "home_broadcast") {
+      return { pushOk, smsOk: false, smsSkip: "home_broadcast_push_only" };
     }
 
     const creds = await loadPulseemCredentials(admin, businessId);

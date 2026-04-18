@@ -1,5 +1,7 @@
+import { randomUUID } from 'expo-crypto';
 import { supabase, User, getBusinessId } from '../supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/businessProfile';
 
 /** Same matching idea as Edge `phoneDigits` / `userExistsForRegister`. */
 function userPhoneMatchesRow(storedPhone: string, rawPhone: string): boolean {
@@ -275,6 +277,78 @@ export const usersApi = {
       console.error('Error creating user:', error);
       return null;
     }
+  },
+
+  /**
+   * Admin flow: create a client row so they can sign in with OTP using this phone (same `password_hash` pattern as Edge auth).
+   */
+  async createClientForAdminBooking(params: {
+    name: string;
+    phone: string;
+  }): Promise<
+    | { ok: true; user: User }
+    | { ok: false; code: 'duplicate_phone' | 'validation' | 'insert_failed'; message?: string }
+  > {
+    const name = params.name.trim();
+    const phoneRaw = params.phone.trim();
+    const digits = phoneRaw.replace(/\D/g, '');
+    if (name.length < 2) {
+      return { ok: false, code: 'validation', message: 'name' };
+    }
+    if (digits.length < 9 || digits.length > 15) {
+      return { ok: false, code: 'validation', message: 'phone' };
+    }
+
+    const businessId = getBusinessId();
+    const { data: candidates, error: qerr } = await supabase
+      .from('users')
+      .select('id, phone')
+      .eq('business_id', businessId)
+      .eq('user_type', 'client');
+
+    if (qerr) {
+      console.error('[usersApi] createClientForAdminBooking list', qerr);
+      return { ok: false, code: 'insert_failed', message: qerr.message };
+    }
+
+    for (const row of candidates || []) {
+      if (row?.phone && userPhoneMatchesRow(String(row.phone), phoneRaw)) {
+        return { ok: false, code: 'duplicate_phone' };
+      }
+    }
+
+    const profile = await businessProfileApi.getProfile();
+    const clientApproved = !isClientApprovalRequired(profile);
+    const password_hash = `otp_only_${randomUUID()}`;
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        name,
+        phone: phoneRaw,
+        user_type: 'client',
+        business_id: businessId,
+        password_hash,
+        client_approved: clientApproved,
+        language: 'he',
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('[usersApi] createClientForAdminBooking insert', error);
+      const code = (error as { code?: string }).code;
+      if (code === '23505') {
+        return { ok: false, code: 'duplicate_phone' };
+      }
+      return { ok: false, code: 'insert_failed', message: error.message };
+    }
+
+    if (!data) {
+      return { ok: false, code: 'insert_failed', message: 'no_row' };
+    }
+
+    return { ok: true, user: data as User };
   },
 
   /**

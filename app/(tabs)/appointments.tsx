@@ -2134,11 +2134,13 @@ export default function AdminAppointmentsScreen() {
   const onCalendarFabPickReminder = useCallback(() => {
     setReminderEditorEditing(null);
     setShowCalendarFabSheet(false);
+    calendarAddSheetRef.current?.close();
     setShowReminderEditor(true);
   }, []);
 
   const onCalendarFabPickAppointment = useCallback(() => {
     setShowCalendarFabSheet(false);
+    calendarAddSheetRef.current?.close();
     router.push({
       pathname: '/(tabs)/add-appointment',
       params: { date: selectedDateStr },
@@ -2147,6 +2149,7 @@ export default function AdminAppointmentsScreen() {
 
   const onCalendarFabPickConstraints = useCallback(() => {
     setShowCalendarFabSheet(false);
+    calendarAddSheetRef.current?.close();
     setShowConstraintsModal(true);
   }, []);
 
@@ -2281,6 +2284,7 @@ export default function AdminAppointmentsScreen() {
   const openEditReminderModal = useCallback((r: CalendarReminder) => {
     setReminderEditorEditing(r);
     setShowCalendarFabSheet(false);
+    calendarAddSheetRef.current?.close();
     setShowReminderEditor(true);
   }, []);
 

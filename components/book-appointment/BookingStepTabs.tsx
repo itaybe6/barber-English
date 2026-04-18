@@ -57,6 +57,16 @@ export function getBookingStepBarBottomInsetNoTabBar(safeAreaBottom: number): nu
   return safeAreaBottom + BOOKING_STEP_BAR_GAP_ABOVE_TAB;
 }
 
+/**
+ * Scroll `paddingBottom` for the time-slot list on book-appointment.
+ * The step row (`BOOKING_TABS_HEIGHT`) is omitted there when `advanceNext` is not passed, so using
+ * `getBookingStepBarTopFromBottomNoTabBar + …` left a large empty band above the summary sheet.
+ * This value matches the collapsed summary peek + handle overlap with the time step viewport.
+ */
+export function getBookingTimeSelectionScrollBottomPadding(safeAreaBottom: number): number {
+  return Math.max(safeAreaBottom + 44, 56);
+}
+
 export default function BookingStepTabs({
   safeAreaBottom,
   bottomInsetOverride,

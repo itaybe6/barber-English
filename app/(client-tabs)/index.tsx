@@ -2356,12 +2356,18 @@ const styles = StyleSheet.create<any>({
   },
   // ── Lava Lamp Book Card ──
   lavaBookCard: {
-    borderRadius: 9999,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     overflow: 'hidden',
     marginHorizontal: 4,
     position: 'relative',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+      ios: {
+        borderCurve: 'continuous' as const,
+        shadowColor: '#000',
+        shadowOpacity: 0.16,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 6 },
+      },
       android: { elevation: 7 },
     }),
   },

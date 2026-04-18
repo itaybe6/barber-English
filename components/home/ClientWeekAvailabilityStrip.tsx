@@ -23,8 +23,8 @@ import { usersApi } from '@/lib/api/users';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 import { parseHexRgb } from '@/lib/colorContrast';
 import type { User } from '@/lib/supabase';
+import { DAILY_SCHEDULE_SURFACE_RADIUS } from '@/components/DailySchedule';
 
-const CARD_RADIUS = 20;
 const GAUGE_TRACK_H = 76;
 
 function primaryRgba(hex: string, alpha: number): string {
@@ -401,13 +401,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 4,
   },
-  /** Same family as `WaitlistHomeFabPanel` `cardTrigger` — no `overflow: hidden` here or iOS clips the shadow */
+  /** Same corner radius as waitlist / greeting / next-appointment cards (`DAILY_SCHEDULE_SURFACE_RADIUS`). No `overflow: hidden` or iOS clips the shadow. */
   sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: CARD_RADIUS,
+    borderRadius: DAILY_SCHEDULE_SURFACE_RADIUS,
     marginHorizontal: 4,
     ...Platform.select({
       ios: {
+        borderCurve: 'continuous' as const,
         shadowColor: '#1e253b',
         shadowOpacity: 0.12,
         shadowRadius: 18,

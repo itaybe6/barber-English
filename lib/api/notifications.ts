@@ -216,7 +216,8 @@ export const notificationsApi = {
   },
 
   /**
-   * Insert one notification row per client (with phone). DB trigger may invoke push/SMS edge function.
+   * Insert one notification row per client (with phone). DB trigger invokes notification-push-sms:
+   * Expo push for all matching types; SMS is skipped for type `home_broadcast` (admin home broadcast).
    * @returns ok=false only on fetch/insert errors; recipientCount=0 means no eligible clients (not an error).
    */
   async sendNotificationToAllClients(

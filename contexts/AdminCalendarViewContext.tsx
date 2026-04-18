@@ -9,7 +9,7 @@ type AdminCalendarViewContextValue = {
 const AdminCalendarViewContext = createContext<AdminCalendarViewContextValue | null>(null);
 
 export function AdminCalendarViewProvider({ children }: { children: ReactNode }) {
-  const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
+  const [calendarView, setCalendarView] = useState<CalendarViewMode>('day');
   const value = useMemo(
     () => ({ calendarView, setCalendarView }),
     [calendarView]

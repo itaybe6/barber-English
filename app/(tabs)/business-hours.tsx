@@ -13,6 +13,7 @@ import {
   Pressable,
   InteractionManager,
   Platform,
+  I18nManager,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -20,7 +21,13 @@ import Animated, {
   FadeOut,
   FadeOutDown,
   LinearTransition,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessHoursApi } from '@/lib/api/businessHours';
@@ -142,104 +149,159 @@ interface TimePickerProps {
   isBreakTime?: boolean;
 }
 
-const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: boolean }> = ({ 
-  value, 
-  onValueChange, 
-  label, 
-  options, 
+const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: boolean }> = ({
+  value,
+  onValueChange,
+  label,
+  options,
   isBreakTime = false,
   primaryColor = Colors.primary,
-  useAmPm = false
+  useAmPm = false,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const wheelRef = useRef<ScrollView | null>(null);
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const [modalVisible, setModalVisible] = useState(false);
   const [tempValue, setTempValue] = useState<string>(value);
   const [openTick, setOpenTick] = useState<number>(0);
+  const tempValueRef = useRef(value);
+  const onValueChangeRef = useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
 
-  useEffect(() => {
-    if (isOpen) {
-      setOpenTick((t) => t + 1);
-    }
-  }, [isOpen]);
+  const translateY = useSharedValue(600);
+  const backdropOpacity = useSharedValue(0);
 
-  const handleConfirm = () => {
-    onValueChange(tempValue);
-    setIsOpen(false);
+  const openSheet = () => {
+    tempValueRef.current = value;
+    setTempValue(value);
+    setOpenTick((n) => n + 1);
+    setModalVisible(true);
+    translateY.value = withSpring(0, { damping: 24, stiffness: 260, mass: 0.9 });
+    backdropOpacity.value = withTiming(1, { duration: 260 });
   };
 
-  const dropdownBackgroundColor = isBreakTime 
-    ? 'rgba(255, 149, 0, 0.1)' 
+  const animateClose = (onDone: () => void) => {
+    translateY.value = withSpring(600, { damping: 24, stiffness: 260, mass: 0.9 });
+    backdropOpacity.value = withTiming(0, { duration: 220 }, () => {
+      runOnJS(onDone)();
+    });
+  };
+
+  const handleClose = () => {
+    animateClose(() => setModalVisible(false));
+  };
+
+  const handleConfirm = () => {
+    const val = tempValueRef.current;
+    animateClose(() => {
+      setModalVisible(false);
+      onValueChangeRef.current(val);
+    });
+  };
+
+  const handleTempChange = (v: string) => {
+    tempValueRef.current = v;
+    setTempValue(v);
+  };
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+
+  const dropdownBackgroundColor = isBreakTime
+    ? 'rgba(255, 149, 0, 0.1)'
     : 'rgba(0, 122, 255, 0.1)';
-    
-  const dropdownBorderColor = isBreakTime 
-    ? 'rgba(255, 149, 0, 0.3)' 
+  const dropdownBorderColor = isBreakTime
+    ? 'rgba(255, 149, 0, 0.3)'
     : 'rgba(0, 122, 255, 0.3)';
-    
   const selectedColor = isBreakTime ? Colors.warning : primaryColor;
   const displayTextColor = isBreakTime ? Colors.warning : Colors.text;
 
+  const gradientColors: [string, string] = isBreakTime
+    ? ['#FF9500', '#FF6B00']
+    : [primaryColor, primaryColor + 'CC'];
+
   return (
-    <View style={[styles.timePickerContainer, { zIndex: isOpen ? 10000 : 1 }]}> 
+    <View style={[styles.timePickerContainer, { zIndex: modalVisible ? 10000 : 1 }]}>
       <Text style={[styles.timePickerLabel, isBreakTime && styles.timePickerLabelSmall]}>{label}</Text>
-      
-      {/* Dropdown Button */}
+
       <TouchableOpacity
         style={[
           styles.dropdownButton,
           isBreakTime && styles.dropdownButtonSmall,
-          isOpen && styles.dropdownButtonOpen,
-          { 
-            backgroundColor: dropdownBackgroundColor,
-            borderColor: dropdownBorderColor 
-          }
+          modalVisible && styles.dropdownButtonOpen,
+          { backgroundColor: dropdownBackgroundColor, borderColor: dropdownBorderColor },
         ]}
-        onPress={() => { setTempValue(value); setIsOpen(true); }}
+        onPress={openSheet}
         activeOpacity={0.8}
       >
-        <Text numberOfLines={1} ellipsizeMode="clip" style={[
-          styles.dropdownButtonText,
-          isBreakTime && styles.dropdownButtonTextSmall,
-          { color: displayTextColor, flex: 1, textAlign: 'center', fontSize: isBreakTime ? undefined : 12 }
-        ]}> 
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="clip"
+          style={[
+            styles.dropdownButtonText,
+            isBreakTime && styles.dropdownButtonTextSmall,
+            { color: displayTextColor, flex: 1, textAlign: 'center', fontSize: isBreakTime ? undefined : 12 },
+          ]}
+        >
           {formatDisplayTime(value, useAmPm)}
         </Text>
-        <Ionicons 
-          name={isOpen ? "chevron-up" : "chevron-down"} 
-          size={16} 
-          color={displayTextColor} 
+        <Ionicons
+          name={modalVisible ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={displayTextColor}
         />
       </TouchableOpacity>
 
-      {/* Bottom Sheet Modal with iOS-like wheels */}
       <Modal
-        visible={isOpen}
+        visible={modalVisible}
         transparent
-        animationType="slide"
-        onRequestClose={() => setIsOpen(false)}
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={handleClose}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsOpen(false)} />
-        <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
+        {/* Dimmed backdrop */}
+        <Animated.View style={[StyleSheet.absoluteFill, styles.modalOverlay, backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        </Animated.View>
+
+        {/* Bottom sheet */}
+        <Animated.View style={[styles.bottomSheet, sheetStyle]}>
+          {/* Drag handle */}
           <View style={styles.sheetHandle} />
+
+          {/* Header — title only, centered */}
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{label}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <TouchableOpacity onPress={() => setIsOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={20} color={Colors.secondaryText} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleConfirm} style={[styles.confirmButton, { backgroundColor: primaryColor }]} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="checkmark" size={20} color={'#FFFFFF'} />
-              </TouchableOpacity>
-            </View>
           </View>
-          <WheelPicker 
-            options={options} 
-            value={tempValue} 
-            onChange={setTempValue} 
-            accentColor={selectedColor} 
+
+          {/* Wheel */}
+          <WheelPicker
+            options={options}
+            value={tempValue}
+            onChange={handleTempChange}
+            accentColor={selectedColor}
             useAmPm={useAmPm}
             openKey={`${openTick}-${tempValue}`}
           />
-        </View>
+
+          {/* Confirm button */}
+          <View style={[styles.sheetConfirmRow, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <TouchableOpacity
+              onPress={handleConfirm}
+              activeOpacity={0.88}
+              style={styles.sheetConfirmTouchable}
+            >
+              <LinearGradient
+                colors={gradientColors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sheetConfirmGradient}
+              >
+                <Ionicons name="checkmark" size={20} color="#FFFFFF" style={{ marginEnd: 8 }} />
+                <Text style={styles.sheetConfirmText}>{t('confirm')}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </Modal>
     </View>
   );
@@ -306,6 +368,25 @@ export default function BusinessHoursScreen() {
   const [tempSlotDuration, setTempSlotDuration] = useState<string>('60');
   const [useBreaks, setUseBreaks] = useState<boolean>(false);
   const [tempBreaks, setTempBreaks] = useState<BreakWindow[]>([]);
+
+  // Original (saved) values — used to detect unsaved changes
+  const [origStartTime, setOrigStartTime] = useState('09:00');
+  const [origEndTime, setOrigEndTime] = useState('17:00');
+  const [origUseBreaks, setOrigUseBreaks] = useState(false);
+  const [origBreaks, setOrigBreaks] = useState<Array<{ start_time: string; end_time: string }>>([]);
+
+  const isDirty = useMemo(() => {
+    if (tempStartTime !== origStartTime) return true;
+    if (tempEndTime !== origEndTime) return true;
+    if (useBreaks !== origUseBreaks) return true;
+    const cur = useBreaks ? tempBreaks.map(b => ({ start_time: b.start_time, end_time: b.end_time })) : [];
+    const orig = origUseBreaks ? origBreaks : [];
+    if (cur.length !== orig.length) return true;
+    for (let i = 0; i < cur.length; i++) {
+      if (cur[i].start_time !== orig[i].start_time || cur[i].end_time !== orig[i].end_time) return true;
+    }
+    return false;
+  }, [tempStartTime, tempEndTime, useBreaks, tempBreaks, origStartTime, origEndTime, origUseBreaks, origBreaks]);
 
   // Ensure End Time is always after Start Time while editing
   useEffect(() => {
@@ -415,8 +496,14 @@ export default function BusinessHoursScreen() {
         const e = formatHHMM(dayHours.break_end_time);
         loadedBreaks = [makeBreakWindow(s, e, `legacy-${s}-${e}`)];
       }
-      setUseBreaks(loadedBreaks.length > 0);
+      const hasBreaks = loadedBreaks.length > 0;
+      setUseBreaks(hasBreaks);
       setTempBreaks(loadedBreaks);
+      // Store originals for dirty-check
+      setOrigStartTime(formatHHMM(dayHours.start_time));
+      setOrigEndTime(formatHHMM(dayHours.end_time));
+      setOrigUseBreaks(hasBreaks);
+      setOrigBreaks(loadedBreaks.map(b => ({ start_time: b.start_time, end_time: b.end_time })));
       setEditingDay(dayOfWeek);
     }
   };
@@ -502,9 +589,15 @@ export default function BusinessHoursScreen() {
         layout={_layout}
         key={dayOfWeek}
         style={[styles.dayCard, isActive && styles.dayCardActive]}
-        activeOpacity={0.9}
-        onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }}
-        disabled={isEditing}
+        activeOpacity={isEditing && isDirty ? 1 : 0.9}
+        onPress={() => {
+          if (!isEditing) {
+            handleEditDay(dayOfWeek);
+          } else if (!isDirty) {
+            setEditingDay(null);
+          }
+        }}
+        disabled={false}
       >
         <Animated.View layout={_layout} style={styles.dayHeader}>
           <Animated.View layout={_layout} style={styles.dayInfo}>
@@ -578,168 +671,202 @@ export default function BusinessHoursScreen() {
 
         {isEditing && (
           <Animated.View style={styles.editContainer} layout={_layout} entering={_entering} exiting={_exiting}>
-            {/* Work Hours Section */}
+
+            {/* ── Work Hours Card ── */}
             <Animated.View layout={_layout} style={styles.workHoursSection}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="briefcase-outline" size={16} color={businessColors.primary} />
-                <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.workHours')}</Text>
-              </View>
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>{t('admin.hours.showBreaksQuestion')}</Text>
-                <Switch
-                  value={useBreaks}
-                  onValueChange={setUseBreaks}
-                  trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
-                  thumbColor={useBreaks ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
-                  ios_backgroundColor={hoursSwitchPalette.trackOff}
-                />
-              </View>
-              <View style={styles.timeRow}>
-                <View style={styles.timeColumn}>
-                  <TimePicker
-                    value={tempStartTime}
-                    onValueChange={setTempStartTime}
-                    label={t('admin.hours.startTime')}
-                    options={startTimeOptions}
-                    isBreakTime={false}
-                    primaryColor={businessColors.primary}
-                    useAmPm={useAmPm}
+              {/* Accent bar */}
+              <View style={[styles.sectionAccentBar, { backgroundColor: businessColors.primary }]} />
+              <View style={styles.sectionInner}>
+                {/* Header */}
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="briefcase-outline" size={15} color={businessColors.primary} />
+                  <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.workHours')}</Text>
+                </View>
+
+                {/* Breaks toggle row */}
+                <View style={styles.toggleRow}>
+                  <Text style={styles.toggleLabel}>{t('admin.hours.showBreaksQuestion')}</Text>
+                  <Switch
+                    value={useBreaks}
+                    onValueChange={setUseBreaks}
+                    trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
+                    thumbColor={useBreaks ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
+                    ios_backgroundColor={hoursSwitchPalette.trackOff}
                   />
                 </View>
 
-                <View style={styles.timeSeparator}>
-                  <Ionicons name="arrow-forward" size={16} color={Colors.secondaryText} />
-                </View>
-
-                <View style={styles.timeColumn}>
-                  <TimePicker
-                    value={tempEndTime}
-                    onValueChange={(v) => {
-                      // Ensure end > start
-                      if (v <= tempStartTime) {
-                        const options = generateTenMinuteOptions();
-                        const next = options.find(t => t > tempStartTime) || v;
-                        setTempEndTime(next);
-                      } else {
-                        setTempEndTime(v);
-                      }
-                    }}
-                    label={t('admin.hours.endTime')}
-                    options={endTimeOptions}
-                    isBreakTime={false}
-                    primaryColor={businessColors.primary}
-                    useAmPm={useAmPm}
-                  />
+                {/* Time pickers */}
+                <View style={styles.timeRow}>
+                  <View style={styles.timeColumn}>
+                    <TimePicker
+                      value={tempStartTime}
+                      onValueChange={setTempStartTime}
+                      label={t('admin.hours.startTime')}
+                      options={startTimeOptions}
+                      isBreakTime={false}
+                      primaryColor={businessColors.primary}
+                      useAmPm={useAmPm}
+                    />
+                  </View>
+                  <View style={styles.timeSeparator}>
+                    <Ionicons name="arrow-forward" size={16} color={Colors.tertiaryText} />
+                  </View>
+                  <View style={styles.timeColumn}>
+                    <TimePicker
+                      value={tempEndTime}
+                      onValueChange={(v) => {
+                        if (v <= tempStartTime) {
+                          const options = generateTenMinuteOptions();
+                          const next = options.find(t => t > tempStartTime) || v;
+                          setTempEndTime(next);
+                        } else {
+                          setTempEndTime(v);
+                        }
+                      }}
+                      label={t('admin.hours.endTime')}
+                      options={endTimeOptions}
+                      isBreakTime={false}
+                      primaryColor={businessColors.primary}
+                      useAmPm={useAmPm}
+                    />
+                  </View>
                 </View>
               </View>
             </Animated.View>
 
-            {/* Multiple Breaks Section */}
+            {/* ── Breaks Card ── */}
             {useBreaks && (
               <Animated.View layout={_layout} style={styles.breakHoursSection}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="cafe-outline" size={16} color={Colors.warning} />
-                  <Text style={[styles.sectionTitle, { color: Colors.warning }]}>{t('admin.hours.breaks')}</Text>
+                <View style={[styles.sectionAccentBar, { backgroundColor: Colors.warning }]} />
+                <View style={styles.sectionInner}>
+                  {/* Header */}
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="cafe-outline" size={15} color={Colors.warning} />
+                    <Text style={[styles.sectionTitle, { color: Colors.warning }]}>{t('admin.hours.breaks')}</Text>
+                  </View>
+
+                  <Animated.View layout={_layout} style={{ gap: 0 }}>
+                    {tempBreaks.map((b, idx) => (
+                      <Animated.View key={b.id} layout={_layout} entering={_entering} exiting={_fadeExit}>
+                        {idx > 0 && <View style={styles.breakDivider} />}
+                        <View style={styles.breakItemRow}>
+                          {/* Break label + delete */}
+                          <View style={styles.breakItemHeader}>
+                            <TouchableOpacity
+                              onPress={() => setTempBreaks(prev => prev.filter(x => x.id !== b.id))}
+                              style={styles.breakDeleteButton}
+                              activeOpacity={0.75}
+                            >
+                              <Ionicons name="close" size={13} color={Colors.danger} />
+                            </TouchableOpacity>
+                            <View style={styles.breakNumberRow}>
+                              <Text style={styles.breakNumber}>{t('admin.hours.breakNumber', { num: idx + 1 })}</Text>
+                              <Ionicons name="cafe" size={13} color={Colors.warning} />
+                            </View>
+                          </View>
+                          {/* Time pickers */}
+                          <View style={styles.timeRow}>
+                            <View style={styles.timeColumn}>
+                              <TimePicker
+                                value={b.start_time}
+                                onValueChange={(v) => setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x))}
+                                label={t('admin.hours.start')}
+                                options={startTimeOptions}
+                                isBreakTime
+                                primaryColor={businessColors.primary}
+                                useAmPm={useAmPm}
+                              />
+                            </View>
+                            <View style={styles.timeSeparator}>
+                              <Ionicons name="arrow-back" size={16} color={Colors.tertiaryText} />
+                            </View>
+                            <View style={styles.timeColumn}>
+                              <TimePicker
+                                value={b.end_time}
+                                onValueChange={(v) => setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x))}
+                                label={t('admin.hours.end')}
+                                options={endTimeOptions}
+                                isBreakTime
+                                primaryColor={businessColors.primary}
+                                useAmPm={useAmPm}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                      </Animated.View>
+                    ))}
+
+                    {/* Add break button */}
+                    <TouchableOpacity
+                      onPress={() => setTempBreaks(prev => ([...prev, makeBreakWindow()]))}
+                      style={styles.addBreakButton}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="add-circle" size={18} color={Colors.warning} />
+                      <Text style={styles.addBreakText}>{t('admin.hours.addBreak')}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
                 </View>
-                <Animated.View layout={_layout} style={{ gap: 12 }}>
-                  {tempBreaks.map((b, idx) => (
-                    <Animated.View key={b.id} layout={_layout} entering={_entering} exiting={_fadeExit} style={styles.breakItemRow}>
-                      <View style={styles.breakItemHeader}>
-                        <TouchableOpacity
-                          onPress={() => setTempBreaks(prev => prev.filter(x => x.id !== b.id))}
-                          style={styles.breakDeleteButton}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="close" size={14} color={Colors.danger} />
-                        </TouchableOpacity>
-                        <View style={styles.breakNumberRow}>
-                          <Text style={styles.breakNumber}>{t('admin.hours.breakNumber', { num: idx + 1 })}</Text>
-                          <Ionicons name="cafe" size={13} color={Colors.warning} />
-                        </View>
-                      </View>
-                      <View style={styles.timeRow}>
-                        <View style={styles.timeColumn}>
-                          <TimePicker
-                            value={b.start_time}
-                            onValueChange={(v) => {
-                              setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x));
-                            }}
-                            label={t('admin.hours.start')}
-                            options={startTimeOptions}
-                            isBreakTime
-                            primaryColor={businessColors.primary}
-                            useAmPm={useAmPm}
-                          />
-                        </View>
-                        <View style={styles.timeSeparator}>
-                          <Ionicons name="arrow-back" size={16} color={Colors.secondaryText} />
-                        </View>
-                        <View style={styles.timeColumn}>
-                          <TimePicker
-                            value={b.end_time}
-                            onValueChange={(v) => {
-                              setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x));
-                            }}
-                            label={t('admin.hours.end')}
-                            options={endTimeOptions}
-                            isBreakTime
-                            primaryColor={businessColors.primary}
-                            useAmPm={useAmPm}
-                          />
-                        </View>
-                      </View>
-                      {idx < tempBreaks.length - 1 && <View style={styles.breakDivider} />}
-                    </Animated.View>
-                  ))}
-                  <TouchableOpacity
-                    onPress={() => setTempBreaks(prev => ([...prev, makeBreakWindow()]))}
-                    style={styles.addBreakButton}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="add-circle-outline" size={16} color={Colors.warning} />
-                    <Text style={styles.addBreakText}>{t('admin.hours.addBreak')}</Text>
-                  </TouchableOpacity>
-                </Animated.View>
               </Animated.View>
             )}
 
-            {/* Day Summary */}
+            {/* ── Day Summary ── */}
             <Animated.View layout={_layout} style={styles.daySummary}>
               <View style={styles.summaryHeader}>
-                <Ionicons name="calendar-outline" size={14} color={Colors.success} />
+                <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
                 <Text style={styles.summaryTitle}>{t('admin.hours.daySummary')}</Text>
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryText}>{t('admin.hours.workPrefix')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
-                {useBreaks && tempBreaks.length > 0 ? (
-                  <View style={{ gap: 4 }}>
-                    {tempBreaks.map((b, i) => (
-                      <Text key={b.id} style={styles.summaryBreak}>
+                {/* Work row */}
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLtrValue}>
+                    <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text>
+                  </Text>
+                  <View style={styles.summaryRowLabel}>
+                    <Ionicons name="time-outline" size={13} color={Colors.secondaryText} />
+                    <Text style={styles.summaryRowLabelText}>{t('admin.hours.workPrefix')}</Text>
+                  </View>
+                </View>
+                {/* Break rows */}
+                {useBreaks && tempBreaks.map((b, i) => (
+                  <View key={b.id} style={styles.summaryRow}>
+                    <Text style={styles.summaryLtrBreakValue}>
+                      <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                    </Text>
+                    <View style={styles.summaryRowLabel}>
+                      <Ionicons name="cafe-outline" size={13} color={Colors.tertiaryText} />
+                      <Text style={styles.summaryRowBreakText}>
                         {tempBreaks.length > 1
                           ? t('admin.hours.summaryBreakNumbered', { num: i + 1 })
                           : t('admin.hours.summaryBreakSingle')}
-                        <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                       </Text>
-                    ))}
+                    </View>
                   </View>
-                ) : null}
+                ))}
               </View>
             </Animated.View>
 
+            {/* ── Action Buttons ── */}
             <View style={styles.editActions}>
               <TouchableOpacity
-                style={styles.cancelButton}
+                style={[styles.cancelButton, !isDirty && styles.buttonDisabled]}
                 onPress={() => setEditingDay(null)}
-                activeOpacity={0.7}
+                activeOpacity={isDirty ? 0.7 : 1}
+                disabled={!isDirty}
               >
                 <Text style={styles.cancelButtonText}>{t('cancel')}</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={[styles.saveButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
+                style={[
+                  styles.saveButton,
+                  { backgroundColor: businessColors.primary, shadowColor: businessColors.primary },
+                  !isDirty && styles.buttonDisabled,
+                ]}
                 onPress={handleSaveDay}
-                activeOpacity={0.7}
+                activeOpacity={isDirty ? 0.7 : 1}
+                disabled={!isDirty}
               >
+                <Ionicons name="checkmark" size={16} color="#FFFFFF" style={{ marginEnd: 6 }} />
                 <Text style={styles.saveButtonText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
@@ -802,75 +929,71 @@ export default function BusinessHoursScreen() {
               style={styles.content}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollContent}
-              onScrollBeginDrag={() => {
-                if (isBreakPickerOpen) setIsBreakPickerOpen(false);
-              }}
+              onScrollBeginDrag={() => {}}
             >
           {hoursSegment === 'fixedBreaks' && (
             <View style={styles.breakSectionWrap}>
               <View style={styles.breakGroupedCard}>
-                <View style={styles.breakGroupedHeader}>
-                  <Text style={styles.breakGroupedTitle}>{t('admin.hours.breakMinutes')}</Text>
-                  <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
-                </View>
-                <TouchableOpacity
-                  style={[styles.breakGroupedControl, isBreakPickerOpen && styles.breakGroupedControlOpen]}
-                  onPress={() => {
-                    if (!isSavingGlobalBreak) setIsBreakPickerOpen((o) => !o);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.breakControlValue}>
-                    {globalBreakMinutes} {t('admin.hours.min')}
-                  </Text>
-                  <View style={styles.breakControlAffordance}>
+                {/* Accent bar */}
+                <View style={[styles.sectionAccentBar, { backgroundColor: businessColors.primary }]} />
+                <View style={styles.breakGroupedInner}>
+                  {/* Header */}
+                  <View style={styles.breakGroupedHeader}>
+                    <Ionicons name="timer-outline" size={16} color={businessColors.primary} />
+                    <Text style={[styles.breakGroupedTitle, { color: businessColors.primary }]}>
+                      {t('admin.hours.breakMinutes')}
+                    </Text>
+                  </View>
+
+                  {/* Large current value display */}
+                  <View style={styles.breakValueDisplay}>
                     {isSavingGlobalBreak ? (
-                      <ActivityIndicator size="small" color={businessColors.primary} />
+                      <ActivityIndicator size="small" color={businessColors.primary} style={{ marginVertical: 6 }} />
                     ) : (
-                      <Ionicons
-                        name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'}
-                        size={18}
-                        color={Colors.secondaryText}
-                      />
+                      <View style={[styles.breakValueBadge, { backgroundColor: `${businessColors.primary}12` }]}>
+                        <Text style={[styles.breakValueNumber, { color: businessColors.primary }]}>
+                          {globalBreakMinutes === 0
+                            ? t('admin.hours.breakNone')
+                            : globalBreakMinutes}
+                        </Text>
+                        {globalBreakMinutes > 0 && (
+                          <Text style={[styles.breakValueUnit, { color: businessColors.primary }]}>
+                            {' '}{t('admin.hours.min')}
+                          </Text>
+                        )}
+                      </View>
                     )}
                   </View>
-                </TouchableOpacity>
 
-                {isBreakPickerOpen && (
-                  <Animated.View
-                    entering={FadeIn.duration(220)}
-                    exiting={FadeOut.duration(160)}
-                    style={styles.breakDropdownPanel}
-                  >
-                    {GLOBAL_BREAK_MINUTES_VALUES.map((m, index) => (
-                      <TouchableOpacity
-                        key={m}
-                        style={[
-                          styles.breakDropdownRow,
-                          index < GLOBAL_BREAK_MINUTES_VALUES.length - 1 && styles.breakDropdownRowBorder,
-                          globalBreakMinutes === m && { backgroundColor: `${businessColors.primary}18` },
-                        ]}
-                        onPress={() => saveGlobalBreakMinutes(m)}
-                        disabled={isSavingGlobalBreak}
-                        activeOpacity={0.65}
-                      >
-                        <Text
+                  {/* Chips row */}
+                  <View style={styles.breakChipsRow}>
+                    {GLOBAL_BREAK_MINUTES_VALUES.map((m) => {
+                      const isSelected = globalBreakMinutes === m;
+                      return (
+                        <TouchableOpacity
+                          key={m}
                           style={[
-                            styles.breakDropdownRowText,
-                            globalBreakMinutes === m && { color: businessColors.primary, fontWeight: '700' },
+                            styles.breakChip,
+                            isSelected && {
+                              backgroundColor: businessColors.primary,
+                              borderColor: businessColors.primary,
+                            },
                           ]}
+                          onPress={() => saveGlobalBreakMinutes(m)}
+                          disabled={isSavingGlobalBreak}
+                          activeOpacity={0.72}
                         >
-                          {m} {t('admin.hours.min')}
-                        </Text>
-                        {globalBreakMinutes === m ? (
-                          <Ionicons name="checkmark-circle" size={22} color={businessColors.primary} />
-                        ) : (
-                          <View style={styles.breakDropdownRowSpacer} />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </Animated.View>
-                )}
+                          <Text style={[styles.breakChipText, isSelected && styles.breakChipTextSelected]}>
+                            {m === 0 ? t('admin.hours.breakNone') : `${m}`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Hint */}
+                  <Text style={styles.breakHintText}>{t('admin.hours.breakHint')}</Text>
+                </View>
               </View>
             </View>
           )}
@@ -1305,54 +1428,64 @@ const styles = StyleSheet.create({
   },
   // Modal bottom sheet styles
   modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   bottomSheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
+    backgroundColor: Colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 24,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 32,
   },
   sheetHandle: {
     alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#E5E5EA',
-    marginBottom: 8,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(60, 60, 67, 0.18)',
+    marginBottom: 12,
   },
   sheetHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(60, 60, 67, 0.2)',
-  },
-  confirmButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60, 60, 67, 0.12)',
   },
   sheetTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  sheetConfirmRow: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  sheetConfirmTouchable: {
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  sheetConfirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 18,
+  },
+  sheetConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   sheetList: {
     maxHeight: 320,
@@ -1397,16 +1530,18 @@ const styles = StyleSheet.create({
   },
   editActions: {
     flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'flex-start',
+    gap: 10,
+    marginTop: 4,
   },
   cancelButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 16,
     backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButtonText: {
     color: Colors.secondaryText,
@@ -1415,19 +1550,25 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   saveButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 14,
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButtonText: {
     color: Colors.card,
     fontWeight: '700',
     fontSize: 15,
     letterSpacing: -0.2,
+  },
+  buttonDisabled: {
+    opacity: 0.35,
   },
   generateButton: {
     marginHorizontal: 24,
@@ -1458,33 +1599,87 @@ const styles = StyleSheet.create({
     height: 40,
   },
   breakSectionWrap: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     marginBottom: 20,
   },
   breakGroupedCard: {
     backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60, 60, 67, 0.08)',
+    borderRadius: 22,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  breakGroupedInner: {
+    flex: 1,
+    padding: 20,
   },
   breakGroupedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     gap: 8,
-    marginBottom: 12,
-    width: '100%',
-    direction: 'rtl',
+    marginBottom: 18,
   },
   breakGroupedTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
     letterSpacing: -0.3,
-    textAlign: 'right',
     flexShrink: 1,
-    writingDirection: 'rtl',
+  },
+  breakValueDisplay: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  breakValueBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  breakValueNumber: {
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  breakValueUnit: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  breakChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  breakChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(60,60,67,0.15)',
+    backgroundColor: Colors.background,
+  },
+  breakChipText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.secondaryText,
+    letterSpacing: -0.2,
+  },
+  breakChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  breakHintText: {
+    fontSize: 12,
+    color: Colors.tertiaryText,
+    textAlign: 'center',
+    letterSpacing: -0.1,
+    lineHeight: 17,
   },
   breakGroupedControl: {
     flexDirection: 'row',
@@ -1496,11 +1691,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(60, 60, 67, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
   },
   breakGroupedControlOpen: {
     borderBottomLeftRadius: 8,
@@ -1515,11 +1705,6 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 14,
     borderBottomRightRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
   },
   breakDropdownRow: {
     flexDirection: 'row',
@@ -1553,75 +1738,91 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Work Hours Section
+  // ── Section Cards ──
   workHoursSection: {
-    backgroundColor: 'rgba(0, 122, 255, 0.05)',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.1)',
-    overflow: 'visible',
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 3,
   },
   breakHoursSection: {
-    backgroundColor: 'rgba(255, 149, 0, 0.04)',
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 149, 0, 0.1)',
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    marginBottom: 14,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  sectionAccentBar: {
+    width: 4,
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+    alignSelf: 'stretch',
+  },
+  sectionInner: {
+    flex: 1,
+    padding: 18,
     overflow: 'visible',
-  },
-  breakItemRow: {
-    paddingVertical: 10,
-  },
-  breakDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 149, 0, 0.2)',
-    marginTop: 12,
-  },
-  breakDeleteButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,59,48,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,59,48,0.25)'
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
-    gap: 8,
+    marginBottom: 16,
+    gap: 7,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
     letterSpacing: -0.3,
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 16,
   },
   toggleLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: 8,
+    flexShrink: 1,
+    letterSpacing: -0.2,
+  },
+  breakItemRow: {
+    paddingVertical: 14,
+  },
+  breakDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(60,60,67,0.12)',
+    marginHorizontal: 4,
+  },
+  breakDeleteButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,59,48,0.08)',
   },
   breakItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   breakNumberRow: {
     flexDirection: 'row',
@@ -1629,21 +1830,23 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   breakNumber: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.2,
+    color: Colors.secondaryText,
+    letterSpacing: -0.1,
   },
   addBreakButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 13,
+    gap: 7,
+    paddingVertical: 14,
+    marginTop: 6,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,149,0,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,149,0,0.2)',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,149,0,0.35)',
+    backgroundColor: 'rgba(255,149,0,0.04)',
   },
   addBreakText: {
     color: Colors.warning,
@@ -1671,8 +1874,8 @@ const styles = StyleSheet.create({
   timeSeparator: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 24,
-    width: 28,
+    paddingTop: 32,
+    width: 24,
   },
   timeLabel: {
     fontSize: 16,
@@ -1684,27 +1887,67 @@ const styles = StyleSheet.create({
   },
 
   daySummary: {
-    backgroundColor: 'rgba(52, 199, 89, 0.05)',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(52, 199, 89, 0.1)',
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 6,
+    gap: 7,
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.1)',
   },
   summaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: Colors.text,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   summaryContent: {
-    gap: 4,
+    gap: 10,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryRowLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  summaryRowLabelText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.secondaryText,
+    letterSpacing: -0.1,
+  },
+  summaryRowBreakText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.tertiaryText,
+    letterSpacing: -0.1,
+  },
+  summaryLtrValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: 0.2,
+  },
+  summaryLtrBreakValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.secondaryText,
+    letterSpacing: 0.2,
   },
   summaryText: {
     fontSize: 15,

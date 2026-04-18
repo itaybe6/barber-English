@@ -15,7 +15,7 @@ import {
   ScrollView,
   useWindowDimensions,
   BackHandler,
-  Keyboard,
+  I18nManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,17 +30,23 @@ import { useTranslation } from 'react-i18next';
 import { Search, ImagePlus, ShoppingBag, X, GripVertical, Info } from 'lucide-react-native';
 import DraggableFlatList, { ScaleDecorator, type DragEndParams } from 'react-native-draggable-flatlist';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
-import { FabButton } from '@/components/FabButton';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetTextInput,
+  type BottomSheetBackdropProps,
+  type BottomSheetScrollViewMethods,
+} from '@gorhom/bottom-sheet';
 import { useEditProductsTabBar, useEditProductsTabBarRegistration } from '@/contexts/EditProductsTabBarContext';
 import { storageExtensionFromContentType } from '@/lib/utils/mediaUrl';
 
 const numColumns = 2;
-const FAB_H_INSET = 20;
-const FAB_OPEN_PADDING_H = 18;
 
-function getFabStep2ContentWidth(screenW: number) {
-  const openW = Math.min(screenW * 0.92, screenW - FAB_H_INSET * 2);
-  return openW - FAB_OPEN_PADDING_H * 2;
+/** Inner width for product sheet content (horizontal padding 20×2, same as edit-gallery). */
+function getStoreSheetInnerContentWidth(screenW: number) {
+  const pad = 20;
+  return Math.max(0, screenW - pad * 2);
 }
 
 function getStoreStep2ThumbSize(innerWidth: number): { thumbSize: number; gap: number } {
@@ -58,19 +64,15 @@ export default function EditProductsScreen() {
   );
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [keyboardH, setKeyboardH] = useState(0);
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors, windowWidth, windowHeight), [colors, windowWidth, windowHeight]);
+  const styles = useMemo(() => createStyles(colors, windowWidth), [colors, windowWidth]);
 
-  /** Same as edit-gallery: DidShow/DidHide — avoid mixing KeyboardAwareScroll inside absolute FAB. */
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardH(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardH(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  const storeSheetInnerW = useMemo(() => getStoreSheetInnerContentWidth(windowWidth), [windowWidth]);
+  /** Square side for product cover picker tile (sheet pad 20×2, gap 12 — same as gallery photo tile). */
+  const productPickTileSize = useMemo(() => {
+    const inner = Math.max(0, windowWidth - 40);
+    return Math.max(118, Math.min(176, Math.floor((inner - 12) / 2)));
+  }, [windowWidth]);
 
   const { products, fetchProducts, applyProductDisplayOrder, isLoading } = useProductsStore();
 
@@ -100,6 +102,89 @@ export default function EditProductsScreen() {
 
   const { deleteMode, setDeleteMode, reorderMode, setReorderMode, setReorderDirty, setFloatingBarHidden } =
     useEditProductsTabBar();
+
+  const createProductSheetRef = useRef<BottomSheetModal>(null);
+  const editProductSheetRef = useRef<BottomSheetModal>(null);
+  const createProductSheetScrollRef = useRef<BottomSheetScrollViewMethods>(null);
+  const editProductSheetScrollRef = useRef<BottomSheetScrollViewMethods>(null);
+
+  const scrollProductFieldIntoView = useCallback((which: 'create' | 'edit') => {
+    const ref = which === 'create' ? createProductSheetScrollRef : editProductSheetScrollRef;
+    setTimeout(() => ref.current?.scrollToEnd({ animated: true }), 260);
+    setTimeout(() => ref.current?.scrollToEnd({ animated: true }), 520);
+  }, []);
+
+  useEffect(() => {
+    if (createVisible) {
+      createProductSheetRef.current?.present();
+    } else {
+      createProductSheetRef.current?.dismiss();
+    }
+  }, [createVisible]);
+
+  useEffect(() => {
+    if (editVisible) {
+      editProductSheetRef.current?.present();
+    } else {
+      editProductSheetRef.current?.dismiss();
+    }
+  }, [editVisible]);
+
+  const productSheetChrome = useMemo(
+    () => ({
+      background: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+      } as const,
+      handle: {
+        backgroundColor: 'rgba(0,0,0,0.18)',
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        marginTop: 2,
+      } as const,
+    }),
+    [colors.surface]
+  );
+
+  const renderCreateProductBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.45}
+        pressBehavior={isCreating ? 'none' : 'close'}
+      />
+    ),
+    [isCreating]
+  );
+
+  const renderEditProductBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.45}
+        pressBehavior={isSavingEdit ? 'none' : 'close'}
+      />
+    ),
+    [isSavingEdit]
+  );
+
+  useEffect(() => {
+    if (!createVisible || createStep !== 2) return;
+    const t = setTimeout(() => createProductSheetScrollRef.current?.scrollToEnd({ animated: true }), 180);
+    return () => clearTimeout(t);
+  }, [createVisible, createStep]);
+
+  useEffect(() => {
+    if (!editVisible || editStep !== 2) return;
+    const t = setTimeout(() => editProductSheetScrollRef.current?.scrollToEnd({ animated: true }), 180);
+    return () => clearTimeout(t);
+  }, [editVisible, editStep]);
 
   useEffect(() => {
     setFloatingBarHidden(createVisible || editVisible);
@@ -135,34 +220,6 @@ export default function EditProductsScreen() {
       setCreateStep(1);
     }
   }, [createVisible]);
-
-  useEffect(() => {
-    if (!createVisible) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isCreating) return true;
-      if (createStep === 2) {
-        setCreateStep(1);
-        return true;
-      }
-      setCreateVisible(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [createVisible, isCreating, createStep]);
-
-  useEffect(() => {
-    if (!editVisible) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isSavingEdit) return true;
-      if (editStep === 2) {
-        setEditStep(1);
-        return true;
-      }
-      closeEdit();
-      return true;
-    });
-    return () => sub.remove();
-  }, [editVisible, isSavingEdit, editStep]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -387,6 +444,34 @@ export default function EditProductsScreen() {
     setIsSavingEdit(false);
   }, []);
 
+  useEffect(() => {
+    if (!createVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isCreating) return true;
+      if (createStep === 2) {
+        setCreateStep(1);
+        return true;
+      }
+      closeCreate();
+      return true;
+    });
+    return () => sub.remove();
+  }, [createVisible, isCreating, createStep, closeCreate]);
+
+  useEffect(() => {
+    if (!editVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isSavingEdit) return true;
+      if (editStep === 2) {
+        setEditStep(1);
+        return true;
+      }
+      closeEdit();
+      return true;
+    });
+    return () => sub.remove();
+  }, [editVisible, isSavingEdit, editStep, closeEdit]);
+
   const handleSaveEdit = async () => {
     if (!editingProduct) return;
     if (!editName.trim()) {
@@ -458,26 +543,7 @@ export default function EditProductsScreen() {
 
   const tileSize = (windowWidth - styles._layout.paddingH * 2 - styles._layout.gap * (numColumns - 1)) / numColumns;
 
-  /**
-   * Match edit-gallery FAB keyboard lift (step 2 only). Instant `bottom` updates: enablePanelLayoutAnimation={false} on FabButton.
-   */
-  const fabHeaderH = 90;
-  const fabPaddingV = 24;
-  const fabBottomOffset =
-    ((createVisible && createStep === 2) || (editVisible && editStep === 2)) && keyboardH > 0
-      ? keyboardH + 10
-      : insets.bottom + 88;
-  const fabMaxScrollH = Math.max(
-    200,
-    windowHeight - fabBottomOffset - fabHeaderH - fabPaddingV - 20
-  );
-
-  const fabScrollPaddingBottom =
-    ((createVisible && createStep === 2) || (editVisible && editStep === 2)) && keyboardH > 0
-      ? Math.min(160, 36 + Math.round(keyboardH * 0.22))
-      : 24;
-
-  const fabOverlayOpen = createVisible || editVisible;
+  const sheetOverlayOpen = createVisible || editVisible;
   const pageBg = colors.background;
 
   const listEmpty = useMemo(() => {
@@ -503,15 +569,14 @@ export default function EditProductsScreen() {
   const createDisplayUri = createImageLocalUri || createImageUri;
   const editDisplayUri = editImageLocalUri || editImageUri;
 
-  const storeFabInnerW = useMemo(() => getFabStep2ContentWidth(windowWidth), [windowWidth]);
-  const storeStep2Thumb = useMemo(() => getStoreStep2ThumbSize(storeFabInnerW), [storeFabInnerW]);
+  const storeStep2Thumb = useMemo(() => getStoreStep2ThumbSize(storeSheetInnerW), [storeSheetInnerW]);
 
   return (
     <View style={[styles.screen, { backgroundColor: pageBg }]}>
       <SafeAreaView
         edges={['top']}
         style={{ backgroundColor: pageBg }}
-        pointerEvents={fabOverlayOpen ? 'none' : 'auto'}
+        pointerEvents={sheetOverlayOpen ? 'none' : 'auto'}
       >
         <View style={[styles.searchRowWrap, { backgroundColor: pageBg }]}>
           <View
@@ -779,71 +844,61 @@ export default function EditProductsScreen() {
         </View>
       </SafeAreaView>
 
-      {/* ─── Create backdrop ─── */}
-      {createVisible ? (
-        <Pressable
-          style={styles.fabBackdrop}
-          onPress={closeCreate}
-          accessibilityRole="button"
-          accessibilityLabel={t('close', 'סגירה')}
-        />
-      ) : null}
-
-      {/* ─── Create FAB ─── */}
-      {createVisible ? (
-        <FabButton
-          isOpen
-          onPress={closeCreate}
-          bottom={fabBottomOffset}
-          horizontalInset={20}
-          openedSize={windowWidth * 0.92}
-          closedSize={58}
-          duration={480}
-          grabberColor={colors.primary}
-          hideCloseButton
-          enablePanelLayoutAnimation={false}
+      <BottomSheetModal
+        ref={createProductSheetRef}
+        enableDynamicSizing
+        maxDynamicContentSize={Math.round(windowHeight * 0.92)}
+        enablePanDownToClose={!isCreating}
+        backdropComponent={renderCreateProductBackdrop}
+        onDismiss={() => {
+          if (!isCreating) closeCreate();
+        }}
+        style={I18nManager.isRTL ? ({ direction: 'rtl' } as const) : ({ direction: 'ltr' } as const)}
+        handleIndicatorStyle={productSheetChrome.handle}
+        backgroundStyle={productSheetChrome.background}
+        topInset={insets.top + 8}
+        bottomInset={insets.bottom}
+        keyboardBehavior="fillParent"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        animationConfigs={{ duration: 400 }}
+      >
+        <BottomSheetScrollView
+          ref={createProductSheetScrollRef}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 4,
+            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            ...(I18nManager.isRTL ? ({ direction: 'rtl' as const } as const) : ({ direction: 'ltr' as const } as const)),
+          }}
         >
-          <View style={styles.fabSheetHeader}>
-            <View style={styles.fabSheetHeaderSpacer} />
-            <View style={styles.fabSheetHeaderBody}>
-              <Text style={[styles.fabSheetTitle, { color: colors.text }]}>
-                {createStep === 1
-                  ? t('admin.store.createStep1Title', 'תמונת מוצר')
-                  : t('admin.store.createStep2Title', 'פרטי המוצר')}
-              </Text>
-              <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
-                {createStep === 1
-                  ? t('admin.store.createStep1Tagline', 'הוסף תמונה עבור המוצר')
-                  : t('admin.store.createStep2Tagline', 'הזן שם, תיאור ומחיר')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={closeCreate}
-              disabled={isCreating}
-              hitSlop={14}
-              style={[styles.fabHeaderCloseBtn, { backgroundColor: colors.text + '0C' }]}
-              accessibilityRole="button"
-              accessibilityLabel={t('close', 'סגירה')}
-            >
-              <X size={20} color={colors.textSecondary} strokeWidth={2.25} />
-            </TouchableOpacity>
+          <View style={styles.gallerySheetHeader}>
+            <Text style={[styles.gallerySheetTitle, { color: colors.text }]}>
+              {createStep === 1
+                ? t('admin.store.createStep1Title', 'תמונת מוצר')
+                : t('admin.store.createStep2Title', 'פרטי המוצר')}
+            </Text>
+            <Text style={[styles.gallerySheetSubtitle, { color: colors.textSecondary }]}>
+              {createStep === 1
+                ? t('admin.store.createStep1Tagline', 'הוסף תמונה עבור המוצר')
+                : t('admin.store.createStep2Tagline', 'הזן שם, תיאור ומחיר')}
+            </Text>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            style={{ maxHeight: fabMaxScrollH }}
-            contentContainerStyle={{ paddingBottom: fabScrollPaddingBottom }}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          >
-            {createStep === 1 ? (
-              <>
+          {createStep === 1 ? (
+            <>
+              <View style={styles.galleryMediaPickRow}>
                 <TouchableOpacity
                   onPress={handlePickCreateImage}
                   style={[
-                    styles.pickCard,
+                    styles.galleryMediaPickTile,
                     {
+                      width: productPickTileSize,
+                      height: productPickTileSize,
                       borderColor: colors.primary + '55',
                       backgroundColor: colors.primary + '0C',
                       opacity: isCreating || isPickingImage ? 0.45 : 1,
@@ -851,225 +906,287 @@ export default function EditProductsScreen() {
                   ]}
                   activeOpacity={0.88}
                   disabled={isCreating || isPickingImage}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('admin.store.selectImage', 'בחר תמונה')}. ${t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}`}
                 >
-                  <View style={styles.pickTextCol}>
-                    <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
-                      {t('admin.store.selectImage', 'בחר תמונה')}
-                    </Text>
-                    <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}
-                    </Text>
+                  {createDisplayUri ? (
+                    <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.countBadgeText}>1</Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.primary + '24' }]}>
+                    <ImagePlus
+                      size={Math.min(28, Math.max(22, Math.round(productPickTileSize * 0.17)))}
+                      color={colors.primary}
+                      strokeWidth={2}
+                    />
                   </View>
-                  <View style={styles.pickCardTrailing}>
-                    {createDisplayUri ? (
-                      <View style={styles.pickThumbPreview}>
-                        <ExpoImage source={{ uri: createDisplayUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="none" />
-                      </View>
-                    ) : (
-                      <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
-                        <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
-                      </View>
-                    )}
-                  </View>
+                  <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                    {t('admin.store.selectImage', 'בחר תמונה')}
+                  </Text>
+                  <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}
+                  </Text>
                 </TouchableOpacity>
+              </View>
 
+              {createDisplayUri ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    alignItems: 'flex-start',
+                    paddingVertical: 12,
+                    width: '100%',
+                    gap: storeStep2Thumb.gap,
+                  }}
+                >
+                  {(() => {
+                    const s = storeStep2Thumb.thumbSize;
+                    const r = Math.min(16, Math.round(s * 0.12));
+                    const xSize = Math.min(30, Math.max(22, Math.round(s * 0.28)));
+                    return (
+                      <View
+                        style={{
+                          width: s,
+                          height: s,
+                          borderRadius: r,
+                          overflow: 'hidden',
+                          backgroundColor: colors.surface,
+                          borderWidth: StyleSheet.hairlineWidth * 2,
+                          borderColor: colors.border,
+                          position: 'relative',
+                        }}
+                      >
+                        <ExpoImage
+                          source={{ uri: createDisplayUri }}
+                          style={styles.previewImg}
+                          contentFit="cover"
+                          cachePolicy="none"
+                          transition={120}
+                        />
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (!isCreating) {
+                              setCreateImageLocalUri(null);
+                              setCreateImageUri(null);
+                            }
+                          }}
+                          style={[
+                            styles.previewX,
+                            {
+                              backgroundColor: colors.error,
+                              top: Math.max(4, Math.round(s * 0.05)),
+                              end: Math.max(4, Math.round(s * 0.05)),
+                              width: xSize,
+                              height: xSize,
+                              borderRadius: xSize / 2,
+                            },
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          disabled={isCreating}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('remove', 'הסרה')}
+                        >
+                          <Ionicons name="close" size={Math.min(16, Math.round(xSize * 0.5))} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => setCreateStep(2)}
+                style={[styles.fabPrimaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('next', 'המשך')}
+              >
+                <Text style={styles.primaryBtnText}>{t('next', 'המשך')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {createDisplayUri ? (
+                <View style={styles.step2ImageOuter}>
+                  <Pressable
+                    onPress={() => {
+                      if (!isCreating) setCreateStep(1);
+                    }}
+                    disabled={isCreating}
+                    style={({ pressed }) => [
+                      styles.step2ImageFrame,
+                      {
+                        width: storeStep2Thumb.thumbSize,
+                        height: storeStep2Thumb.thumbSize,
+                        borderRadius: Math.min(16, Math.round(storeStep2Thumb.thumbSize * 0.12)),
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                        opacity: pressed ? 0.92 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('admin.store.changeImage', 'החלף תמונה')}
+                  >
+                    <ExpoImage
+                      source={{ uri: createDisplayUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                      cachePolicy="none"
+                      transition={120}
+                    />
+                    <View pointerEvents="none" style={styles.step2ChangeChipWrap}>
+                      <View style={styles.step2ChangeChip}>
+                        <Text style={styles.step2ChangeChipText}>{t('admin.store.changeImage', 'החלף תמונה')}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22' }]}>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, { color: colors.text }]}
+                  placeholder={t('admin.store.namePlaceholder', 'שם המוצר')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={createName}
+                  onChangeText={setCreateName}
+                  editable={!isCreating}
+                  returnKeyType="next"
+                  maxLength={120}
+                  onFocus={() => scrollProductFieldIntoView('create')}
+                />
+              </View>
+
+              <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8 }]}>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, styles.createFieldInputMultiline, { color: colors.text }]}
+                  placeholder={t('admin.store.descriptionPlaceholder', 'תיאור (אופציונלי)')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={createDescription}
+                  onChangeText={setCreateDescription}
+                  editable={!isCreating}
+                  returnKeyType="next"
+                  multiline
+                  scrollEnabled={false}
+                  maxLength={300}
+                  onFocus={() => scrollProductFieldIntoView('create')}
+                  {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const, includeFontPadding: false } : {})}
+                />
+              </View>
+
+              <View
+                style={[
+                  styles.createFieldWrap,
+                  { borderBottomColor: colors.text + '22', marginTop: 8, flexDirection: 'row', alignItems: 'center' },
+                ]}
+              >
+                <Text style={[styles.currencySymbol, { color: colors.text }]}>₪</Text>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, { color: colors.text, flex: 1 }]}
+                  placeholder={t('admin.store.pricePlaceholder', 'מחיר')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={createPrice}
+                  onChangeText={setCreatePrice}
+                  editable={!isCreating}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                  maxLength={12}
+                  onFocus={() => scrollProductFieldIntoView('create')}
+                />
+              </View>
+
+              <View style={styles.createFooterRow}>
                 <TouchableOpacity
-                  onPress={() => setCreateStep(2)}
+                  onPress={handleCreate}
                   style={[
                     styles.fabPrimaryBtn,
-                    {
-                      backgroundColor: colors.primary,
-                      marginTop: 8,
-                    },
+                    styles.createPublishFlex,
+                    { backgroundColor: colors.primary, opacity: isCreating ? 0.85 : 1 },
                   ]}
+                  disabled={isCreating}
                   accessibilityRole="button"
-                  accessibilityLabel={t('next', 'המשך')}
+                  accessibilityLabel={t('admin.store.publish', 'פרסום')}
                 >
-                  <Text style={styles.primaryBtnText}>{t('next', 'המשך')}</Text>
+                  {isCreating ? (
+                    <View style={styles.rowCenter}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.store.saving', 'שומר...')}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.primaryBtnText}>{t('admin.store.publish', 'פרסום')}</Text>
+                  )}
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                {createDisplayUri ? (
-                  <View style={styles.step2ImageOuter}>
-                    <Pressable
-                      onPress={() => {
-                        if (!isCreating) {
-                          setCreateImageLocalUri(null);
-                          setCreateImageUri(null);
-                          setCreateStep(1);
-                        }
-                      }}
-                      disabled={isCreating}
-                      style={({ pressed }) => [
-                        styles.step2ImageFrame,
-                        {
-                          width: storeStep2Thumb.thumbSize,
-                          height: storeStep2Thumb.thumbSize,
-                          borderRadius: Math.min(16, Math.round(storeStep2Thumb.thumbSize * 0.12)),
-                          borderColor: colors.border,
-                          backgroundColor: colors.surface,
-                          opacity: pressed ? 0.92 : 1,
-                        },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.store.changeImage', 'החלף תמונה')}
-                    >
-                      <ExpoImage source={{ uri: createDisplayUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="none" transition={120} />
-                      <View pointerEvents="none" style={styles.step2ChangeChipWrap}>
-                        <View style={styles.step2ChangeChip}>
-                          <Text style={styles.step2ChangeChipText}>{t('admin.store.changeImage', 'החלף תמונה')}</Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  </View>
-                ) : null}
+                <TouchableOpacity
+                  onPress={() => setCreateStep(1)}
+                  style={[styles.createBackBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  disabled={isCreating}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.createBackBtnText, { color: colors.text }]}>{t('back', 'חזרה')}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22' }]}>
-                  <TextInput
-                    style={[styles.createFieldInput, { color: colors.text }]}
-                    placeholder={t('admin.store.namePlaceholder', 'שם המוצר')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={createName}
-                    onChangeText={setCreateName}
-                    editable={!isCreating}
-                    returnKeyType="next"
-                    maxLength={120}
-                  />
-                </View>
-
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8 }]}>
-                  <TextInput
-                    style={[styles.createFieldInput, styles.createFieldInputMultiline, { color: colors.text }]}
-                    placeholder={t('admin.store.descriptionPlaceholder', 'תיאור (אופציונלי)')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={createDescription}
-                    onChangeText={setCreateDescription}
-                    editable={!isCreating}
-                    returnKeyType="next"
-                    multiline
-                    scrollEnabled={false}
-                    maxLength={300}
-                    {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const, includeFontPadding: false } : {})}
-                  />
-                </View>
-
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8, flexDirection: 'row', alignItems: 'center' }]}>
-                  <Text style={[styles.currencySymbol, { color: colors.text }]}>₪</Text>
-                  <TextInput
-                    style={[styles.createFieldInput, { color: colors.text, flex: 1 }]}
-                    placeholder={t('admin.store.pricePlaceholder', 'מחיר')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={createPrice}
-                    onChangeText={setCreatePrice}
-                    editable={!isCreating}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                    maxLength={12}
-                  />
-                </View>
-
-                <View style={styles.createFooterRow}>
-                  <TouchableOpacity
-                    onPress={handleCreate}
-                    style={[
-                      styles.fabPrimaryBtn,
-                      styles.createPublishFlex,
-                      { backgroundColor: colors.primary, opacity: isCreating ? 0.85 : 1 },
-                    ]}
-                    disabled={isCreating}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('admin.store.publish', 'פרסום')}
-                  >
-                    {isCreating ? (
-                      <View style={styles.rowCenter}>
-                        <ActivityIndicator color="#fff" size="small" />
-                        <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.store.saving', 'שומר...')}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.primaryBtnText}>{t('admin.store.publish', 'פרסום')}</Text>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setCreateStep(1)}
-                    style={[styles.createBackBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                    disabled={isCreating}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[styles.createBackBtnText, { color: colors.text }]}>{t('back', 'חזרה')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </ScrollView>
-        </FabButton>
-      ) : null}
-
-      {/* ─── Edit backdrop ─── */}
-      {editVisible ? (
-        <Pressable
-          style={styles.fabBackdrop}
-          onPress={() => { if (!isSavingEdit) closeEdit(); }}
-          accessibilityRole="button"
-          accessibilityLabel={t('close', 'סגירה')}
-        />
-      ) : null}
-
-      {/* ─── Edit FAB ─── */}
-      {editVisible ? (
-        <FabButton
-          isOpen
-          onPress={() => { if (!isSavingEdit) closeEdit(); }}
-          bottom={fabBottomOffset}
-          horizontalInset={20}
-          openedSize={windowWidth * 0.92}
-          closedSize={58}
-          duration={480}
-          grabberColor={colors.primary}
-          hideCloseButton
-          enablePanelLayoutAnimation={false}
+      <BottomSheetModal
+        ref={editProductSheetRef}
+        enableDynamicSizing
+        maxDynamicContentSize={Math.round(windowHeight * 0.92)}
+        enablePanDownToClose={!isSavingEdit}
+        backdropComponent={renderEditProductBackdrop}
+        onDismiss={() => {
+          if (!isSavingEdit) closeEdit();
+        }}
+        style={I18nManager.isRTL ? ({ direction: 'rtl' } as const) : ({ direction: 'ltr' } as const)}
+        handleIndicatorStyle={productSheetChrome.handle}
+        backgroundStyle={productSheetChrome.background}
+        topInset={insets.top + 8}
+        bottomInset={insets.bottom}
+        keyboardBehavior="fillParent"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        animationConfigs={{ duration: 400 }}
+      >
+        <BottomSheetScrollView
+          ref={editProductSheetScrollRef}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 4,
+            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            ...(I18nManager.isRTL ? ({ direction: 'rtl' as const } as const) : ({ direction: 'ltr' as const } as const)),
+          }}
         >
-          <View style={styles.fabSheetHeader}>
-            <View style={styles.fabSheetHeaderSpacer} />
-            <View style={styles.fabSheetHeaderBody}>
-              <Text style={[styles.fabSheetTitle, { color: colors.text }]}>
-                {editStep === 1
-                  ? t('admin.store.editStep1Title', 'תמונת מוצר')
-                  : t('admin.store.editStep2Title', 'עריכת פרטים')}
-              </Text>
-              <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
-                {editStep === 1
-                  ? t('admin.store.editStep1Tagline', 'לחץ לשינוי תמונת המוצר')
-                  : t('admin.store.editStep2Tagline', 'עדכן שם, תיאור ומחיר')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => { if (!isSavingEdit) closeEdit(); }}
-              disabled={isSavingEdit}
-              hitSlop={14}
-              style={[styles.fabHeaderCloseBtn, { backgroundColor: colors.text + '0C' }]}
-              accessibilityRole="button"
-              accessibilityLabel={t('close', 'סגירה')}
-            >
-              <X size={20} color={colors.textSecondary} strokeWidth={2.25} />
-            </TouchableOpacity>
+          <View style={styles.gallerySheetHeader}>
+            <Text style={[styles.gallerySheetTitle, { color: colors.text }]}>
+              {editStep === 1
+                ? t('admin.store.editStep1Title', 'תמונת מוצר')
+                : t('admin.store.editStep2Title', 'עריכת פרטים')}
+            </Text>
+            <Text style={[styles.gallerySheetSubtitle, { color: colors.textSecondary }]}>
+              {editStep === 1
+                ? t('admin.store.editStep1Tagline', 'לחץ לשינוי תמונת המוצר')
+                : t('admin.store.editStep2Tagline', 'עדכן שם, תיאור ומחיר')}
+            </Text>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled
-            style={{ maxHeight: fabMaxScrollH }}
-            contentContainerStyle={{ paddingBottom: fabScrollPaddingBottom }}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          >
-            {editStep === 1 ? (
-              <>
+          {editStep === 1 ? (
+            <>
+              <View style={styles.galleryMediaPickRow}>
                 <TouchableOpacity
                   onPress={handlePickEditImage}
                   style={[
-                    styles.pickCard,
+                    styles.galleryMediaPickTile,
                     {
+                      width: productPickTileSize,
+                      height: productPickTileSize,
                       borderColor: colors.primary + '55',
                       backgroundColor: colors.primary + '0C',
                       opacity: isSavingEdit || isPickingImage ? 0.45 : 1,
@@ -1077,150 +1194,234 @@ export default function EditProductsScreen() {
                   ]}
                   activeOpacity={0.88}
                   disabled={isSavingEdit || isPickingImage}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('admin.store.selectImage', 'בחר תמונה')}. ${t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}`}
                 >
-                  <View style={styles.pickTextCol}>
-                    <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
-                      {t('admin.store.selectImage', 'בחר תמונה')}
-                    </Text>
-                    <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}
-                    </Text>
+                  {editDisplayUri ? (
+                    <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.countBadgeText}>1</Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.primary + '24' }]}>
+                    <ImagePlus
+                      size={Math.min(28, Math.max(22, Math.round(productPickTileSize * 0.17)))}
+                      color={colors.primary}
+                      strokeWidth={2}
+                    />
                   </View>
-                  <View style={styles.pickCardTrailing}>
-                    {editDisplayUri ? (
-                      <View style={styles.pickThumbPreview}>
-                        <ExpoImage source={{ uri: editDisplayUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="none" />
-                      </View>
-                    ) : (
-                      <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
-                        <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
-                      </View>
-                    )}
-                  </View>
+                  <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                    {t('admin.store.selectImage', 'בחר תמונה')}
+                  </Text>
+                  <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {t('admin.store.imageHint', 'תמונה ריבועית מומלצת')}
+                  </Text>
                 </TouchableOpacity>
+              </View>
 
+              {editDisplayUri ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                    alignItems: 'flex-start',
+                    paddingVertical: 12,
+                    width: '100%',
+                    gap: storeStep2Thumb.gap,
+                  }}
+                >
+                  {(() => {
+                    const s = storeStep2Thumb.thumbSize;
+                    const r = Math.min(16, Math.round(s * 0.12));
+                    const xSize = Math.min(30, Math.max(22, Math.round(s * 0.28)));
+                    return (
+                      <View
+                        style={{
+                          width: s,
+                          height: s,
+                          borderRadius: r,
+                          overflow: 'hidden',
+                          backgroundColor: colors.surface,
+                          borderWidth: StyleSheet.hairlineWidth * 2,
+                          borderColor: colors.border,
+                          position: 'relative',
+                        }}
+                      >
+                        <ExpoImage
+                          source={{ uri: editDisplayUri }}
+                          style={styles.previewImg}
+                          contentFit="cover"
+                          cachePolicy="none"
+                          transition={120}
+                        />
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (!isSavingEdit) {
+                              setEditImageLocalUri(null);
+                              setEditImageUri(editingProduct?.image_url || null);
+                            }
+                          }}
+                          style={[
+                            styles.previewX,
+                            {
+                              backgroundColor: colors.error,
+                              top: Math.max(4, Math.round(s * 0.05)),
+                              end: Math.max(4, Math.round(s * 0.05)),
+                              width: xSize,
+                              height: xSize,
+                              borderRadius: xSize / 2,
+                            },
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          disabled={isSavingEdit}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('remove', 'הסרה')}
+                        >
+                          <Ionicons name="close" size={Math.min(16, Math.round(xSize * 0.5))} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => setEditStep(2)}
+                style={[styles.fabPrimaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+                accessibilityRole="button"
+              >
+                <Text style={styles.primaryBtnText}>{t('next', 'המשך')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {editDisplayUri ? (
+                <View style={styles.step2ImageOuter}>
+                  <Pressable
+                    onPress={() => {
+                      if (!isSavingEdit) setEditStep(1);
+                    }}
+                    disabled={isSavingEdit}
+                    style={({ pressed }) => [
+                      styles.step2ImageFrame,
+                      {
+                        width: storeStep2Thumb.thumbSize,
+                        height: storeStep2Thumb.thumbSize,
+                        borderRadius: Math.min(16, Math.round(storeStep2Thumb.thumbSize * 0.12)),
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                        opacity: pressed ? 0.92 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('admin.store.changeImage', 'החלף תמונה')}
+                  >
+                    <ExpoImage
+                      source={{ uri: editDisplayUri }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                      cachePolicy="none"
+                      transition={120}
+                    />
+                    <View pointerEvents="none" style={styles.step2ChangeChipWrap}>
+                      <View style={styles.step2ChangeChip}>
+                        <Text style={styles.step2ChangeChipText}>{t('admin.store.changeImage', 'החלף תמונה')}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22' }]}>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, { color: colors.text }]}
+                  placeholder={t('admin.store.namePlaceholder', 'שם המוצר')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={editName}
+                  onChangeText={setEditName}
+                  editable={!isSavingEdit}
+                  returnKeyType="next"
+                  maxLength={120}
+                  onFocus={() => scrollProductFieldIntoView('edit')}
+                />
+              </View>
+
+              <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8 }]}>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, styles.createFieldInputMultiline, { color: colors.text }]}
+                  placeholder={t('admin.store.descriptionPlaceholder', 'תיאור (אופציונלי)')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  editable={!isSavingEdit}
+                  returnKeyType="next"
+                  multiline
+                  scrollEnabled={false}
+                  maxLength={300}
+                  onFocus={() => scrollProductFieldIntoView('edit')}
+                  {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const, includeFontPadding: false } : {})}
+                />
+              </View>
+
+              <View
+                style={[
+                  styles.createFieldWrap,
+                  { borderBottomColor: colors.text + '22', marginTop: 8, flexDirection: 'row', alignItems: 'center' },
+                ]}
+              >
+                <Text style={[styles.currencySymbol, { color: colors.text }]}>₪</Text>
+                <BottomSheetTextInput
+                  style={[styles.createFieldInput, { color: colors.text, flex: 1 }]}
+                  placeholder={t('admin.store.pricePlaceholder', 'מחיר')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={editPrice}
+                  onChangeText={setEditPrice}
+                  editable={!isSavingEdit}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                  maxLength={12}
+                  onFocus={() => scrollProductFieldIntoView('edit')}
+                />
+              </View>
+
+              <View style={styles.createFooterRow}>
                 <TouchableOpacity
-                  onPress={() => setEditStep(2)}
-                  style={[styles.fabPrimaryBtn, { backgroundColor: colors.primary, marginTop: 8 }]}
+                  onPress={handleSaveEdit}
+                  style={[
+                    styles.fabPrimaryBtn,
+                    styles.createPublishFlex,
+                    { backgroundColor: colors.primary, opacity: isSavingEdit ? 0.85 : 1 },
+                  ]}
+                  disabled={isSavingEdit}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.primaryBtnText}>{t('next', 'המשך')}</Text>
+                  {isSavingEdit ? (
+                    <View style={styles.rowCenter}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.store.saving', 'שומר...')}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.primaryBtnText}>{t('save', 'שמירה')}</Text>
+                  )}
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                {editDisplayUri ? (
-                  <View style={styles.step2ImageOuter}>
-                    <Pressable
-                      onPress={() => { if (!isSavingEdit) setEditStep(1); }}
-                      disabled={isSavingEdit}
-                      style={({ pressed }) => [
-                        styles.step2ImageFrame,
-                        {
-                          width: storeStep2Thumb.thumbSize,
-                          height: storeStep2Thumb.thumbSize,
-                          borderRadius: Math.min(16, Math.round(storeStep2Thumb.thumbSize * 0.12)),
-                          borderColor: colors.border,
-                          backgroundColor: colors.surface,
-                          opacity: pressed ? 0.92 : 1,
-                        },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('admin.store.changeImage', 'החלף תמונה')}
-                    >
-                      <ExpoImage source={{ uri: editDisplayUri }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="none" transition={120} />
-                      <View pointerEvents="none" style={styles.step2ChangeChipWrap}>
-                        <View style={styles.step2ChangeChip}>
-                          <Text style={styles.step2ChangeChipText}>{t('admin.store.changeImage', 'החלף תמונה')}</Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  </View>
-                ) : null}
-
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22' }]}>
-                  <TextInput
-                    style={[styles.createFieldInput, { color: colors.text }]}
-                    placeholder={t('admin.store.namePlaceholder', 'שם המוצר')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={editName}
-                    onChangeText={setEditName}
-                    editable={!isSavingEdit}
-                    returnKeyType="next"
-                    maxLength={120}
-                  />
-                </View>
-
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8 }]}>
-                  <TextInput
-                    style={[styles.createFieldInput, styles.createFieldInputMultiline, { color: colors.text }]}
-                    placeholder={t('admin.store.descriptionPlaceholder', 'תיאור (אופציונלי)')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={editDescription}
-                    onChangeText={setEditDescription}
-                    editable={!isSavingEdit}
-                    returnKeyType="next"
-                    multiline
-                    scrollEnabled={false}
-                    maxLength={300}
-                    {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const, includeFontPadding: false } : {})}
-                  />
-                </View>
-
-                <View style={[styles.createFieldWrap, { borderBottomColor: colors.text + '22', marginTop: 8, flexDirection: 'row', alignItems: 'center' }]}>
-                  <Text style={[styles.currencySymbol, { color: colors.text }]}>₪</Text>
-                  <TextInput
-                    style={[styles.createFieldInput, { color: colors.text, flex: 1 }]}
-                    placeholder={t('admin.store.pricePlaceholder', 'מחיר')}
-                    placeholderTextColor={colors.textSecondary}
-                    value={editPrice}
-                    onChangeText={setEditPrice}
-                    editable={!isSavingEdit}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                    maxLength={12}
-                  />
-                </View>
-
-                <View style={styles.createFooterRow}>
-                  <TouchableOpacity
-                    onPress={handleSaveEdit}
-                    style={[
-                      styles.fabPrimaryBtn,
-                      styles.createPublishFlex,
-                      { backgroundColor: colors.primary, opacity: isSavingEdit ? 0.85 : 1 },
-                    ]}
-                    disabled={isSavingEdit}
-                    accessibilityRole="button"
-                  >
-                    {isSavingEdit ? (
-                      <View style={styles.rowCenter}>
-                        <ActivityIndicator color="#fff" size="small" />
-                        <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.store.saving', 'שומר...')}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.primaryBtnText}>{t('save', 'שמירה')}</Text>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setEditStep(1)}
-                    style={[styles.createBackBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
-                    disabled={isSavingEdit}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[styles.createBackBtnText, { color: colors.text }]}>{t('back', 'חזרה')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </ScrollView>
-        </FabButton>
-      ) : null}
+                <TouchableOpacity
+                  onPress={() => setEditStep(1)}
+                  style={[styles.createBackBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  disabled={isSavingEdit}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.createBackBtnText, { color: colors.text }]}>{t('back', 'חזרה')}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
     </View>
   );
 }
 
-function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: number) {
+function createStyles(colors: ThemeColors, windowWidth: number) {
   const paddingH = 20;
   const gap = 10;
   const layout = { paddingH, gap };
@@ -1508,99 +1709,104 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
       paddingHorizontal: 4,
       justifyContent: 'center' as const,
     },
-    fabBackdrop: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.38)',
-      zIndex: 10000,
-      ...Platform.select({ ios: {}, android: { elevation: 12 } }),
-    },
-    fabSheetHeader: {
-      width: '100%' as const,
-      flexDirection: 'row' as const,
+    gallerySheetHeader: {
       alignItems: 'center' as const,
-      direction: 'ltr' as const,
-      gap: 8,
+      paddingBottom: 14,
       marginBottom: 4,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
-      paddingBottom: 12,
     },
-    fabSheetHeaderSpacer: { flex: 1, minWidth: 0 },
-    fabHeaderCloseBtn: {
-      width: 40,
-      height: 40,
+    gallerySheetTitle: {
+      fontSize: 17,
+      fontWeight: '700' as const,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
+      letterSpacing: -0.25,
+    },
+    gallerySheetSubtitle: {
+      marginTop: 6,
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '500' as const,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
+    },
+    galleryMediaPickRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      gap: 12,
+      width: '100%' as const,
+      marginTop: 8,
+    },
+    galleryMediaPickTile: {
+      position: 'relative' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      paddingVertical: 8,
+      paddingHorizontal: 6,
+      flexShrink: 0,
+      overflow: 'hidden' as const,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+        },
+        android: { elevation: 1 },
+      }),
+    },
+    galleryMediaPickBadgeAbs: {
+      position: 'absolute' as const,
+      top: 8,
+      end: 8,
+      zIndex: 2,
+      minWidth: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: 7,
+    },
+    galleryMediaPickTileIconWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: 16,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginBottom: 2,
+    },
+    galleryMediaPickTileTitle: {
+      fontSize: 13,
+      fontWeight: '700' as const,
+      textAlign: 'center' as const,
+      width: '100%' as const,
+      paddingHorizontal: 2,
+    },
+    galleryMediaPickTileSub: {
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 4,
+      textAlign: 'center' as const,
+      width: '100%' as const,
+      paddingHorizontal: 2,
+    },
+    countBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' as const },
+    previewImg: { width: '100%' as const, height: '100%' as const },
+    previewX: {
+      position: 'absolute' as const,
+      top: 5,
+      end: 5,
+      width: 24,
+      height: 24,
       borderRadius: 12,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      flexShrink: 0,
-    },
-    fabSheetHeaderBody: {
-      alignItems: 'flex-end' as const,
-      flexShrink: 1,
-      minWidth: 0,
-      maxWidth: '100%' as const,
-    },
-    fabSheetTitle: {
-      fontSize: 21,
-      fontWeight: '700' as const,
-      width: '100%' as const,
-      textAlign: 'right' as const,
-      letterSpacing: -0.35,
-      lineHeight: 28,
-    },
-    fabSheetSubtitle: {
-      fontSize: 13,
-      marginTop: 4,
-      lineHeight: 19.5,
-      width: '100%' as const,
-      textAlign: 'right' as const,
-      opacity: 0.92,
-    },
-    pickCard: {
-      borderRadius: 14,
-      borderWidth: 1.5,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      justifyContent: 'space-between' as const,
-      direction: 'ltr' as const,
-      gap: 10,
-      marginTop: 12,
-    },
-    pickTextCol: {
-      flex: 1,
-      alignItems: 'flex-end' as const,
-    },
-    fabTextRight: {
-      textAlign: 'right' as const,
-      writingDirection: 'rtl' as const,
-    },
-    pickTitle: {
-      fontSize: 15,
-      fontWeight: '600' as const,
-    },
-    pickSub: {
-      fontSize: 12,
-      marginTop: 2,
-      opacity: 0.82,
-    },
-    pickCardTrailing: {
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    },
-    pickIconCircle: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    },
-    pickThumbPreview: {
-      width: 52,
-      height: 52,
-      borderRadius: 10,
-      overflow: 'hidden' as const,
+      zIndex: 2,
+      ...Platform.select({ android: { elevation: 3 } }),
     },
     step2ImageOuter: {
       width: '100%' as const,

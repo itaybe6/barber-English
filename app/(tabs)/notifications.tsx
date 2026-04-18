@@ -4,12 +4,18 @@ import {
   Text,
   View,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   RefreshControl,
   StatusBar,
   FlatList,
   I18nManager,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,6 +33,8 @@ import {
   Phone,
   Tag,
   Timer,
+  XCircle,
+  Info,
 } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import {
@@ -39,7 +47,6 @@ import type { TFunction } from 'i18next';
 /** Only load notifications from the last N days on this screen (smaller queries). */
 const NOTIFICATIONS_FETCH_MAX_AGE_DAYS = 2;
 
-/** First valid YYYY-MM-DD in title/content (e.g. admin "new appointment" body). */
 /** [[PERIOD:YYYY-MM]] from finance_monthly_review notifications */
 function extractFinanceReviewPeriod(n: Pick<Notification, 'content'>): string | null {
   const m = (n.content || '').match(/\[\[PERIOD:(\d{4}-\d{2})\]\]/);
@@ -82,47 +89,31 @@ interface TypeConfig {
 function getTypeConfig(kind: NotifKind): TypeConfig {
   switch (kind) {
     case 'new':
-      return {
-        color: '#007AFF',
-        bg: '#EBF4FF',
-        tint: '#F0F7FF',
-      };
+      return { color: '#007AFF', bg: '#EBF4FF', tint: '#F0F8FF' };
     case 'cancel':
-      return {
-        color: '#FF3B30',
-        bg: '#FFEEED',
-        tint: '#FFF5F5',
-      };
+      return { color: '#FF3B30', bg: '#FFEEED', tint: '#FFF5F5' };
     case 'reminder':
-      return {
-        color: '#FF9500',
-        bg: '#FFF3E0',
-        tint: '#FFFAF0',
-      };
+      return { color: '#FF9500', bg: '#FFF3E0', tint: '#FFFAF0' };
     case 'waitlist':
-      return {
-        color: '#34C759',
-        bg: '#E8FAF0',
-        tint: '#F3FDF6',
-      };
+      return { color: '#34C759', bg: '#E8FAF0', tint: '#F3FDF6' };
     case 'system':
-      return {
-        color: '#8E8E93',
-        bg: '#F2F2F7',
-        tint: '#F9F9FB',
-      };
+      return { color: '#8E8E93', bg: '#F2F2F7', tint: '#F9F9FB' };
     case 'finance':
-      return {
-        color: '#16A34A',
-        bg: '#DCFCE7',
-        tint: '#F0FDF4',
-      };
+      return { color: '#16A34A', bg: '#DCFCE7', tint: '#F0FDF4' };
     default:
-      return {
-        color: '#5E5CE6',
-        bg: '#EEEEFF',
-        tint: '#F5F5FF',
-      };
+      return { color: '#5E5CE6', bg: '#EEEEFF', tint: '#F5F5FF' };
+  }
+}
+
+function getTypeIcon(kind: NotifKind, color: string, size: number = 20) {
+  switch (kind) {
+    case 'new':       return <Calendar size={size} color={color} strokeWidth={1.8} />;
+    case 'cancel':    return <XCircle size={size} color={color} strokeWidth={1.8} />;
+    case 'reminder':  return <Clock size={size} color={color} strokeWidth={1.8} />;
+    case 'waitlist':  return <Timer size={size} color={color} strokeWidth={1.8} />;
+    case 'system':    return <Info size={size} color={color} strokeWidth={1.8} />;
+    case 'finance':   return <Receipt size={size} color={color} strokeWidth={1.8} />;
+    default:          return <Bell size={size} color={color} strokeWidth={1.8} />;
   }
 }
 
@@ -150,6 +141,7 @@ interface NotificationListRowProps {
   pressable: boolean;
   onPress: (n: Notification) => void;
   isAdminReminder: (n: Notification) => boolean;
+  index?: number;
 }
 
 const NotificationListRow = memo(function NotificationListRow({
@@ -158,6 +150,7 @@ const NotificationListRow = memo(function NotificationListRow({
   pressable,
   onPress,
   isAdminReminder,
+  index = 0,
 }: NotificationListRowProps) {
   const { t, i18n } = useTranslation();
   const parsed: ParsedNotification = useMemo(
@@ -172,139 +165,159 @@ const NotificationListRow = memo(function NotificationListRow({
     i18n.language
   );
   const rtlText = rtlTextStyle();
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = useCallback(() => {
+    if (!pressable) return;
+    scale.value = withSpring(0.97, { damping: 15, stiffness: 250 });
+  }, [pressable, scale]);
+
+  const handlePressOut = useCallback(() => {
+    if (!pressable) return;
+    scale.value = withSpring(1, { damping: 15, stiffness: 250 });
+  }, [pressable, scale]);
 
   const showChips =
     Boolean(
-      parsed.name ||
-        parsed.phone ||
-        parsed.service ||
-        parsed.datePretty ||
-        parsed.timePretty ||
-        parsed.periodLabel
-    ) ||
-    isAdminReminder(notification) ||
-    kind === 'finance';
-
-  const cardBody = (
-    <View style={styles.cardInner}>
-      <View style={[styles.accentBar, { backgroundColor: cfg.color }]} />
-      <View style={styles.cardContent}>
-        <View style={styles.cardTopRow}>
-          <Text style={[styles.cardTitle, rtlText]} numberOfLines={2}>
-            {notification.title}
-          </Text>
-          <View style={styles.cardMeta}>
-            {isUnread ? <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} /> : null}
-            {timeAgo ? <Text style={[styles.cardTime, rtlText]}>{timeAgo}</Text> : null}
-          </View>
-        </View>
-
-        {parsed.primary ? (
-          <Text style={[styles.cardBody, rtlText]} numberOfLines={6}>
-            {parsed.primary}
-          </Text>
-        ) : null}
-
-        {showChips ? (
-          <View style={styles.chipsRow}>
-            {kind === 'finance' ? (
-              <View style={[styles.chip, { backgroundColor: '#DCFCE7' }]}>
-                <Receipt size={11} color="#16A34A" />
-                <Text style={[styles.chipText, { color: '#16A34A' }, rtlText]}>
-                  {t('notifications.chip.monthClosure', 'סגירת חודש')}
-                </Text>
-              </View>
-            ) : null}
-            {parsed.name ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <User size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.name}</Text>
-              </View>
-            ) : null}
-            {parsed.phone ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Phone size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.phone}</Text>
-              </View>
-            ) : null}
-            {parsed.service ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Tag size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.service}</Text>
-              </View>
-            ) : null}
-            {parsed.datePretty ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Calendar size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.datePretty}</Text>
-              </View>
-            ) : null}
-            {parsed.timePretty ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Clock size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.timePretty}</Text>
-              </View>
-            ) : null}
-            {parsed.periodLabel ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Timer size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.periodLabel}</Text>
-              </View>
-            ) : null}
-            {isAdminReminder(notification) ? (
-              <View style={[styles.chip, { backgroundColor: '#FFF3E0' }]}>
-                <Clock size={11} color="#FF9500" />
-                <Text style={[styles.chipText, { color: '#FF9500' }, rtlText]}>
-                  {t('notifications.chip.reminder', 'תזכורת')}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {(notification as { push_sent?: boolean }).push_sent && (
-          <View style={styles.pushBadge}>
-            <CheckCircle size={12} color="#34C759" />
-            <Text style={[styles.pushBadgeText, rtlText]}>
-              {t('notifications.pushSent', 'נשלח בהצלחה')}
-            </Text>
-          </View>
-        )}
-      </View>
-    </View>
-  );
-
-  const cardStyle = [
-    styles.card,
-    isUnread && { backgroundColor: cfg.tint },
-  ];
+      parsed.name || parsed.phone || parsed.service ||
+      parsed.datePretty || parsed.timePretty || parsed.periodLabel
+    ) || isAdminReminder(notification) || kind === 'finance';
 
   return (
-    <View style={styles.rowWrap}>
-      {pressable ? (
-        <TouchableOpacity style={cardStyle} onPress={() => onPress(notification)} activeOpacity={0.75}>
-          {cardBody}
-        </TouchableOpacity>
-      ) : (
-        <View style={cardStyle}>{cardBody}</View>
-      )}
-    </View>
+    <Animated.View
+      style={[styles.rowWrap, animatedStyle]}
+      entering={FadeInDown.delay(Math.min(index * 55, 280)).duration(380).springify()}
+    >
+      <Pressable
+        onPress={pressable ? () => onPress(notification) : undefined}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[styles.card, isUnread && { backgroundColor: cfg.tint }]}
+      >
+        <View style={styles.cardInner}>
+          {/* Icon bubble — first in JSX → appears on RIGHT side in RTL */}
+          <View style={[styles.iconBubble, { backgroundColor: cfg.bg }]}>
+            {getTypeIcon(kind, cfg.color, 20)}
+            {isUnread && (
+              <View style={[styles.unreadPip, { backgroundColor: cfg.color }]} />
+            )}
+          </View>
+
+          <View style={styles.cardContent}>
+            <View style={styles.cardTopRow}>
+              <Text style={[styles.cardTitle, rtlText]} numberOfLines={2}>
+                {notification.title}
+              </Text>
+              {timeAgo ? (
+                <Text style={[styles.cardTime, rtlText]}>{timeAgo}</Text>
+              ) : null}
+            </View>
+
+            {parsed.primary ? (
+              <Text style={[styles.cardBody, rtlText]} numberOfLines={6}>
+                {parsed.primary}
+              </Text>
+            ) : null}
+
+            {showChips ? (
+              <View style={styles.chipsRow}>
+                {kind === 'finance' ? (
+                  <View style={[styles.chip, { backgroundColor: '#DCFCE7' }]}>
+                    <Receipt size={11} color="#16A34A" />
+                    <Text style={[styles.chipText, { color: '#16A34A' }, rtlText]}>
+                      {t('notifications.chip.monthClosure', 'סגירת חודש')}
+                    </Text>
+                  </View>
+                ) : null}
+                {parsed.name ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <User size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.name}</Text>
+                  </View>
+                ) : null}
+                {parsed.phone ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <Phone size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.phone}</Text>
+                  </View>
+                ) : null}
+                {parsed.service ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <Tag size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.service}</Text>
+                  </View>
+                ) : null}
+                {parsed.datePretty ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <Calendar size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.datePretty}</Text>
+                  </View>
+                ) : null}
+                {parsed.timePretty ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <Clock size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.timePretty}</Text>
+                  </View>
+                ) : null}
+                {parsed.periodLabel ? (
+                  <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                    <Timer size={11} color={cfg.color} />
+                    <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.periodLabel}</Text>
+                  </View>
+                ) : null}
+                {isAdminReminder(notification) ? (
+                  <View style={[styles.chip, { backgroundColor: '#FFF3E0' }]}>
+                    <Clock size={11} color="#FF9500" />
+                    <Text style={[styles.chipText, { color: '#FF9500' }, rtlText]}>
+                      {t('notifications.chip.reminder', 'תזכורת')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {(notification as { push_sent?: boolean }).push_sent && (
+              <View style={styles.pushBadge}>
+                <CheckCircle size={12} color="#34C759" />
+                <Text style={[styles.pushBadgeText, rtlText]}>
+                  {t('notifications.pushSent', 'נשלח בהצלחה')}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 });
 
-const SkeletonCard = memo(function SkeletonCard() {
+const SkeletonCard = memo(function SkeletonCard({ index = 0 }: { index?: number }) {
   const rtl = I18nManager.isRTL;
   return (
-    <View style={[styles.card, styles.skeletonCard]}>
-      <View style={styles.cardInner}>
-        <View style={[styles.accentBar, { backgroundColor: '#E5E5EA' }]} />
-        <View style={styles.cardContent}>
-          <View style={[styles.skeletonLine, rtl && styles.skeletonLineRtl]} />
-          <View style={[styles.skeletonLine, { width: '60%', marginTop: 8 }, rtl && styles.skeletonLineRtl]} />
-          <View style={[styles.skeletonLine, { width: '40%', marginTop: 6, height: 10 }, rtl && styles.skeletonLineRtl]} />
+    <Animated.View
+      style={styles.rowWrap}
+      entering={FadeInDown.delay(index * 80).duration(300)}
+    >
+      <View style={[styles.card, styles.skeletonCard]}>
+        <View style={styles.cardInner}>
+          {/* Bubble placeholder */}
+          <View style={[styles.iconBubble, { backgroundColor: '#EBEBF0' }]} />
+          <View style={styles.cardContent}>
+            <View style={[styles.skeletonLine, { width: '72%' }, rtl && styles.skeletonLineRtl]} />
+            <View style={[styles.skeletonLine, { width: '52%', marginTop: 8 }, rtl && styles.skeletonLineRtl]} />
+            <View style={[
+              styles.skeletonLine,
+              { width: '38%', marginTop: 10, height: 24, borderRadius: 12 },
+              rtl && styles.skeletonLineRtl,
+            ]} />
+          </View>
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
@@ -439,7 +452,8 @@ export default function AdminNotificationsScreen() {
   const isAdminReminder = (n: Notification): boolean => {
     if (!n) return false;
     if (n.type === 'admin_reminder') return true;
-    return n.type === 'system' && typeof n.content === 'string' && /\bReminder:\b/i.test(n.content);
+    if (n.type !== 'system' || typeof n.content !== 'string') return false;
+    return /\bReminder:\b/i.test(n.content) || /^\s*תזכורת:/u.test(n.content.trim());
   };
 
   const getNotifKind = (n: Notification): NotifKind => {
@@ -510,18 +524,22 @@ export default function AdminNotificationsScreen() {
   });
 
   const FILTERS = [
-    { key: 'all' as const, label: t('notifications.filter.all', 'הכל') },
-    { key: 'new' as const, label: t('notifications.filter.new', 'תורים חדשים') },
-    { key: 'cancel' as const, label: t('notifications.filter.cancel', 'ביטולים') },
-    { key: 'waitlist' as const, label: t('notifications.filter.waitlist', 'המתנה') },
+    { key: 'all' as const,      label: t('notifications.filter.all', 'הכל'),           Icon: Bell },
+    { key: 'new' as const,      label: t('notifications.filter.new', 'תורים חדשים'),   Icon: Calendar },
+    { key: 'cancel' as const,   label: t('notifications.filter.cancel', 'ביטולים'),    Icon: XCircle },
+    { key: 'waitlist' as const, label: t('notifications.filter.waitlist', 'המתנה'),    Icon: Timer },
   ];
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F8FC" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F5FB" />
 
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <View style={styles.headerCenter}>
+        <View style={styles.headerRow}>
+          <View style={[styles.headerIconWrap, { backgroundColor: colors.primary + '18' }]}>
+            <Bell size={20} color={colors.primary} strokeWidth={1.8} />
+          </View>
           <Text
             style={[
               styles.headerTitle,
@@ -531,13 +549,19 @@ export default function AdminNotificationsScreen() {
             {t('notifications.title', 'התראות')}
           </Text>
           {unreadCount > 0 && (
-            <View style={styles.headerBadge}>
+            <View style={[styles.headerBadge, { backgroundColor: colors.primary }]}>
               <Text style={styles.headerBadgeText}>{unreadCount}</Text>
             </View>
           )}
         </View>
+        {unreadCount > 0 && (
+          <Text style={[styles.headerSubtitle, I18nManager.isRTL && { writingDirection: 'rtl', textAlign: 'center' }]}>
+            {t('notifications.unreadSummary', '{{count}} לא נקראו', { count: unreadCount })}
+          </Text>
+        )}
       </View>
 
+      {/* ── Filter pills ── */}
       {isAdmin && (
         <ScrollView
           horizontal
@@ -545,51 +569,67 @@ export default function AdminNotificationsScreen() {
           style={styles.filterScroll}
           contentContainerStyle={styles.filterBar}
         >
-          {FILTERS.map(({ key, label }) => {
+          {FILTERS.map(({ key, label, Icon }) => {
             const isActive = activeFilter === key;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={key}
                 onPress={() => setActiveFilter(key)}
-                style={[styles.filterChip, isActive && { backgroundColor: colors.primary }]}
-                activeOpacity={0.8}
+                style={[
+                  styles.filterChip,
+                  isActive && { backgroundColor: colors.primary },
+                ]}
               >
+                <Icon
+                  size={13}
+                  color={isActive ? '#FFFFFF' : '#6C6C72'}
+                  strokeWidth={2}
+                />
                 <Text style={[styles.filterChipText, rtlText, isActive && { color: '#FFFFFF' }]}>
                   {label}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </ScrollView>
       )}
 
+      {/* ── List / Skeletons ── */}
       {loading ? (
         <View style={styles.listPad}>
-          {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+          {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} index={i} />)}
         </View>
       ) : (
         <FlatList
           data={filteredNotifications}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <NotificationListRow
               notification={item}
               kind={getNotifKind(item)}
               pressable={!isCancellationNotification(item)}
               onPress={handleNotificationPress}
               isAdminReminder={isAdminReminder}
+              index={index}
             />
           )}
           contentContainerStyle={[
             styles.listPad,
             { paddingBottom: bottomPadding, flexGrow: 1 },
           ]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconWrap}>
-                <Bell size={36} color="#C7C7CC" />
+              <View style={[styles.emptyIconWrap, { backgroundColor: colors.primary + '14' }]}>
+                <Bell size={40} color={colors.primary} strokeWidth={1.5} />
               </View>
               <Text style={[styles.emptyTitle, I18nManager.isRTL && { writingDirection: 'rtl' }]}>
                 {t('notifications.empty', 'אין התראות')}
@@ -608,46 +648,61 @@ export default function AdminNotificationsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F8FC',
+    backgroundColor: '#F5F5FB',
   },
+
+  /* ── Header ── */
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 14,
+    alignItems: 'center',
+    gap: 4,
   },
-  headerCenter: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#1C1C1E',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
     textAlign: 'center',
   },
   headerBadge: {
-    backgroundColor: '#FF3B30',
     borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
   },
   headerBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  headerSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+
+  /* ── Filter bar ── */
   filterScroll: {
-    maxHeight: 48,
-    marginBottom: 4,
+    maxHeight: 50,
+    marginBottom: 6,
   },
   filterBar: {
     paddingHorizontal: 16,
@@ -655,30 +710,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterChip: {
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f2f2f7',
+    backgroundColor: '#EBEBF0',
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#3C3C43',
   },
+
+  /* ── List ── */
   listPad: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
   },
   rowWrap: {
     marginBottom: 10,
   },
+
+  /* ── Notification card ── */
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: '#1C1C1E',
     shadowOpacity: 0.07,
-    shadowRadius: 14,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
@@ -686,14 +748,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     padding: 14,
-    gap: 12,
+    gap: 13,
   },
-  accentBar: {
-    width: 3.5,
-    borderRadius: 2,
-    alignSelf: 'stretch',
-    minHeight: 40,
+
+  /* Icon bubble (right side in RTL, first child in row) */
+  iconBubble: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
+  unreadPip: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+
+  /* Card content */
   cardContent: {
     flex: 1,
   },
@@ -711,22 +789,12 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     lineHeight: 20,
   },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-    paddingTop: 2,
-  },
-  unreadDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
   cardTime: {
     fontSize: 11,
     color: '#AEAEB2',
     fontWeight: '500',
+    flexShrink: 0,
+    paddingTop: 2,
   },
   cardBody: {
     fontSize: 14,
@@ -734,6 +802,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 8,
   },
+
+  /* Chips */
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -752,6 +822,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+
+  /* Push badge */
   pushBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -766,6 +838,8 @@ const styles = StyleSheet.create({
     color: '#34C759',
     fontWeight: '600',
   },
+
+  /* Skeleton */
   skeletonCard: {
     shadowOpacity: 0,
     elevation: 0,
@@ -773,12 +847,14 @@ const styles = StyleSheet.create({
   skeletonLine: {
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#EBEBEB',
+    backgroundColor: '#EBEBF0',
     width: '80%',
   },
   skeletonLineRtl: {
     alignSelf: 'flex-end',
   },
+
+  /* Empty state */
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -787,13 +863,12 @@ const styles = StyleSheet.create({
     paddingTop: 80,
   },
   emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: '#F2F2F7',
+    width: 88,
+    height: 88,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   emptyTitle: {
     fontSize: 20,
@@ -809,4 +884,3 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
-

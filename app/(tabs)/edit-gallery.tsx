@@ -15,9 +15,7 @@ import {
   ScrollView,
   useWindowDimensions,
   BackHandler,
-  Keyboard,
   I18nManager,
-  type KeyboardEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,8 +33,14 @@ import { Search, ImagePlus, LayoutGrid, X, Clapperboard, GripVertical, Info } fr
 import DraggableFlatList, { ScaleDecorator, type DragEndParams } from 'react-native-draggable-flatlist';
 import { sortDesignsByDisplayOrder } from '@/lib/api/designs';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
-import { FabButton } from '@/components/FabButton';
-import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  BottomSheetTextInput,
+  type BottomSheetBackdropProps,
+  type BottomSheetScrollViewMethods,
+} from '@gorhom/bottom-sheet';
 import { useAuthStore } from '@/stores/authStore';
 import { useGalleryCreateDraftStore } from '@/stores/galleryCreateDraftStore';
 import { useEditGalleryTabBar, useEditGalleryTabBarRegistration } from '@/contexts/EditGalleryTabBarContext';
@@ -62,13 +66,11 @@ const numColumns = 2;
 
 /** Max images per design in gallery create/edit flows. */
 const GALLERY_MAX_IMAGES = 6;
-const FAB_H_INSET = 20;
-const FAB_OPEN_PADDING_H = 18;
 
-/** Inner content width inside opened FAB (matches FabButton padding). */
-function getFabStep2ContentWidth(screenW: number) {
-  const openW = Math.min(screenW * 0.92, screenW - FAB_H_INSET * 2);
-  return openW - FAB_OPEN_PADDING_H * 2;
+/** Inner width for step-2 thumbnail grid (matches manager settings sheet horizontal padding). */
+function getGallerySheetInnerContentWidth(screenW: number) {
+  const pad = 20;
+  return Math.max(0, screenW - pad * 2);
 }
 
 interface Step2ThumbGrid {
@@ -101,22 +103,13 @@ export default function EditGalleryScreen() {
   );
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const step2ContentW = useMemo(() => getFabStep2ContentWidth(windowWidth), [windowWidth]);
-  const [keyboardH, setKeyboardH] = useState(0);
+  const step2ContentW = useMemo(() => getGallerySheetInnerContentWidth(windowWidth), [windowWidth]);
+  /** Square side for photo / video picker tiles (sheet pad 20×2, gap 12). */
+  const galleryPickTileSize = useMemo(() => {
+    const inner = Math.max(0, windowWidth - 40);
+    return Math.max(118, Math.min(176, Math.floor((inner - 12) / 2)));
+  }, [windowWidth]);
   const colors = useColors();
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
-      setKeyboardH(e.endCoordinates?.height ?? 0);
-    });
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardH(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
 
   const styles = useMemo(
     () => createStyles(colors, windowWidth, windowHeight, I18nManager.isRTL),
@@ -171,6 +164,93 @@ export default function EditGalleryScreen() {
   const [isPreparingGalleryVideo, setIsPreparingGalleryVideo] = useState(false);
   const shortVideoPickerRoleRef = useRef<'create' | 'edit'>('create');
   const [shortVideoPickerOpen, setShortVideoPickerOpen] = useState(false);
+  const createMediaSheetRef = useRef<BottomSheetModal>(null);
+  const editMediaSheetRef = useRef<BottomSheetModal>(null);
+  const createMediaSheetScrollRef = useRef<BottomSheetScrollViewMethods>(null);
+  const editMediaSheetScrollRef = useRef<BottomSheetScrollViewMethods>(null);
+
+  /**
+   * With `keyboardBehavior="fillParent"`, the sheet expands when the keyboard opens.
+   * Still nudge scroll after layout so the name field clears any thumbnails above it.
+   */
+  const scrollGalleryNameStepIntoView = useCallback((which: 'create' | 'edit') => {
+    const ref = which === 'create' ? createMediaSheetScrollRef : editMediaSheetScrollRef;
+    setTimeout(() => ref.current?.scrollToEnd({ animated: true }), 260);
+    setTimeout(() => ref.current?.scrollToEnd({ animated: true }), 520);
+  }, []);
+
+  /** Many thumbnails: ensure name row is reachable once layout is ready (no keyboard padding). */
+  useEffect(() => {
+    if (!createVisible || createStep !== 2) return;
+    const t = setTimeout(() => createMediaSheetScrollRef.current?.scrollToEnd({ animated: true }), 180);
+    return () => clearTimeout(t);
+  }, [createVisible, createStep]);
+
+  useEffect(() => {
+    if (!editVisible || editStep !== 2) return;
+    const t = setTimeout(() => editMediaSheetScrollRef.current?.scrollToEnd({ animated: true }), 180);
+    return () => clearTimeout(t);
+  }, [editVisible, editStep]);
+
+  useEffect(() => {
+    if (createVisible) {
+      createMediaSheetRef.current?.present();
+    } else {
+      createMediaSheetRef.current?.dismiss();
+    }
+  }, [createVisible]);
+
+  useEffect(() => {
+    if (editVisible) {
+      editMediaSheetRef.current?.present();
+    } else {
+      editMediaSheetRef.current?.dismiss();
+    }
+  }, [editVisible]);
+
+  const gallerySheetChrome = useMemo(
+    () => ({
+      background: {
+        backgroundColor: colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+      } as const,
+      handle: {
+        backgroundColor: 'rgba(0,0,0,0.18)',
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        marginTop: 2,
+      } as const,
+    }),
+    [colors.surface]
+  );
+
+  const renderCreateGalleryBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.45}
+        pressBehavior={isCreating ? 'none' : 'close'}
+      />
+    ),
+    [isCreating]
+  );
+
+  const renderEditGalleryBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.45}
+        pressBehavior={isSavingEdit ? 'none' : 'close'}
+      />
+    ),
+    [isSavingEdit]
+  );
 
   useEffect(() => {
     setFloatingBarHidden(viewerVisible || createVisible || editVisible);
@@ -571,11 +651,6 @@ export default function EditGalleryScreen() {
     setIsSavingEdit(false);
   }, []);
 
-  const toggleEditFab = useCallback(() => {
-    if (isSavingEdit) return;
-    closeEdit();
-  }, [isSavingEdit, closeEdit]);
-
   useEffect(() => {
     if (!editVisible) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -833,23 +908,6 @@ export default function EditGalleryScreen() {
     }
   };
 
-  const toggleCreateFab = useCallback(() => {
-    if (isCreating) return;
-    setCreateVisible((open) => {
-      const next = !open;
-      if (next) {
-        setDeleteMode(false);
-        setReorderMode(false);
-        setReorderDirty(false);
-      }
-      return next;
-    });
-  }, [isCreating, setDeleteMode, setReorderMode, setReorderDirty]);
-
-  const closeCreateFab = useCallback(() => {
-    if (!isCreating) setCreateVisible(false);
-  }, [isCreating]);
-
   const openCreateFromTab = useCallback(() => {
     if (isCreating) return;
     setDeleteMode(false);
@@ -885,22 +943,6 @@ export default function EditGalleryScreen() {
       </View>
     );
   }, [colors.primary, designs.length, filtered.length, isLoading, search, styles, t]);
-
-  /**
-   * Step 2: lift the whole FAB above the keyboard (bottom = keyboard height + gap).
-   * Inside the sheet we still use KeyboardAwareScrollView, but enableAutomaticScroll is off on step 2
-   * so the HOC does not add iOS contentInset for the full keyboard (would stack on top of the lift).
-   */
-  const fabHeaderH = 90;
-  const fabPaddingV = 24;
-  const isGalleryFabNameStep =
-    (createVisible && createStep === 2) || (editVisible && editStep === 2);
-  const fabBottomOffset =
-    isGalleryFabNameStep && keyboardH > 0 ? keyboardH + 12 : insets.bottom + 88;
-  const fabMaxScrollH = Math.max(
-    200,
-    windowHeight - fabBottomOffset - fabHeaderH - fabPaddingV - 20
-  );
 
   const pageBg = colors.background;
   /** FAB + dim backdrop must sit above list; block main tree touches so Android does not deliver them to FlatList under the sheet. */
@@ -1222,157 +1264,196 @@ export default function EditGalleryScreen() {
         </View>
       </SafeAreaView>
 
-      {createVisible ? (
-        <Pressable
-          style={styles.fabBackdrop}
-          onPress={closeCreateFab}
-          accessibilityRole="button"
-          accessibilityLabel={t('close', 'סגירה')}
-        />
-      ) : null}
-
-      {createVisible ? (
-      <FabButton
-        isOpen
-        onPress={toggleCreateFab}
-        bottom={fabBottomOffset}
-        horizontalInset={20}
-        openedSize={windowWidth * 0.92}
-        closedSize={58}
-        duration={480}
-        grabberColor={colors.primary}
-        hideCloseButton
-        enablePanelLayoutAnimation={false}
-        panelVerticalAlign="center"
+      <BottomSheetModal
+        ref={createMediaSheetRef}
+        enableDynamicSizing
+        maxDynamicContentSize={Math.round(windowHeight * 0.92)}
+        enablePanDownToClose={!isCreating}
+        backdropComponent={renderCreateGalleryBackdrop}
+        onDismiss={() => {
+          if (!isCreating) setCreateVisible(false);
+        }}
+        style={I18nManager.isRTL ? ({ direction: 'rtl' } as const) : ({ direction: 'ltr' } as const)}
+        handleIndicatorStyle={gallerySheetChrome.handle}
+        backgroundStyle={gallerySheetChrome.background}
+        topInset={insets.top + 8}
+        bottomInset={insets.bottom}
+        keyboardBehavior="fillParent"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        animationConfigs={{ duration: 400 }}
       >
-        <View style={styles.fabSheetHeader}>
-          <View style={styles.fabSheetHeaderSpacer} />
-          <View style={styles.fabSheetHeaderBody}>
-            <Text style={[styles.fabSheetTitle, { color: colors.text }]}>
+        <BottomSheetScrollView
+          ref={createMediaSheetScrollRef}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 4,
+            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            /* Gorhom mounts the sheet outside the normal tree — re-apply RTL so rows/chips mirror like the rest of the app */
+            ...(I18nManager.isRTL ? ({ direction: 'rtl' as const } as const) : ({ direction: 'ltr' as const } as const)),
+          }}
+        >
+          <View style={styles.gallerySheetHeader}>
+            <Text style={[styles.gallerySheetTitle, { color: colors.text }]}>
               {createStep === 1
                 ? t('admin.gallery.createStep1Title', 'בחירת תמונות')
                 : t('admin.gallery.createStep2Title', 'שם לעיצוב')}
             </Text>
-            <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
+            <Text style={[styles.gallerySheetSubtitle, { color: colors.textSecondary }]}>
               {createStep === 1
                 ? t('admin.gallery.createStep1Tagline', 'העלאת תמונה או סרטון לגלריה שלך')
                 : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={toggleCreateFab}
-            disabled={isCreating}
-            hitSlop={14}
-            style={[styles.fabHeaderCloseBtn, { backgroundColor: colors.text + '0C' }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('close', 'סגירה')}
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2.25} />
-          </TouchableOpacity>
-        </View>
 
-        <KeyboardAwareScreenScroll
-          nestedScrollEnabled
-          style={{ maxHeight: fabMaxScrollH }}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          enableAutomaticScroll={!isGalleryFabNameStep}
-          keyboardOpeningTime={Platform.OS === 'ios' ? 0 : 250}
-        >
           {createStep === 1 ? (
             <>
               {adminUsers.length > 1 && (
                 <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
-                  <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.selectAdmin', 'בחר/י מנהל')}
+                  <Text style={[styles.galleryTeamSelectLabel, { color: colors.textSecondary }]}>
+                    {t('admin.gallery.selectAdmin', 'בחר/י איש צוות')}
                   </Text>
-                  <View style={styles.chipRow}>
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={adminUsers.length > 3}
+                    keyboardShouldPersistTaps="handled"
+                    style={styles.galleryTeamScroll}
+                    contentContainerStyle={styles.galleryTeamRowScroll}
+                  >
                     {adminUsers.map((user) => {
                       const on = selectedUserId === user.id;
+                      const avatarUri = user.image_url?.trim();
                       return (
                         <TouchableOpacity
                           key={user.id}
                           onPress={() => !isCreating && setSelectedUserId(user.id)}
-                          style={[
-                            styles.chip,
-                            { borderColor: colors.border, backgroundColor: colors.surface },
-                            on && { backgroundColor: colors.primary, borderColor: colors.primary },
-                          ]}
+                          activeOpacity={0.88}
                           disabled={isCreating}
+                          style={[
+                            styles.galleryTeamPill,
+                            {
+                              borderColor: on ? colors.primary : colors.border,
+                              backgroundColor: on ? colors.primary : colors.surface,
+                            },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: on }}
+                          accessibilityLabel={user.name}
                         >
-                          <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
+                          <View style={styles.galleryTeamPillAvatar}>
+                            {avatarUri ? (
+                              <ExpoImage
+                                source={{ uri: avatarUri }}
+                                style={styles.galleryTeamPillAvatarImg}
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={100}
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.galleryTeamPillAvatarFallback,
+                                  {
+                                    backgroundColor: on ? 'rgba(255,255,255,0.22)' : colors.text + '10',
+                                  },
+                                ]}
+                              >
+                                <Ionicons name="person" size={18} color={on ? '#fff' : colors.textSecondary} />
+                              </View>
+                            )}
+                          </View>
+                          <Text
+                            style={[styles.galleryTeamPillLabel, { color: on ? '#fff' : colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {user.name}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
-                  </View>
+                  </ScrollView>
                 </View>
               )}
 
-              <TouchableOpacity
-                onPress={pickImages}
-                style={[
-                  styles.pickCard,
-                  {
-                    borderColor: colors.primary + '55',
-                    backgroundColor: colors.primary + '0C',
-                    opacity: isCreating || pickedVideo ? 0.45 : 1,
-                  },
-                ]}
-                activeOpacity={0.88}
-                disabled={isCreating || !!pickedVideo}
-              >
-                <View style={styles.pickTextCol}>
-                  <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
-                  <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
-                  </Text>
-                </View>
-                <View style={styles.pickCardTrailing}>
+              <View style={styles.galleryMediaPickRow}>
+                <TouchableOpacity
+                  onPress={pickImages}
+                  style={[
+                    styles.galleryMediaPickTile,
+                    {
+                      width: galleryPickTileSize,
+                      height: galleryPickTileSize,
+                      borderColor: colors.primary + '55',
+                      backgroundColor: colors.primary + '0C',
+                      opacity: isCreating || pickedVideo ? 0.45 : 1,
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  disabled={isCreating || !!pickedVideo}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('admin.gallery.selectImages', 'בחר/י תמונות')}. ${t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}`}
+                >
                   {pickedAssets.length > 0 ? (
-                    <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                    <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
                       <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
                     </View>
                   ) : null}
-                  <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
-                    <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
+                  <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.primary + '24' }]}>
+                    <ImagePlus
+                      size={Math.min(28, Math.max(22, Math.round(galleryPickTileSize * 0.17)))}
+                      color={colors.primary}
+                      strokeWidth={2}
+                    />
                   </View>
-                </View>
-              </TouchableOpacity>
+                  <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                    {t('admin.gallery.selectImages', 'בחר/י תמונות')}
+                  </Text>
+                  <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={pickVideoForCreate}
-                style={[
-                  styles.pickCard,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: colors.surface,
-                    marginTop: 10,
-                    opacity: isCreating || isPreparingGalleryVideo || pickedAssets.length > 0 ? 0.45 : 1,
-                  },
-                ]}
-                activeOpacity={0.88}
-                disabled={isCreating || isPreparingGalleryVideo || pickedAssets.length > 0}
-              >
-                <View style={styles.pickTextCol}>
-                  <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
-                    {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
-                  </Text>
-                  <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
-                  </Text>
-                </View>
-                <View style={styles.pickCardTrailing}>
+                <TouchableOpacity
+                  onPress={pickVideoForCreate}
+                  style={[
+                    styles.galleryMediaPickTile,
+                    {
+                      width: galleryPickTileSize,
+                      height: galleryPickTileSize,
+                      borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                      opacity: isCreating || isPreparingGalleryVideo || pickedAssets.length > 0 ? 0.45 : 1,
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  disabled={isCreating || isPreparingGalleryVideo || pickedAssets.length > 0}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}. ${t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}`}
+                >
                   {pickedVideo ? (
-                    <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                    <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
                       <Text style={styles.countBadgeText}>1</Text>
                     </View>
                   ) : null}
-                  <View style={[styles.pickIconCircle, { backgroundColor: colors.text + '14' }]}>
-                    <Clapperboard size={26} color={colors.textSecondary} strokeWidth={2} />
+                  <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.text + '14' }]}>
+                    <Clapperboard
+                      size={Math.min(28, Math.max(22, Math.round(galleryPickTileSize * 0.17)))}
+                      color={colors.textSecondary}
+                      strokeWidth={2}
+                    />
                   </View>
-                </View>
-              </TouchableOpacity>
+                  <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                    {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
+                  </Text>
+                  <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               {pickedAssets.length > 0 || pickedVideo ? (
                 <View
@@ -1571,7 +1652,7 @@ export default function EditGalleryScreen() {
                   { borderBottomColor: colors.text + '22' },
                 ]}
               >
-                <TextInput
+                <BottomSheetTextInput
                   style={[styles.createNameInputLight, { color: colors.text }]}
                   placeholder={t('admin.gallery.namePlaceholder', 'כתבו כאן את שם העיצוב')}
                   placeholderTextColor={colors.textSecondary}
@@ -1581,6 +1662,7 @@ export default function EditGalleryScreen() {
                   returnKeyType="done"
                   maxLength={120}
                   accessibilityLabel={t('admin.gallery.nameLabel', 'שם לתצוגה')}
+                  onFocus={() => scrollGalleryNameStepIntoView('create')}
                 />
               </View>
 
@@ -1617,164 +1699,197 @@ export default function EditGalleryScreen() {
               </View>
             </>
           )}
-        </KeyboardAwareScreenScroll>
-      </FabButton>
-      ) : null}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
-      {editVisible ? (
-        <Pressable
-          style={styles.fabBackdrop}
-          onPress={() => {
-            if (!isSavingEdit) closeEdit();
+      <BottomSheetModal
+        ref={editMediaSheetRef}
+        enableDynamicSizing
+        maxDynamicContentSize={Math.round(windowHeight * 0.92)}
+        enablePanDownToClose={!isSavingEdit}
+        backdropComponent={renderEditGalleryBackdrop}
+        onDismiss={closeEdit}
+        style={I18nManager.isRTL ? ({ direction: 'rtl' } as const) : ({ direction: 'ltr' } as const)}
+        handleIndicatorStyle={gallerySheetChrome.handle}
+        backgroundStyle={gallerySheetChrome.background}
+        topInset={insets.top + 8}
+        bottomInset={insets.bottom}
+        keyboardBehavior="fillParent"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        animationConfigs={{ duration: 400 }}
+      >
+        <BottomSheetScrollView
+          ref={editMediaSheetScrollRef}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 4,
+            paddingBottom: Math.max(insets.bottom, 16) + 12,
+            ...(I18nManager.isRTL ? ({ direction: 'rtl' as const } as const) : ({ direction: 'ltr' as const } as const)),
           }}
-          accessibilityRole="button"
-          accessibilityLabel={t('close', 'סגירה')}
-        />
-      ) : null}
-
-      {editVisible ? (
-        <FabButton
-          isOpen
-          onPress={toggleEditFab}
-          bottom={fabBottomOffset}
-          horizontalInset={20}
-          openedSize={windowWidth * 0.92}
-          closedSize={58}
-          duration={480}
-          grabberColor={colors.primary}
-          hideCloseButton
-          enablePanelLayoutAnimation={false}
-          panelVerticalAlign="center"
         >
-          <View style={styles.fabSheetHeader}>
-            <View style={styles.fabSheetHeaderSpacer} />
-            <View style={styles.fabSheetHeaderBody}>
-              <Text style={[styles.fabSheetTitle, { color: colors.text }]}>
-                {editStep === 1
-                  ? t('admin.gallery.createStep1Title', 'בחירת תמונות')
-                  : t('admin.gallery.createStep2Title', 'שם לעיצוב')}
-              </Text>
-              <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
-                {editStep === 1
-                  ? t('admin.gallery.createStep1Tagline', 'העלאת תמונה או סרטון לגלריה שלך')
-                  : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={toggleEditFab}
-              disabled={isSavingEdit}
-              hitSlop={14}
-              style={[styles.fabHeaderCloseBtn, { backgroundColor: colors.text + '0C' }]}
-              accessibilityRole="button"
-              accessibilityLabel={t('close', 'סגירה')}
-            >
-              <X size={20} color={colors.textSecondary} strokeWidth={2.25} />
-            </TouchableOpacity>
+          <View style={styles.gallerySheetHeader}>
+            <Text style={[styles.gallerySheetTitle, { color: colors.text }]}>
+              {editStep === 1
+                ? t('admin.gallery.createStep1Title', 'בחירת תמונות')
+                : t('admin.gallery.createStep2Title', 'שם לעיצוב')}
+            </Text>
+            <Text style={[styles.gallerySheetSubtitle, { color: colors.textSecondary }]}>
+              {editStep === 1
+                ? t('admin.gallery.createStep1Tagline', 'העלאת תמונה או סרטון לגלריה שלך')
+                : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
+            </Text>
           </View>
 
-          <KeyboardAwareScreenScroll
-            nestedScrollEnabled
-            style={{ maxHeight: fabMaxScrollH }}
-            contentContainerStyle={{ paddingBottom: 24 }}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            enableAutomaticScroll={!isGalleryFabNameStep}
-            keyboardOpeningTime={Platform.OS === 'ios' ? 0 : 250}
-          >
             {editStep === 1 ? (
               <>
                 {adminUsers.length > 1 && (
                   <View style={[styles.block, { opacity: isSavingEdit ? 0.55 : 1 }]}>
-                    <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.selectAdmin', 'בחר/י מנהל')}
+                    <Text style={[styles.galleryTeamSelectLabel, { color: colors.textSecondary }]}>
+                      {t('admin.gallery.selectAdmin', 'בחר/י איש צוות')}
                     </Text>
-                    <View style={styles.chipRow}>
+                    <ScrollView
+                      horizontal
+                      nestedScrollEnabled
+                      showsHorizontalScrollIndicator={adminUsers.length > 3}
+                      keyboardShouldPersistTaps="handled"
+                      style={styles.galleryTeamScroll}
+                      contentContainerStyle={styles.galleryTeamRowScroll}
+                    >
                       {adminUsers.map((user) => {
                         const on = editSelectedUserId === user.id;
+                        const avatarUri = user.image_url?.trim();
                         return (
                           <TouchableOpacity
                             key={user.id}
                             onPress={() => !isSavingEdit && setEditSelectedUserId(user.id)}
-                            style={[
-                              styles.chip,
-                              { borderColor: colors.border, backgroundColor: colors.surface },
-                              on && { backgroundColor: colors.primary, borderColor: colors.primary },
-                            ]}
+                            activeOpacity={0.88}
                             disabled={isSavingEdit}
+                            style={[
+                              styles.galleryTeamPill,
+                              {
+                                borderColor: on ? colors.primary : colors.border,
+                                backgroundColor: on ? colors.primary : colors.surface,
+                              },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: on }}
+                            accessibilityLabel={user.name}
                           >
-                            <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
+                            <View style={styles.galleryTeamPillAvatar}>
+                              {avatarUri ? (
+                                <ExpoImage
+                                  source={{ uri: avatarUri }}
+                                  style={styles.galleryTeamPillAvatarImg}
+                                  contentFit="cover"
+                                  cachePolicy="memory-disk"
+                                  transition={100}
+                                />
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.galleryTeamPillAvatarFallback,
+                                    {
+                                      backgroundColor: on ? 'rgba(255,255,255,0.22)' : colors.text + '10',
+                                    },
+                                  ]}
+                                >
+                                  <Ionicons name="person" size={18} color={on ? '#fff' : colors.textSecondary} />
+                                </View>
+                              )}
+                            </View>
+                            <Text
+                              style={[styles.galleryTeamPillLabel, { color: on ? '#fff' : colors.text }]}
+                              numberOfLines={1}
+                            >
+                              {user.name}
+                            </Text>
                           </TouchableOpacity>
                         );
                       })}
-                    </View>
+                    </ScrollView>
                   </View>
                 )}
 
-                <TouchableOpacity
-                  onPress={addImagesToEdit}
-                  style={[
-                    styles.pickCard,
-                    {
-                      borderColor: colors.primary + '55',
-                      backgroundColor: colors.primary + '0C',
-                      opacity: isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES ? 0.45 : 1,
-                    },
-                  ]}
-                  activeOpacity={0.88}
-                  disabled={isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES}
-                >
-                  <View style={styles.pickTextCol}>
-                    <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
-                    <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
-                    </Text>
-                  </View>
-                  <View style={styles.pickCardTrailing}>
+                <View style={styles.galleryMediaPickRow}>
+                  <TouchableOpacity
+                    onPress={addImagesToEdit}
+                    style={[
+                      styles.galleryMediaPickTile,
+                      {
+                        width: galleryPickTileSize,
+                        height: galleryPickTileSize,
+                        borderColor: colors.primary + '55',
+                        backgroundColor: colors.primary + '0C',
+                        opacity: isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES ? 0.45 : 1,
+                      },
+                    ]}
+                    activeOpacity={0.88}
+                    disabled={isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('admin.gallery.selectImages', 'בחר/י תמונות')}. ${t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}`}
+                  >
                     {editImageCount > 0 ? (
-                      <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                      <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
                         <Text style={styles.countBadgeText}>{editImageCount}</Text>
                       </View>
                     ) : null}
-                    <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
-                      <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
+                    <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.primary + '24' }]}>
+                      <ImagePlus
+                        size={Math.min(28, Math.max(22, Math.round(galleryPickTileSize * 0.17)))}
+                        color={colors.primary}
+                        strokeWidth={2}
+                      />
                     </View>
-                  </View>
-                </TouchableOpacity>
+                    <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                      {t('admin.gallery.selectImages', 'בחר/י תמונות')}
+                    </Text>
+                    <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
+                    </Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={addVideoToEdit}
-                  style={[
-                    styles.pickCard,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.surface,
-                      marginTop: 10,
-                      opacity:
-                        isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0 ? 0.45 : 1,
-                    },
-                  ]}
-                  activeOpacity={0.88}
-                  disabled={isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0}
-                >
-                  <View style={styles.pickTextCol}>
-                    <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
-                      {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
-                    </Text>
-                    <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
-                    </Text>
-                  </View>
-                  <View style={styles.pickCardTrailing}>
+                  <TouchableOpacity
+                    onPress={addVideoToEdit}
+                    style={[
+                      styles.galleryMediaPickTile,
+                      {
+                        width: galleryPickTileSize,
+                        height: galleryPickTileSize,
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                        opacity:
+                          isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0 ? 0.45 : 1,
+                      },
+                    ]}
+                    activeOpacity={0.88}
+                    disabled={isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}. ${t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}`}
+                  >
                     {editHasVideo ? (
-                      <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                      <View style={[styles.galleryMediaPickBadgeAbs, { backgroundColor: colors.primary }]}>
                         <Text style={styles.countBadgeText}>1</Text>
                       </View>
                     ) : null}
-                    <View style={[styles.pickIconCircle, { backgroundColor: colors.text + '14' }]}>
-                      <Clapperboard size={26} color={colors.textSecondary} strokeWidth={2} />
+                    <View style={[styles.galleryMediaPickTileIconWrap, { backgroundColor: colors.text + '14' }]}>
+                      <Clapperboard
+                        size={Math.min(28, Math.max(22, Math.round(galleryPickTileSize * 0.17)))}
+                        color={colors.textSecondary}
+                        strokeWidth={2}
+                      />
                     </View>
-                  </View>
-                </TouchableOpacity>
+                    <Text style={[styles.galleryMediaPickTileTitle, { color: colors.text }]} numberOfLines={2}>
+                      {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
+                    </Text>
+                    <Text style={[styles.galleryMediaPickTileSub, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
                 {editImages.length > 0 ? (
                   <View
@@ -1922,7 +2037,7 @@ export default function EditGalleryScreen() {
                 ) : null}
 
                 <View style={[styles.createNameFieldWrap, { borderBottomColor: colors.text + '22' }]}>
-                  <TextInput
+                  <BottomSheetTextInput
                     style={[styles.createNameInputLight, { color: colors.text }]}
                     placeholder={t('admin.gallery.namePlaceholder', 'כתבו כאן את שם העיצוב')}
                     placeholderTextColor={colors.textSecondary}
@@ -1932,6 +2047,7 @@ export default function EditGalleryScreen() {
                     returnKeyType="done"
                     maxLength={120}
                     accessibilityLabel={t('admin.gallery.nameLabel', 'שם לתצוגה')}
+                    onFocus={() => scrollGalleryNameStepIntoView('edit')}
                   />
                 </View>
 
@@ -1968,9 +2084,8 @@ export default function EditGalleryScreen() {
                 </View>
               </>
             )}
-          </KeyboardAwareScreenScroll>
-        </FabButton>
-      ) : null}
+        </BottomSheetScrollView>
+      </BottomSheetModal>
 
       {/* ───────── Image viewer modal ───────── */}
       {viewerVisible ? (
@@ -2191,6 +2306,29 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
       textAlign: 'right',
       opacity: 0.92,
     },
+    /** Bottom sheet header — aligned with manager settings booking-window sheets */
+    gallerySheetHeader: {
+      alignItems: 'center' as const,
+      paddingBottom: 14,
+      marginBottom: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    gallerySheetTitle: {
+      fontSize: 17,
+      fontWeight: '700' as const,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
+      letterSpacing: -0.25,
+    },
+    gallerySheetSubtitle: {
+      marginTop: 6,
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '500' as const,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
+    },
     /** Minimal free-text line — underline only, no inner title */
     createNameFieldWrap: {
       marginTop: 14,
@@ -2230,17 +2368,6 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     },
     fabFieldInput: {
       minHeight: Platform.OS === 'ios' ? 50 : 48,
-    },
-    pickTextCol: {
-      flex: 1,
-      minWidth: 0,
-      paddingEnd: 8,
-    },
-    pickCardTrailing: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      flexShrink: 0,
     },
     searchRow: {
       flexDirection: 'row',
@@ -2563,16 +2690,73 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 8 },
     emptySubtitle: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 22 },
     fieldLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 16, marginBottom: 8 },
-    block: { marginTop: 4 },
-    /** RTL: row starts at the right — flex-start keeps chips flush to the label side; LTR: flex-end. */
-    chipRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-      justifyContent: layoutRtl ? 'flex-start' : 'flex-end',
+    /** "בחר/י איש צוות" — centered with the pill row below */
+    galleryTeamSelectLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 16,
+      marginBottom: 8,
+      textAlign: 'center' as const,
+      alignSelf: 'stretch' as const,
     },
-    chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
-    chipText: { fontSize: 14, fontWeight: '500' },
+    block: { marginTop: 4 },
+    /** Horizontal strip; many admins scroll instead of wrapping. */
+    galleryTeamScroll: {
+      marginTop: 4,
+      alignSelf: 'stretch',
+      direction: layoutRtl ? 'rtl' : 'ltr',
+    },
+    galleryTeamRowScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 4,
+      paddingHorizontal: 0,
+      direction: layoutRtl ? 'rtl' : 'ltr',
+      /** Few pills: full width, row centered under the title. */
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    /**
+     * Pill: [avatar, name] in DOM. RTL `row` → avatar at main-start (visual right). LTR `row-reverse`
+     * → same visual (name left, avatar right) for Hebrew-style chips.
+     */
+    galleryTeamPill: {
+      flexDirection: layoutRtl ? ('row' as const) : ('row-reverse' as const),
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 0,
+      paddingVertical: 4,
+      paddingStart: layoutRtl ? 4 : 14,
+      paddingEnd: layoutRtl ? 14 : 4,
+      borderRadius: 999,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      maxWidth: 280,
+    },
+    galleryTeamPillAvatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      overflow: 'hidden',
+    },
+    galleryTeamPillAvatarImg: {
+      width: '100%',
+      height: '100%',
+    },
+    galleryTeamPillAvatarFallback: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    galleryTeamPillLabel: {
+      flexShrink: 1,
+      minWidth: 0,
+      fontSize: 14,
+      fontWeight: '600',
+    },
     fabPrimaryBtn: {
       marginTop: 20,
       borderRadius: 16,
@@ -2592,16 +2776,24 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
     rowCenter: { flexDirection: 'row', alignItems: 'center' },
-    pickCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      alignSelf: 'stretch',
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      borderRadius: 20,
-      borderWidth: StyleSheet.hairlineWidth * 2,
+    galleryMediaPickRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      gap: 12,
+      width: '100%' as const,
       marginTop: 8,
+    },
+    galleryMediaPickTile: {
+      position: 'relative' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      borderRadius: 22,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      paddingVertical: 8,
+      paddingHorizontal: 6,
+      flexShrink: 0,
+      overflow: 'hidden' as const,
       ...Platform.select({
         ios: {
           shadowColor: '#000',
@@ -2612,10 +2804,41 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
         android: { elevation: 1 },
       }),
     },
-    pickIconCircle: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-    pickTitle: { fontSize: 16, fontWeight: '700' },
-    pickSub: { fontSize: 13, marginTop: 3, lineHeight: 18 },
-    countBadge: { minWidth: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+    galleryMediaPickBadgeAbs: {
+      position: 'absolute' as const,
+      top: 8,
+      end: 8,
+      zIndex: 2,
+      minWidth: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: 7,
+    },
+    galleryMediaPickTileIconWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: 16,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginBottom: 2,
+    },
+    galleryMediaPickTileTitle: {
+      fontSize: 13,
+      fontWeight: '700' as const,
+      textAlign: 'center' as const,
+      width: '100%' as const,
+      paddingHorizontal: 2,
+    },
+    galleryMediaPickTileSub: {
+      fontSize: 10,
+      lineHeight: 14,
+      marginTop: 4,
+      textAlign: 'center' as const,
+      width: '100%' as const,
+      paddingHorizontal: 2,
+    },
     countBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
     previewImg: { width: '100%', height: '100%' },
     previewX: {

@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useRef, useEffect, useLayoutEffect } fr
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   Pressable,
   Modal,
@@ -15,6 +16,7 @@ import {
   Dimensions,
   Keyboard,
   Easing,
+  useWindowDimensions,
   type GestureResponderEvent,
   type PanResponderGestureState,
 } from 'react-native';
@@ -29,10 +31,10 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import BroadcastOwnerOnlyModal from '@/components/BroadcastOwnerOnlyModal';
 import ClientsListActionModal from '@/components/admin/ClientsListActionModal';
+import { getHomeLogoSourceFromUrl } from '@/src/theme/assets';
 
 type BroadcastComposerDialog =
   | null
-  | 'confirm'
   | { type: 'error'; message: string }
   | { type: 'success'; message: string };
 
@@ -45,9 +47,15 @@ type AdminBroadcastComposerProps = {
   renderTrigger?: boolean;
   /** When set, opening the sheet and sending require this to resolve true (business owner / super-admin gate). */
   ensureCanBroadcast?: () => Promise<boolean>;
+  /** `business_profile.home_logo_url` — preview uses bundled logo when omitted or empty. */
+  homeLogoUrl?: string | null;
 };
 
 const SHEET_OFFSCREEN_Y = Math.min(620, Math.round(Dimensions.get('window').height * 0.85));
+
+/** Broadcast-to-all-clients limits (UI + insert payloads). */
+const BROADCAST_TITLE_MAX_LEN = 40;
+const BROADCAST_BODY_MAX_LEN = 130;
 
 function darkenHex(hex: string, ratio: number): string {
   const h = (hex || '').replace('#', '');
@@ -71,14 +79,28 @@ export default function AdminBroadcastComposer({
   onOpenChange,
   renderTrigger = true,
   ensureCanBroadcast,
+  homeLogoUrl,
 }: AdminBroadcastComposerProps) {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const colors = useColors();
   const { onPrimary } = usePrimaryContrast();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  /** Taller sheet so step-1 title + multiline body fit without scrolling on typical phones */
+  const broadcastSheetMaxHeight = useMemo(
+    () => Math.min(Math.round(windowHeight * 0.94), windowHeight - 6),
+    [windowHeight]
+  );
+  const actionBarReserve = Math.max(insets.bottom, 8) + 88;
+  /** Step 1: cap scroll area so the sheet can shrink to content (avoids huge dead gap above the action bar). */
+  const step1ScrollMaxHeight = useMemo(() => {
+    const dragAndHandle = 52;
+    return Math.max(260, broadcastSheetMaxHeight - actionBarReserve - dragAndHandle);
+  }, [broadcastSheetMaxHeight, actionBarReserve]);
   const effectiveIconColor = iconColor ?? colors.primary;
+
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === 'boolean';
   const isOpen = isControlled ? !!open : internalOpen;
@@ -95,11 +117,19 @@ export default function AdminBroadcastComposer({
   const [dialog, setDialog] = useState<BroadcastComposerDialog>(null);
   const [titleFocused, setTitleFocused] = useState(false);
   const [contentFocused, setContentFocused] = useState(false);
+  /** 1 = title + body; 2 = push-style preview only, then confirm send */
+  const [composerStep, setComposerStep] = useState<1 | 2>(1);
   const closeOwnerOnlyModal = useCallback(() => setOwnerOnlyModalOpen(false), []);
 
   const [renderModal, setRenderModal] = useState(false);
   const translateY = useRef(new Animated.Value(SHEET_OFFSCREEN_Y)).current;
   const panStartTranslateY = useRef(0);
+
+  /**
+   * Do not tie sheet maxHeight to keyboard height: KeyboardAwareScrollView already adjusts insets,
+   * and shrinking the sheet here caused double-offset — sheet jumped off-screen (keyboard + dim only).
+   */
+  const sheetMaxHeightApplied = broadcastSheetMaxHeight;
 
   const requestCloseSheet = useCallback(() => {
     Keyboard.dismiss();
@@ -133,6 +163,7 @@ export default function AdminBroadcastComposer({
 
   useEffect(() => {
     if (isOpen) {
+      setComposerStep(1);
       translateY.setValue(SHEET_OFFSCREEN_Y);
       Animated.spring(translateY, {
         toValue: 0,
@@ -239,19 +270,27 @@ export default function AdminBroadcastComposer({
       ok: t('admin.broadcastComposer.ok'),
       failMsg: t('admin.broadcastComposer.failMsg'),
       accessibilitySend: t('admin.broadcastComposer.accessibilitySend'),
-    }),
-    [t]
-  );
-
-  const confirmStrings = useMemo(
-    () => ({
-      title: t('admin.broadcastComposer.confirmTitle', 'לשלוח לכל הלקוחות?'),
-      body: t(
-        'admin.broadcastComposer.confirmBody',
-        'הודעה זו תישלח כעת לכל הלקוחות ותופיע גם בדף הבית.\n\nאפשר לערוך ולשלוח מחדש בכל זמן.',
+      nextToPreview: t('admin.broadcastComposer.nextToPreview', 'המשך לתצוגה מקדימה'),
+      backToEdit: t('admin.broadcastComposer.backToEdit', 'חזור'),
+      accessibilityBackToEdit: t(
+        'admin.broadcastComposer.accessibilityBackToEdit',
+        'חזרה לעריכת ההודעה',
+      ),
+      previewConfirm: t('admin.broadcastComposer.previewConfirm', 'אישור'),
+      accessibilityNextPreview: t(
+        'admin.broadcastComposer.accessibilityNextPreview',
+        'המשך לתצוגה המקדימה',
+      ),
+      accessibilityConfirmSend: t(
+        'admin.broadcastComposer.accessibilityConfirmSend',
+        'אישור ושליחה לכל הלקוחות',
+      ),
+      previewStepSubtitle: t(
+        'admin.broadcastComposer.previewStepSubtitle',
+        'כך תיראה ההתראה אצל הלקוחות.\nלחצו אישור לשליחה לכל הלקוחות.',
       ),
     }),
-    [t],
+    [t]
   );
 
   const closeDialog = useCallback(() => setDialog(null), []);
@@ -261,11 +300,13 @@ export default function AdminBroadcastComposer({
     setNotificationContent('');
     setTitleFocused(false);
     setContentFocused(false);
+    setComposerStep(1);
   };
 
-  const handleSendWithConfirm = () => {
+  const goToPreviewStep = () => {
     if (!canSend) return;
-    setDialog('confirm');
+    Keyboard.dismiss();
+    setComposerStep(2);
   };
 
   const handleSend = async () => {
@@ -301,7 +342,7 @@ export default function AdminBroadcastComposer({
         return;
       }
 
-      const notify = await notificationsApi.sendNotificationToAllClients(finalTitle, body, 'general');
+      const notify = await notificationsApi.sendNotificationToAllClients(finalTitle, body, 'home_broadcast');
 
       let msg = strings.successMsg;
       if (notify.ok && notify.recipientCount === 0) {
@@ -340,28 +381,18 @@ export default function AdminBroadcastComposer({
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const previewLogoSource = useMemo(() => getHomeLogoSourceFromUrl(homeLogoUrl), [homeLogoUrl]);
 
   const dialogTitle =
-    dialog === 'confirm'
-      ? confirmStrings.title
-      : dialog && typeof dialog === 'object' && dialog.type === 'error'
-        ? strings.error
-        : dialog && typeof dialog === 'object' && dialog.type === 'success'
-          ? strings.success
-          : '';
-  const dialogMessage =
-    dialog === 'confirm'
-      ? confirmStrings.body
-      : dialog && typeof dialog === 'object'
-        ? dialog.message
+    dialog && typeof dialog === 'object' && dialog.type === 'error'
+      ? strings.error
+      : dialog && typeof dialog === 'object' && dialog.type === 'success'
+        ? strings.success
         : '';
+  const dialogMessage =
+    dialog && typeof dialog === 'object' ? dialog.message : '';
 
   const handleDialogConfirm = () => {
-    if (dialog === 'confirm') {
-      closeDialog();
-      void handleSend();
-      return;
-    }
     if (dialog && typeof dialog === 'object' && dialog.type === 'success') {
       resetState();
       requestCloseSheet();
@@ -444,9 +475,20 @@ export default function AdminBroadcastComposer({
             <View
               style={[
                 styles.sheet,
-                { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) + 86 },
+                {
+                  backgroundColor: 'transparent',
+                  paddingBottom: actionBarReserve,
+                  maxHeight: sheetMaxHeightApplied,
+                },
               ]}
             >
+              <LinearGradient
+                pointerEvents="none"
+                colors={[colors.background, colors.surface]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
               <View
                 style={styles.dragHandleZone}
                 {...sheetPanResponder.panHandlers}
@@ -455,186 +497,276 @@ export default function AdminBroadcastComposer({
                 <View style={styles.dragHandle} />
               </View>
 
-              {/* KeyboardAware scroll — all content except sticky bar */}
+              {composerStep === 1 ? (
               <KeyboardAwareScreenScroll
-                style={{ flexGrow: 1 }}
+                style={{ alignSelf: 'stretch', maxHeight: step1ScrollMaxHeight, flexGrow: 0 }}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                enableAutomaticScroll
+                enableOnAndroid
+                extraScrollHeight={120}
+                extraHeight={32}
                 contentContainerStyle={styles.scrollContent}
                 scrollEventThrottle={16}
                 {...(Platform.OS === 'android' ? { nestedScrollEnabled: true } : {})}
               >
-                {/* ── Hero header ── */}
-                <View style={styles.heroSection}>
-                  {/* Icon */}
-                  <View style={[styles.heroIconWrap, { backgroundColor: `${colors.primary}14` }]}>
-                    <LinearGradient
-                      colors={[colors.primary, darkenHex(colors.primary, 0.28)]}
-                      start={{ x: 0.1, y: 0 }}
-                      end={{ x: 0.9, y: 1 }}
-                      style={styles.heroIconGradient}
-                    >
-                      <Ionicons name="megaphone" size={30} color="#fff" />
-                    </LinearGradient>
-                  </View>
-
-                  <Text style={[styles.heroTitle, { color: colors.text }]}>
-                    {strings.headerTitle}
-                  </Text>
-                  <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-                    {strings.subtitle}
-                  </Text>
-
-                  {/* Audience chip */}
-                  <View style={[styles.audienceChip, rowDir, { backgroundColor: `${colors.primary}10`, borderColor: `${colors.primary}22` }]}>
-                    <Ionicons name="people" size={14} color={colors.primary} />
-                    <Text style={[styles.audienceChipText, { color: colors.primary }]}>
-                      {t('admin.broadcastComposer.audienceAllClients', 'לכל הלקוחות')}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* ── Title field ── */}
-                <View style={styles.sectionGroup}>
-                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
-                    {strings.titleLabel.toUpperCase()}
-                  </Text>
-                  <View
-                    style={[
-                      styles.fieldCard,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: titleFocused ? colors.primary : `${colors.border}88`,
-                        shadowColor: titleFocused ? colors.primary : '#000',
-                        shadowOpacity: titleFocused ? 0.12 : 0.04,
-                      },
-                    ]}
-                  >
-                    <TextInput
-                      style={[styles.fieldInput, { color: colors.text }]}
-                      placeholder={strings.titlePlaceholder}
-                      placeholderTextColor={`${colors.textSecondary}80`}
-                      value={title}
-                      onChangeText={setTitle}
-                      maxLength={80}
-                      returnKeyType="next"
-                      textAlign="right"
-                      onFocus={() => setTitleFocused(true)}
-                      onBlur={() => setTitleFocused(false)}
-                    />
-                    <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
-                      {title.length}/80
-                    </Text>
-                  </View>
-                </View>
-
-                {/* ── Content field ── */}
-                <View style={[styles.sectionGroup, { marginTop: 4 }]}>
-                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
-                    {strings.contentLabel.toUpperCase()}
-                  </Text>
-                  <View
-                    style={[
-                      styles.fieldCard,
-                      {
-                        backgroundColor: colors.background,
-                        borderColor: contentFocused ? colors.primary : `${colors.border}88`,
-                        shadowColor: contentFocused ? colors.primary : '#000',
-                        shadowOpacity: contentFocused ? 0.12 : 0.04,
-                      },
-                    ]}
-                  >
-                    <TextInput
-                      style={[styles.fieldInput, styles.fieldInputMulti, { color: colors.text }]}
-                      placeholder={strings.contentPlaceholder}
-                      placeholderTextColor={`${colors.textSecondary}80`}
-                      value={notificationContent}
-                      onChangeText={setNotificationContent}
-                      multiline
-                      numberOfLines={5}
-                      maxLength={500}
-                      textAlignVertical="top"
-                      textAlign="right"
-                      onFocus={() => setContentFocused(true)}
-                      onBlur={() => setContentFocused(false)}
-                    />
-                    <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
-                      {notificationContent.length}/500
-                    </Text>
-                  </View>
-                </View>
-
-                {/* ── iOS Notification Preview ── */}
-                <View style={[styles.sectionGroup, { marginTop: 4 }]}>
-                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
-                    {strings.previewHint.toUpperCase()}
-                  </Text>
-
-                  {/* iOS notification widget */}
-                  <View style={[styles.notifCard, { backgroundColor: Platform.OS === 'ios' ? 'rgba(242,242,247,0.97)' : '#F2F2F7' }]}>
-                    {/* Top row: app icon + name + time */}
-                    <View style={[styles.notifTopRow, rowDirReverse]}>
-                      <View style={[rowDir, styles.notifAppRow]}>
-                        <View style={[styles.notifAppIcon, { backgroundColor: colors.primary }]}>
-                          <Ionicons name="notifications" size={11} color="#fff" />
-                        </View>
+                  <>
+                    {/* ── Hero header ── */}
+                    <View style={[styles.heroSection, styles.heroSectionStep1]}>
+                      <View
+                        style={[
+                          styles.heroIconWrap,
+                          styles.heroIconWrapStep1,
+                          { backgroundColor: `${colors.primary}14` },
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={[colors.primary, darkenHex(colors.primary, 0.28)]}
+                          start={{ x: 0.1, y: 0 }}
+                          end={{ x: 0.9, y: 1 }}
+                          style={styles.heroIconGradientStep1}
+                        >
+                          <Ionicons name="megaphone" size={26} color="#fff" />
+                        </LinearGradient>
                       </View>
-                      <Text style={styles.notifTime}>{timeStr}</Text>
+
+                      <Text style={[styles.heroTitle, { color: colors.text }]}>
+                        {strings.headerTitle}
+                      </Text>
+                      <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
+                        {strings.subtitle}
+                      </Text>
+
+                      <View
+                        style={[
+                          styles.audienceChip,
+                          rowDir,
+                          { backgroundColor: `${colors.primary}10`, borderColor: `${colors.primary}22` },
+                        ]}
+                      >
+                        <Ionicons name="people" size={14} color={colors.primary} />
+                        <Text style={[styles.audienceChipText, { color: colors.primary }]}>
+                          {t('admin.broadcastComposer.audienceAllClients', 'לכל הלקוחות')}
+                        </Text>
+                      </View>
                     </View>
 
-                    {/* Divider */}
-                    <View style={styles.notifDivider} />
+                    <View style={styles.sectionGroup}>
+                      <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
+                        {strings.titleLabel.toUpperCase()}
+                      </Text>
+                      <View
+                        style={[
+                          styles.fieldCard,
+                          {
+                            backgroundColor: colors.background,
+                            borderColor: titleFocused ? colors.primary : `${colors.border}88`,
+                            shadowColor: titleFocused ? colors.primary : '#000',
+                            shadowOpacity: titleFocused ? 0.12 : 0.04,
+                          },
+                        ]}
+                      >
+                        <TextInput
+                          style={[styles.fieldInput, { color: colors.text }]}
+                          placeholder={strings.titlePlaceholder}
+                          placeholderTextColor={`${colors.textSecondary}80`}
+                          value={title}
+                          onChangeText={setTitle}
+                          maxLength={BROADCAST_TITLE_MAX_LEN}
+                          returnKeyType="next"
+                          textAlign="right"
+                          onFocus={() => setTitleFocused(true)}
+                          onBlur={() => setTitleFocused(false)}
+                        />
+                        <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
+                          {title.length}/{BROADCAST_TITLE_MAX_LEN}
+                        </Text>
+                      </View>
+                    </View>
 
-                    {/* Notification body */}
-                    <Text style={[styles.notifTitle, { textAlign }]} numberOfLines={2}>
-                      {currentTitle || strings.previewTitlePlaceholder}
+                    <View style={[styles.sectionGroup, { marginTop: 4 }]}>
+                      <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
+                        {strings.contentLabel.toUpperCase()}
+                      </Text>
+                      <View
+                        style={[
+                          styles.fieldCard,
+                          {
+                            backgroundColor: colors.background,
+                            borderColor: contentFocused ? colors.primary : `${colors.border}88`,
+                            shadowColor: contentFocused ? colors.primary : '#000',
+                            shadowOpacity: contentFocused ? 0.12 : 0.04,
+                          },
+                        ]}
+                      >
+                        <TextInput
+                          style={[styles.fieldInput, styles.fieldInputMulti, { color: colors.text }]}
+                          placeholder={strings.contentPlaceholder}
+                          placeholderTextColor={`${colors.textSecondary}80`}
+                          value={notificationContent}
+                          onChangeText={setNotificationContent}
+                          multiline
+                          numberOfLines={5}
+                          maxLength={BROADCAST_BODY_MAX_LEN}
+                          textAlignVertical="top"
+                          textAlign="right"
+                          onFocus={() => setContentFocused(true)}
+                          onBlur={() => setContentFocused(false)}
+                        />
+                        <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
+                          {notificationContent.length}/{BROADCAST_BODY_MAX_LEN}
+                        </Text>
+                      </View>
+                    </View>
+                  </>
+              </KeyboardAwareScreenScroll>
+              ) : (
+                <View style={styles.previewStepBody}>
+                  <View style={styles.previewOnlySection}>
+                    <Text style={[styles.previewOnlyTitle, { color: colors.text }]}>
+                      {strings.previewHint}
                     </Text>
-                    <Text style={[styles.notifBody, { textAlign }]} numberOfLines={4}>
-                      {notificationContent || strings.previewContentPlaceholder}
+                    <Text style={[styles.previewOnlySubtitle, { color: colors.textSecondary }]}>
+                      {strings.previewStepSubtitle}
                     </Text>
+                    <View
+                      style={[
+                        styles.notifCard,
+                        {
+                          backgroundColor:
+                            Platform.OS === 'ios' ? 'rgba(242,242,247,0.97)' : '#F2F2F7',
+                          marginTop: 10,
+                          borderWidth: StyleSheet.hairlineWidth,
+                          borderColor: 'rgba(0,0,0,0.08)',
+                        },
+                      ]}
+                    >
+                      <View style={[styles.notifTopRow, rowDir]}>
+                        <Text style={styles.notifTime}>{timeStr}</Text>
+                        <View style={[rowDir, styles.notifAppRow]}>
+                          <View style={[styles.notifAppIcon, { backgroundColor: colors.primary }]}>
+                            <Ionicons name="notifications" size={11} color="#fff" />
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.notifDivider} />
+                      <View style={styles.notifBodyRow}>
+                        <View
+                          style={[
+                            styles.notifLogoSquare,
+                            { borderColor: `${colors.border}66`, backgroundColor: colors.background },
+                          ]}
+                        >
+                          <Image
+                            source={previewLogoSource}
+                            style={styles.notifLogoImage}
+                            resizeMode="contain"
+                            accessibilityIgnoresInvertColors
+                          />
+                        </View>
+                        <View style={styles.notifTextColumn}>
+                          <Text style={[styles.notifTitle, { textAlign }]} numberOfLines={2}>
+                            {currentTitle}
+                          </Text>
+                          <Text style={[styles.notifBody, { textAlign }]} numberOfLines={8}>
+                            {notificationContent.trim()}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 </View>
-              </KeyboardAwareScreenScroll>
+              )}
 
               {/* ── Sticky action bar ── */}
               <View
                 style={[
                   styles.actionBar,
                   {
-                    backgroundColor: colors.background,
+                    backgroundColor: colors.surface,
                     borderTopColor: `${colors.border}44`,
                     paddingBottom: Math.max(insets.bottom, 8),
                   },
                 ]}
               >
-                <TouchableOpacity
-                  style={[styles.cancelBtn, { borderColor: `${colors.border}BB` }]}
-                  onPress={requestCloseSheet}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
-                    {strings.cancel}
-                  </Text>
-                </TouchableOpacity>
+                {composerStep === 1 ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.cancelBtn, { borderColor: `${colors.border}BB` }]}
+                      onPress={requestCloseSheet}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
+                        {strings.cancel}
+                      </Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  onPress={handleSendWithConfirm}
-                  activeOpacity={canSend ? 0.85 : 1}
-                  disabled={!canSend}
-                  style={[
-                    styles.sendBtnWrap,
-                    {
-                      backgroundColor: canSend ? colors.primary : '#C7C7CC',
-                      opacity: canSend ? 1 : 0.65,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={strings.accessibilitySend}
-                  accessibilityState={{ disabled: !canSend, busy: isSending }}
-                >
-                  <Text style={[styles.sendBtnText, { color: canSend ? onPrimary : '#fff' }]}>
-                    {isSending ? strings.sending : strings.sendAll}
-                  </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={goToPreviewStep}
+                      activeOpacity={canSend ? 0.85 : 1}
+                      disabled={!canSend}
+                      style={[
+                        styles.sendBtnWrap,
+                        {
+                          backgroundColor: canSend ? colors.primary : '#C7C7CC',
+                          opacity: canSend ? 1 : 0.65,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={strings.accessibilityNextPreview}
+                      accessibilityState={{ disabled: !canSend }}
+                    >
+                      <Text style={[styles.sendBtnText, { color: canSend ? onPrimary : '#fff' }]}>
+                        {strings.nextToPreview}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[
+                        styles.previewBackBtn,
+                        {
+                          borderColor: `${colors.primary}55`,
+                          backgroundColor: colors.surface,
+                          opacity: isSending ? 0.5 : 1,
+                        },
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setComposerStep(1);
+                      }}
+                      activeOpacity={0.75}
+                      disabled={isSending}
+                      accessibilityRole="button"
+                      accessibilityLabel={strings.accessibilityBackToEdit}
+                    >
+                      <Text style={[styles.previewBackBtnText, { color: colors.primary }]}>
+                        {strings.backToEdit}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => void handleSend()}
+                      activeOpacity={isSending ? 1 : 0.85}
+                      disabled={isSending}
+                      style={[
+                        styles.sendBtnWrap,
+                        {
+                          backgroundColor: isSending ? '#C7C7CC' : colors.primary,
+                          opacity: isSending ? 0.65 : 1,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={strings.accessibilityConfirmSend}
+                      accessibilityState={{ disabled: isSending, busy: isSending }}
+                    >
+                      <Text style={[styles.sendBtnText, { color: isSending ? '#fff' : onPrimary }]}>
+                        {isSending ? strings.sending : strings.previewConfirm}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
           </Animated.View>
@@ -645,9 +777,9 @@ export default function AdminBroadcastComposer({
               visible
               title={dialogTitle}
               message={dialogMessage}
-              showCancel={dialog === 'confirm'}
+              showCancel={false}
               cancelText={strings.cancel}
-              confirmText={dialog === 'confirm' ? strings.sendAll : strings.ok}
+              confirmText={strings.ok}
               confirmDestructive={false}
               onCancel={closeDialog}
               onConfirm={handleDialogConfirm}
@@ -661,9 +793,9 @@ export default function AdminBroadcastComposer({
           visible
           title={dialogTitle}
           message={dialogMessage}
-          showCancel={dialog === 'confirm'}
+          showCancel={false}
           cancelText={strings.cancel}
-          confirmText={dialog === 'confirm' ? strings.sendAll : strings.ok}
+          confirmText={strings.ok}
           confirmDestructive={false}
           onCancel={closeDialog}
           onConfirm={handleDialogConfirm}
@@ -733,8 +865,7 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     sheet: {
       width: '100%',
       maxWidth: 560,
-      /** Leave visible area above the sheet; content scrolls inside */
-      maxHeight: '86%',
+      position: 'relative',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       overflow: 'hidden',
@@ -763,15 +894,46 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       alignSelf: 'center',
     },
     scrollContent: {
-      paddingBottom: 16,
+      paddingBottom: 12,
+    },
+    /** Step 2: light gray block like step-1 sheet bottom; no flex:1 — sheet hugs content (tighter to action bar). */
+    previewStepBody: {
+      alignSelf: 'stretch',
+      flexGrow: 0,
+      backgroundColor: colors.surface,
+      paddingTop: 4,
+      paddingBottom: 8,
+    },
+    previewOnlySection: {
+      paddingHorizontal: 20,
+      paddingBottom: 10,
+    },
+    previewOnlyTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      textAlign: 'center',
+      letterSpacing: -0.4,
+    },
+    previewOnlySubtitle: {
+      fontSize: 14,
+      fontWeight: '400',
+      textAlign: 'center',
+      lineHeight: 20,
+      marginTop: 4,
+      paddingHorizontal: 8,
     },
 
     /* ─── Hero header ─── */
     heroSection: {
       alignItems: 'center',
-      paddingTop: 4,
+      paddingTop: 2,
       paddingBottom: 22,
       paddingHorizontal: 20,
+    },
+    /** Tighter header on step 1 so the message body field fits above the action bar */
+    heroSectionStep1: {
+      paddingBottom: 8,
+      paddingTop: 0,
     },
     heroIconWrap: {
       width: 72,
@@ -797,29 +959,42 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    heroIconWrapStep1: {
+      width: 60,
+      height: 60,
+      borderRadius: 18,
+      marginBottom: 8,
+    },
+    heroIconGradientStep1: {
+      width: 52,
+      height: 52,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     heroTitle: {
-      fontSize: 22,
+      fontSize: 21,
       fontWeight: '800',
       letterSpacing: -0.5,
       textAlign: 'center',
-      lineHeight: 28,
+      lineHeight: 26,
     },
     heroSubtitle: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '400',
       textAlign: 'center',
-      lineHeight: 20,
-      marginTop: 6,
-      maxWidth: 280,
+      lineHeight: 18,
+      marginTop: 4,
+      maxWidth: 300,
     },
     audienceChip: {
       alignItems: 'center',
       gap: 6,
       paddingHorizontal: 14,
-      paddingVertical: 7,
+      paddingVertical: 6,
       borderRadius: 999,
       borderWidth: 1,
-      marginTop: 14,
+      marginTop: 8,
     },
     audienceChipText: {
       fontSize: 13,
@@ -860,7 +1035,8 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       textAlign: 'right',
     },
     fieldInputMulti: {
-      minHeight: 120,
+      /** ~6 lines at default font so the body field reads as “full” without scrolling */
+      minHeight: 148,
       paddingBottom: 10,
     },
     charCounter: {
@@ -879,11 +1055,11 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       ...Platform.select({
         ios: {
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.07,
-          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.16,
+          shadowRadius: 16,
         },
-        android: { elevation: 2 },
+        android: { elevation: 6 },
       }),
     },
     notifTopRow: {
@@ -916,6 +1092,27 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       height: StyleSheet.hairlineWidth,
       backgroundColor: 'rgba(60,60,67,0.15)',
       marginBottom: 8,
+    },
+    notifBodyRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    notifLogoSquare: {
+      width: 44,
+      height: 44,
+      borderRadius: 10,
+      overflow: 'hidden',
+      borderWidth: StyleSheet.hairlineWidth,
+      flexShrink: 0,
+    },
+    notifLogoImage: {
+      width: '100%',
+      height: '100%',
+    },
+    notifTextColumn: {
+      flex: 1,
+      minWidth: 0,
     },
     notifTitle: {
       fontSize: 15,
@@ -954,6 +1151,28 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     cancelBtnText: {
       fontSize: 16,
       fontWeight: '600',
+    },
+    previewBackBtn: {
+      flex: 0.9,
+      height: 52,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+        },
+        android: { elevation: 3 },
+      }),
+    },
+    previewBackBtnText: {
+      fontSize: 16,
+      fontWeight: '700',
+      letterSpacing: -0.2,
     },
     sendBtnWrap: {
       flex: 1.8,

@@ -436,7 +436,8 @@ export default function DesignCarousel({
       {showDots ? (
         <HorizontalCarouselDots
           count={designs.length}
-          minCount={2}
+          /* minCount=1 → show dots from 2 items (minCount=2 hid dots when only 2 designs fit on screen) */
+          minCount={1}
           activeIndex={carouselIndex}
           activeColor={colors.primary}
         />

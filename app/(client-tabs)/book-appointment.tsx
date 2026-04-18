@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
 import { Ionicons } from '@expo/vector-icons';
-import { Home } from 'lucide-react-native';
+import { Home, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,6 +20,7 @@ import BookingSuccessAnimatedOverlay, {
 import BookingStepTabs, {
   getBookingStepBarTopFromBottomNoTabBar,
   getBookingStepBarBottomInsetNoTabBar,
+  getBookingTimeSelectionScrollBottomPadding,
 } from '@/components/book-appointment/BookingStepTabs';
 import {
   BOOKING_PROGRESS_STRIP_HEIGHT,
@@ -955,6 +956,33 @@ export default function BookAppointment() {
       router.back();
     }
   }, [router]);
+
+  const handleBookingStepBack = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (currentStep === 2) {
+      setCurrentStep(1);
+      return;
+    }
+    if (currentStep === 3) {
+      setSelectedDay(null);
+      setSelectedTime(null);
+      setAvailableSlots([]);
+      setIsLoadingSlots(false);
+      setShowReplaceModal(false);
+      setExistingAppointment(null);
+      setCurrentStep(2);
+      return;
+    }
+    if (currentStep === 4) {
+      setSelectedTime(null);
+      try {
+        summarySheetRef.current?.collapse();
+      } catch {
+        /* noop */
+      }
+      setCurrentStep(3);
+    }
+  }, [currentStep]);
 
   const bookingStripTopInset = 0;
 
@@ -1992,7 +2020,7 @@ export default function BookAppointment() {
       Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null,
     styles,
     topOffset: TOP_OFFSET + bookingStripTopInset,
-    listBottomPadding: bookingBarTopFromBottom + 16,
+    listBottomPadding: getBookingTimeSelectionScrollBottomPadding(safeAreaInsets.bottom),
     availableTimeSlots: (availableTimeSlots || []) as any,
     selectedTime: selectedTime as any,
     primaryColor: colors.primary,
@@ -2104,13 +2132,23 @@ export default function BookAppointment() {
         >
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel={t('booking.summary.goHome', 'Home — leave booking')}
+            accessibilityLabel={
+              currentStep === 1
+                ? t('booking.summary.goHome', 'Home — leave booking')
+                : t('booking.topNav.backOneStep', 'Back one step')
+            }
             hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
-            onPress={handleBookingGoHome}
+            onPress={currentStep === 1 ? handleBookingGoHome : handleBookingStepBack}
             activeOpacity={0.82}
             style={styles.bookingHomeFab}
           >
-            <Home size={22} color="#FFFFFF" />
+            {currentStep === 1 ? (
+              <Home size={22} color="#FFFFFF" />
+            ) : isRtlLanguage(i18n?.language) ? (
+              <ChevronRight size={26} color="#FFFFFF" strokeWidth={2.6} />
+            ) : (
+              <ChevronLeft size={26} color="#FFFFFF" strokeWidth={2.6} />
+            )}
           </TouchableOpacity>
         </View>
 

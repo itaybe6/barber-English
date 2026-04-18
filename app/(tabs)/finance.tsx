@@ -35,7 +35,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import Animated, {
   Easing,
   Extrapolation,
@@ -54,7 +53,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import {
   BottomSheetModal,
   BottomSheetScrollView,
@@ -116,8 +114,6 @@ const CHART_COLORS = [
   '#6366F1', '#10B981', '#F59E0B', '#EC4899',
   '#3B82F6', '#8B5CF6', '#F97316', '#06B6D4',
 ];
-
-const AnimatedKeyboardAwareScrollView = Animated.createAnimatedComponent(KeyboardAwareScrollView);
 
 const FINANCE_HEADER_HIDE = { duration: 260, easing: Easing.in(Easing.cubic) } as const;
 const FINANCE_HEADER_SHOW = { duration: 300, easing: Easing.out(Easing.cubic) } as const;
@@ -292,8 +288,11 @@ function DailySparkline({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        // Don't capture the initial touch — let the parent ScrollView handle vertical scrolling
+        onStartShouldSetPanResponder: () => false,
+        // Only capture when the gesture is clearly horizontal (chart scrubbing, not scrolling)
+        onMoveShouldSetPanResponder: (_, gs) =>
+          Math.abs(gs.dx) > 6 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
         onPanResponderGrant: (e) => {
           if (hideTimer.current) clearTimeout(hideTimer.current);
           const rawIdx = Math.round((e.nativeEvent.locationX / chartWidth) * (n - 1));
@@ -811,6 +810,8 @@ const lbStyles = StyleSheet.create({
 function useCountUp(target: number, trigger: number, duration = 950): number {
   const [display, setDisplay] = useState(0);
   const sv = useSharedValue(0);
+  // Throttle JS-thread updates: only update every ~3 frames (~50ms) instead of every frame
+  const lastJsUpdate = useSharedValue(0);
 
   useEffect(() => {
     sv.value = 0;
@@ -819,7 +820,11 @@ function useCountUp(target: number, trigger: number, duration = 950): number {
   }, [target, trigger]);
 
   useDerivedValue(() => {
-    runOnJS(setDisplay)(Math.round(sv.value));
+    const now = sv.value;
+    if (Math.abs(now - lastJsUpdate.value) >= Math.max(1, target / 20)) {
+      lastJsUpdate.value = now;
+      runOnJS(setDisplay)(Math.round(now));
+    }
   });
 
   return display;
@@ -1391,16 +1396,12 @@ export default function FinanceScreen() {
         </LinearGradient>
       </Animated.View>
 
-      <AnimatedKeyboardAwareScrollView
+      <Animated.ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         bounces
         keyboardShouldPersistTaps="handled"
-        enableOnAndroid
-        extraScrollHeight={36}
-        extraHeight={12}
-        enableResetScrollToCoords={false}
         onScroll={financeScrollHandler}
         scrollEventThrottle={16}
       >
@@ -1841,7 +1842,7 @@ export default function FinanceScreen() {
         </View>
 
         <View style={{ height: Math.max(120, insets.bottom + 108) }} />
-      </AnimatedKeyboardAwareScrollView>
+      </Animated.ScrollView>
 
       {/* ── Add Expense Modal ── */}
       <BottomSheetModal

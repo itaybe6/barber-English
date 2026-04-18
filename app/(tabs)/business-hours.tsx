@@ -38,7 +38,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
-import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 
 // Modern Apple-like Colors
@@ -56,6 +55,17 @@ const Colors = {
   border: '#E5E5EA',
   separator: 'rgba(60, 60, 67, 0.36)',
 };
+
+/**
+ * iOS-style UISwitch: neutral track when off, Apple system green when on, white thumb.
+ * Distinct false/true track colors avoid Android Switch paint glitches when value hydrates from async load.
+ */
+const IOS_STYLE_SWITCH_PALETTE = {
+  trackOff: '#E5E5EA',
+  trackOn: '#34C759',
+  thumbOn: '#FFFFFF',
+  thumbOffAndroid: '#FFFFFF' as const,
+} as const;
 
 type BreakWindow = { id: string; start_time: string; end_time: string };
 
@@ -312,19 +322,7 @@ export default function BusinessHoursScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
-  const { onPrimary } = usePrimaryContrast();
   const primary = businessColors.primary;
-
-  /** Solid on-track + contrasting thumb — translucent track + thumb both “primary” can fail to repaint on Android after async load. */
-  const hoursSwitchPalette = useMemo(
-    () => ({
-      trackOff: Colors.border,
-      trackOn: businessColors.primary,
-      thumbOn: onPrimary,
-      thumbOff: Colors.card,
-    }),
-    [businessColors.primary, onPrimary],
-  );
 
   const hoursPageBg = Colors.background;
   const hoursOnGrayFg = readableOnHex(hoursPageBg);
@@ -661,9 +659,15 @@ export default function BusinessHoursScreen() {
             <Switch
               value={isActive}
               onValueChange={(value) => handleDayToggle(dayOfWeek, value)}
-              trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
-              thumbColor={isActive ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
-              ios_backgroundColor={hoursSwitchPalette.trackOff}
+              trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
+              thumbColor={
+                isActive
+                  ? IOS_STYLE_SWITCH_PALETTE.thumbOn
+                  : Platform.OS === 'android'
+                    ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
+                    : undefined
+              }
+              ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
               style={styles.switch}
             />
           </Animated.View>
@@ -689,9 +693,15 @@ export default function BusinessHoursScreen() {
                   <Switch
                     value={useBreaks}
                     onValueChange={setUseBreaks}
-                    trackColor={{ false: hoursSwitchPalette.trackOff, true: hoursSwitchPalette.trackOn }}
-                    thumbColor={useBreaks ? hoursSwitchPalette.thumbOn : hoursSwitchPalette.thumbOff}
-                    ios_backgroundColor={hoursSwitchPalette.trackOff}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
+                    thumbColor={
+                      useBreaks
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
+                        : Platform.OS === 'android'
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
+                          : undefined
+                    }
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
 

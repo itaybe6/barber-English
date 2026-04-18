@@ -98,8 +98,9 @@ export default function LoginOtpScreen() {
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
   const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(17,24,39,0.74)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(17,24,39,0.52)';
+  const accentInk = useMemo(() => (useLightFg ? '#FFFFFF' : darkenHex(primary, 0.52)), [useLightFg, primary]);
 
   const [passcode, setPasscode] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -405,8 +406,7 @@ export default function LoginOtpScreen() {
                   style={[
                     styles.resendText,
                     {
-                      color:
-                        otpCooldownSec > 0 || isLoginLocked ? heroMuted : useLightFg ? '#FFFFFF' : primary,
+                      color: otpCooldownSec > 0 || isLoginLocked ? heroMuted : accentInk,
                     },
                   ]}
                 >
@@ -449,7 +449,7 @@ export default function LoginOtpScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('login.otp.changePhone', 'שינוי מספר טלפון')}
               >
-                <Text style={[styles.changePhoneText, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                <Text style={[styles.changePhoneText, { color: accentInk }]}>
                   {t('login.otp.changePhone', 'שינוי מספר טלפון')}
                 </Text>
               </TouchableOpacity>

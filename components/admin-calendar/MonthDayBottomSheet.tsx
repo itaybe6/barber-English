@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Appointment, BusinessConstraint } from '@/lib/supabase';
+import { getPrimaryAsForegroundOnLightSurface } from '@/lib/colorContrast';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -160,6 +161,10 @@ export function MonthDayBottomSheet({
 
   const totalCount = appointments.length + constraints.length;
   const rowDir = isRtl ? 'row-reverse' : 'row';
+  const primaryFg = useMemo(
+    () => getPrimaryAsForegroundOnLightSurface(primaryColor, '#5F6368'),
+    [primaryColor],
+  );
 
   const renderBackdrop = useCallback(() => null, []);
 
@@ -188,7 +193,7 @@ export function MonthDayBottomSheet({
           </View>
           {totalCount > 0 && (
             <View style={[styles.countBadge, { backgroundColor: primaryColor + '18' }]}>
-              <Text style={[styles.countBadgeText, { color: primaryColor }]}>
+              <Text style={[styles.countBadgeText, { color: primaryFg }]}>
                 {totalCount} {totalCount === 1 ? 'תור' : 'תורים'}
               </Text>
             </View>
@@ -200,12 +205,12 @@ export function MonthDayBottomSheet({
         {/* Scrollable content — regular ScrollView so BottomSheetView can measure correctly */}
         {loading ? (
           <View style={styles.loadingBox}>
-            <ActivityIndicator color={primaryColor} size="large" />
+            <ActivityIndicator color={primaryFg} size="large" />
           </View>
         ) : appointments.length === 0 && constraints.length === 0 ? (
           <View style={styles.emptyBox}>
             <View style={[styles.emptyIcon, { backgroundColor: primaryColor + '12' }]}>
-              <Ionicons name="calendar-outline" size={32} color={primaryColor} />
+              <Ionicons name="calendar-outline" size={32} color={primaryFg} />
             </View>
             <Text style={styles.emptyTitle}>אין תורים ביום זה</Text>
             <Text style={styles.emptySub}>לחצו על יום אחר כדי לראות תורים</Text>
@@ -271,11 +276,11 @@ export function MonthDayBottomSheet({
                       <View style={[styles.apptAccent, { backgroundColor: primaryColor }]} />
                       <View style={[styles.cardInner, { flexDirection: rowDir }]}>
                         <View style={styles.timeCol}>
-                          <Text style={[styles.timeText, { color: primaryColor }]}>
+                          <Text style={[styles.timeText, { color: primaryFg }]}>
                             {formatTime(appt.slot_time)}
                           </Text>
-                          <Text style={[styles.timeSep, { color: primaryColor + '88' }]}>—</Text>
-                          <Text style={[styles.timeText, { color: primaryColor + 'AA' }]}>
+                          <Text style={[styles.timeSep, { color: primaryFg + 'AA' }]}>—</Text>
+                          <Text style={[styles.timeText, { color: primaryFg }]}>
                             {formatTime(endTime)}
                           </Text>
                         </View>
@@ -300,7 +305,7 @@ export function MonthDayBottomSheet({
                         </View>
 
                         <View style={[styles.avatar, { backgroundColor: primaryColor + '1A' }]}>
-                          <Text style={[styles.avatarText, { color: primaryColor }]}>{initials}</Text>
+                          <Text style={[styles.avatarText, { color: primaryFg }]}>{initials}</Text>
                         </View>
                       </View>
 

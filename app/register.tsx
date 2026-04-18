@@ -182,10 +182,12 @@ export default function RegisterScreen() {
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
   const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
-  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
-  const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(17,24,39,0.74)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(17,24,39,0.52)';
+  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(17,24,39,0.38)';
+  /** Pastel `primary` on a light gradient: raw primary is illegible for links, placeholders, icons. */
+  const accentInk = useMemo(() => (useLightFg ? '#FFFFFF' : darkenHex(primary, 0.52)), [useLightFg, primary]);
+  const phoneBorderFocus = useLightFg ? '#FFFFFF' : accentInk;
   const ctaElevatedBg = useLightFg ? '#FFFFFF' : 'rgba(0,0,0,0.1)';
   const ctaElevatedLabel = useLightFg ? '#141414' : '#111111';
   const ctaElevatedBorder = useLightFg ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.18)';
@@ -781,7 +783,7 @@ export default function RegisterScreen() {
                               styles.linkText,
                               {
                                 color:
-                                  otpCooldownSec > 0 ? heroMuted : useLightFg ? '#FFFFFF' : primary,
+                                  otpCooldownSec > 0 ? heroMuted : accentInk,
                               },
                             ]}
                           >
@@ -825,7 +827,7 @@ export default function RegisterScreen() {
                           }}
                           style={styles.linkBtn}
                         >
-                          <Text style={[styles.linkText, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                          <Text style={[styles.linkText, { color: accentInk }]}>
                             {t('register.otp.editPhone', 'שינוי מספר טלפון')}
                           </Text>
                         </TouchableOpacity>
@@ -910,7 +912,7 @@ export default function RegisterScreen() {
                             )}
                           </View>
                           <Text
-                            style={[styles.avatarCaption, { color: useLightFg ? 'rgba(255,255,255,0.95)' : primary }]}
+                            style={[styles.avatarCaption, { color: useLightFg ? 'rgba(255,255,255,0.95)' : accentInk }]}
                           >
                             {avatarLocalUri
                               ? t('register.profile.photoChange', 'החלפת תמונה')
@@ -1010,7 +1012,7 @@ export default function RegisterScreen() {
                                 hasBirthDate && birthDate
                                   ? useLightFg
                                     ? phoneBorderFocus
-                                    : primary
+                                    : accentInk
                                   : heroFaint
                               }
                               strokeWidth={1.6}
@@ -1143,7 +1145,7 @@ export default function RegisterScreen() {
                             </Text>
                             <RotateCcw
                               size={15}
-                              color={useLightFg ? 'rgba(255,255,255,0.88)' : primary}
+                              color={useLightFg ? 'rgba(255,255,255,0.88)' : accentInk}
                               strokeWidth={2.2}
                             />
                           </TouchableOpacity>
@@ -1213,7 +1215,7 @@ export default function RegisterScreen() {
                         <Text
                           onPress={() => router.push('/login')}
                           accessibilityRole="link"
-                          style={[styles.footerAction, { color: useLightFg ? '#FFFFFF' : primary }]}
+                          style={[styles.footerAction, { color: accentInk }]}
                           suppressHighlighting={false}
                         >
                           {t('auth.signInNow', 'התחבר/י עכשיו')}

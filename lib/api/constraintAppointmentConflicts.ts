@@ -53,7 +53,9 @@ export async function findBookedAppointmentsOverlappingConstraintWindows(
 
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, slot_date, slot_time, duration_minutes, client_name, status, is_available, barber_id')
+    .select(
+      'id, slot_date, slot_time, duration_minutes, client_name, client_phone, service_name, client_user_id, status, is_available, barber_id, business_id'
+    )
     .eq('business_id', businessId)
     .eq('barber_id', barberId)
     .eq('is_available', false)

@@ -18,7 +18,8 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessConstraintsApi, constraintTimeToMinutes } from '@/lib/api/businessConstraints';
-import type { BusinessConstraint } from '@/lib/supabase';
+import type { Appointment, BusinessConstraint } from '@/lib/supabase';
+import { cancelBookedAppointmentsDueToConstraint } from '@/lib/api/constraintAppointmentBulkCancel';
 import { findBookedAppointmentsOverlappingConstraintWindows } from '@/lib/api/constraintAppointmentConflicts';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
@@ -65,6 +66,16 @@ type ConstraintDraft = {
 };
 
 export type ConstraintsCalendarChangedPayload = { dateMin: string; dateMax: string };
+
+type PendingConstraintConflict =
+  | { kind: 'create'; entries: ConstraintDraft[]; conflicts: Appointment[] }
+  | {
+      kind: 'edit';
+      entry: ConstraintDraft;
+      underlyingIds: string[];
+      userIdForCreate: string | null;
+      conflicts: Appointment[];
+    };
 
 interface BusinessConstraintsModalProps {
   visible: boolean;
@@ -317,6 +328,8 @@ export default function BusinessConstraintsModal({
   const [contentReady, setContentReady] = useState(false);
   /** מפתחות `YYYY-MM-DD` מופרדים בפסיק — תאריכים עם תור של לקוח (`is_available` false) */
   const [bookedSlotDateKeys, setBookedSlotDateKeys] = useState('');
+  const [pendingConstraintConflict, setPendingConstraintConflict] = useState<PendingConstraintConflict | null>(null);
+  const [isConfirmingConstraintConflict, setIsConfirmingConstraintConflict] = useState(false);
 
   const editingId = editingConstraint?.id ?? null;
   const isEditMode = Boolean(editingId);
@@ -377,6 +390,13 @@ export default function BusinessConstraintsModal({
       cancelled = true;
     };
   }, [visible, user, today]);
+
+  useEffect(() => {
+    if (!visible) {
+      setPendingConstraintConflict(null);
+      setIsConfirmingConstraintConflict(false);
+    }
+  }, [visible]);
 
   const singleCalendarMarkedDates = useMemo(() => {
     const booked = new Set(
@@ -630,6 +650,135 @@ export default function BusinessConstraintsModal({
     );
   };
 
+  const handleConfirmConstraintConflict = async () => {
+    const pending = pendingConstraintConflict;
+    if (!pending) return;
+    setIsConfirmingConstraintConflict(true);
+    try {
+      const normReason = reason?.trim() || null;
+      const cancelRes = await cancelBookedAppointmentsDueToConstraint(pending.conflicts, (apt) => ({
+        title: t('admin.hoursAdmin.appointmentCancelledByConstraintTitle', 'התור בוטל'),
+        content: t('admin.hoursAdmin.appointmentCancelledByConstraintBody', '{{service}} · {{date}} · {{time}}', {
+          service: (apt.service_name || '').trim() || t('booking.field.service', 'שירות'),
+          date: apt.slot_date,
+          time: sliceHHMM(apt.slot_time),
+        }),
+      }));
+      if (!cancelRes.ok) {
+        Alert.alert(
+          t('error.generic', 'שגיאה'),
+          t('admin.hoursAdmin.constraintCancelAppointmentsFailed', 'לא ניתן היה לבטל את כל התורים. נסו שוב.'),
+        );
+        return;
+      }
+
+      if (pending.kind === 'create') {
+        await businessConstraintsApi.createConstraints(pending.entries as any, (user as any)?.id || null);
+        const sortedDates = pending.entries.map((e) => e.date).sort();
+        onConstraintsChanged?.({
+          dateMin: sortedDates[0]!,
+          dateMax: sortedDates[sortedDates.length - 1]!,
+        });
+        const successLines: SuccessLine[] = [
+          { variant: 'headline', text: t('admin.hoursAdmin.successAnimatedHeadline', 'האילוץ נשמר') },
+        ];
+        if (mode === 'hours') {
+          successLines.push(
+            { variant: 'accent', text: `${t('booking.field.date', 'תאריך')}: ${formatDatePretty(singleDateISO)}` },
+            {
+              variant: 'body',
+              text: `${t('admin.hoursAdmin.closedHours', 'שעות חסומות')}: ${displayTimeLabel(startTime)} – ${displayTimeLabel(endTime)}`,
+            },
+          );
+        } else if (mode === 'single-day') {
+          successLines.push(
+            { variant: 'accent', text: `${t('booking.field.date', 'תאריך')}: ${formatDatePretty(singleDateISO)}` },
+            { variant: 'body', text: t('admin.hoursAdmin.allDay', 'כל היום') },
+          );
+        } else {
+          successLines.push(
+            {
+              variant: 'accent',
+              text: t('admin.hoursAdmin.successDateRangeLine', '{{start}} — {{end}}', {
+                start: formatDatePretty(rangeStartISO!),
+                end: formatDatePretty(rangeEndISO!),
+              }),
+            },
+            {
+              variant: 'body',
+              text: t('admin.hoursAdmin.successDaysClosed', '{{count}} ימים סגורים (כל היום)', {
+                count: pending.entries.length,
+              }),
+            },
+          );
+        }
+        if (normReason) {
+          successLines.push({
+            variant: 'body',
+            text: t('admin.hoursAdmin.successReasonLine', 'סיבה: {{reason}}', { reason: normReason }),
+          });
+        }
+        setConstraintSuccessLines(successLines);
+        setConstraintSuccessAnimKey((k) => k + 1);
+        setShowConstraintSuccess(true);
+      } else {
+        const { entry, underlyingIds, userIdForCreate } = pending;
+        if (underlyingIds.length === 1) {
+          const res = await businessConstraintsApi.updateConstraint(underlyingIds[0]!, {
+            date: entry.date,
+            start_time: entry.start_time,
+            end_time: entry.end_time,
+            reason: normReason,
+          });
+          if (res.ok === false) {
+            Alert.alert(t('error.generic', 'שגיאה'), res.message);
+            return;
+          }
+        } else {
+          for (const id of underlyingIds) {
+            await businessConstraintsApi.deleteConstraint(id);
+          }
+          await businessConstraintsApi.createConstraints(
+            [{ date: entry.date, start_time: entry.start_time, end_time: entry.end_time, reason: normReason }] as any,
+            userIdForCreate,
+          );
+        }
+        onConstraintsChanged?.({ dateMin: entry.date, dateMax: entry.date });
+        const successLinesEdit: SuccessLine[] = [
+          { variant: 'headline', text: t('admin.hoursAdmin.successUpdateHeadline', 'האילוץ עודכן') },
+        ];
+        if (mode === 'hours') {
+          successLinesEdit.push(
+            { variant: 'accent', text: `${t('booking.field.date', 'תאריך')}: ${formatDatePretty(singleDateISO)}` },
+            {
+              variant: 'body',
+              text: `${t('admin.hoursAdmin.closedHours', 'שעות חסומות')}: ${displayTimeLabel(startTime)} – ${displayTimeLabel(endTime)}`,
+            },
+          );
+        } else {
+          successLinesEdit.push(
+            { variant: 'accent', text: `${t('booking.field.date', 'תאריך')}: ${formatDatePretty(singleDateISO)}` },
+            { variant: 'body', text: t('admin.hoursAdmin.allDay', 'כל היום') },
+          );
+        }
+        if (normReason) {
+          successLinesEdit.push({
+            variant: 'body',
+            text: t('admin.hoursAdmin.successReasonLine', 'סיבה: {{reason}}', { reason: normReason }),
+          });
+        }
+        setConstraintSuccessLines(successLinesEdit);
+        setConstraintSuccessAnimKey((k) => k + 1);
+        setShowConstraintSuccess(true);
+      }
+      setPendingConstraintConflict(null);
+    } catch {
+      Alert.alert(t('error.generic', 'שגיאה'), t('admin.hoursAdmin.saveFailed', 'שמירת האילוצים נכשלה'));
+    } finally {
+      setIsConfirmingConstraintConflict(false);
+    }
+  };
+
   // ── save ─────────────────────────────────────────────────────────────────────
 
   const save = async () => {
@@ -717,13 +866,13 @@ export default function BusinessConstraintsModal({
             { date: entry.date, start_time: entry.start_time, end_time: entry.end_time },
           ]);
           if (conflicts.length > 0) {
-            Alert.alert(
-              t('error.generic', 'שגיאה'),
-              t(
-                'admin.hoursAdmin.constraintConflictsWithAppointments',
-                'יש תורים קיימים בטווח הזמן שבחרת. בטל או העבר את התורים האלה לפני הוספת החסימה.',
-              ),
-            );
+            setPendingConstraintConflict({
+              kind: 'edit',
+              entry,
+              underlyingIds,
+              userIdForCreate: editTarget.user_id ?? ((user as any)?.id ?? null),
+              conflicts,
+            });
             return;
           }
         }
@@ -789,13 +938,7 @@ export default function BusinessConstraintsModal({
         }));
         const conflicts = await findBookedAppointmentsOverlappingConstraintWindows(barberId, windows);
         if (conflicts.length > 0) {
-          Alert.alert(
-            t('error.generic', 'שגיאה'),
-            t(
-              'admin.hoursAdmin.constraintConflictsWithAppointments',
-              'יש תורים קיימים בטווח הזמן שבחרת. בטל או העבר את התורים האלה לפני הוספת החסימה.',
-            ),
-          );
+          setPendingConstraintConflict({ kind: 'create', entries, conflicts });
           return;
         }
       }
@@ -1152,6 +1295,79 @@ export default function BusinessConstraintsModal({
         </View>
       </Modal>
 
+      {/* ── overlap: cancel client appointments + confirm constraint ── */}
+      <Modal
+        visible={pendingConstraintConflict !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!isConfirmingConstraintConflict) setPendingConstraintConflict(null);
+        }}
+      >
+        <View style={styles.conflictOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!isConfirmingConstraintConflict) setPendingConstraintConflict(null);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('cancel', 'ביטול')}
+          />
+          <View style={[styles.conflictCard, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+            <View style={[styles.conflictIconRing, { borderColor: `${UI.danger}44` }]}>
+              <Ionicons name="alert-circle" size={32} color={UI.danger} />
+            </View>
+            <Text
+              style={[styles.conflictCardTitle, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
+            >
+              {t('admin.hoursAdmin.constraintConflictSheetTitle', 'יש תורים שחופפים לאילוץ')}
+            </Text>
+            <Text
+              style={[styles.conflictCardBody, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
+            >
+              {t('admin.hoursAdmin.constraintConflictSheetBody', 'זיהינו {{count}} תורים של לקוחות שכבר נקבעו בטווח הזמן שבחרת.', {
+                count: pendingConstraintConflict?.conflicts.length ?? 0,
+              })}
+            </Text>
+            <Text
+              style={[styles.conflictCardHint, { textAlign: layoutRtl ? 'right' : 'center', writingDirection: layoutRtl ? 'rtl' : 'ltr' }]}
+            >
+              {t(
+                'admin.hoursAdmin.constraintConflictSheetHint',
+                'אם תאשר/י — כל התורים האלה יוסרו מהיומן, ולכל לקוח שמספר הטלפון שלו רשום במערכת תישלח התראה באפליקציה והודעת SMS על ביטול התור.',
+              )}
+            </Text>
+            <View style={[styles.conflictActionsRow, layoutRtl && styles.conflictActionsRowRtl]}>
+              <TouchableOpacity
+                style={[styles.conflictBtnSecondary, { borderColor: UI.border }]}
+                onPress={() => {
+                  if (!isConfirmingConstraintConflict) setPendingConstraintConflict(null);
+                }}
+                disabled={isConfirmingConstraintConflict}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.conflictBtnSecondaryText}>{t('admin.hoursAdmin.constraintConflictCancel', 'ביטול')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.conflictBtnPrimary, { backgroundColor: UI.danger }]}
+                onPress={() => void handleConfirmConstraintConflict()}
+                disabled={isConfirmingConstraintConflict}
+                activeOpacity={0.88}
+              >
+                {isConfirmingConstraintConflict ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.conflictBtnPrimaryText}>
+                    {t('admin.hoursAdmin.constraintConflictConfirm', 'אשר/י ובטל/י תורים')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── success animation ── */}
       <Modal
         visible={showConstraintSuccess}
@@ -1501,5 +1717,97 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
+  },
+
+  conflictOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.52)',
+    justifyContent: 'flex-end',
+  },
+  conflictCard: {
+    backgroundColor: UI.surface,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    alignItems: 'stretch',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.18, shadowRadius: 28 },
+      android: { elevation: 24 },
+    }),
+  },
+  conflictIconRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    borderWidth: 2,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    backgroundColor: `${UI.danger}10`,
+  },
+  conflictCardTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: UI.text,
+    marginBottom: 10,
+    letterSpacing: -0.3,
+  },
+  conflictCardBody: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: UI.text,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  conflictCardHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: UI.textSecondary,
+    lineHeight: 19,
+    marginBottom: 22,
+  },
+  conflictActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  conflictActionsRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  conflictBtnSecondary: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    backgroundColor: '#F2F2F7',
+  },
+  conflictBtnSecondaryText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: UI.textSecondary,
+  },
+  conflictBtnPrimary: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    ...Platform.select({
+      ios: { shadowColor: '#FF3B30', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12 },
+      android: { elevation: 6 },
+    }),
+  },
+  conflictBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
   },
 });

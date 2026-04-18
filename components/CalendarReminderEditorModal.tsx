@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  I18nManager,
   Platform,
   Pressable,
   ScrollView,
@@ -306,6 +307,15 @@ export default function CalendarReminderEditorModal({
 
   const primary = businessColors.primary || '#1A73E8';
   const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
+
+  /** Visual left edge of full-width inputs (flex-start/end swap under app RTL) */
+  const fieldLabelRowStyle = useMemo(
+    () => [
+      styles.fieldLabelRowInputStartBase,
+      { alignItems: I18nManager.isRTL ? ('flex-end' as const) : ('flex-start' as const) },
+    ],
+    [],
+  );
   /** Taller sheet so more form (calendar + time) fits without feeling cramped */
   const snapPoints = useMemo(() => ['90%'], []);
 
@@ -594,7 +604,7 @@ export default function CalendarReminderEditorModal({
         >
           {/* Title + notes (single card, delicate labels + placeholders) */}
           <View style={styles.card}>
-            <View style={styles.fieldLabelRowRtl}>
+            <View style={fieldLabelRowStyle}>
               <Text style={styles.fieldLabelDelicate}>
                 {tHe('admin.calendarReminder.fieldTitle', 'כותרת')}
               </Text>
@@ -613,7 +623,7 @@ export default function CalendarReminderEditorModal({
 
             <View style={styles.fieldDividerSpaced} />
 
-            <View style={styles.fieldLabelRowRtl}>
+            <View style={fieldLabelRowStyle}>
               <Text style={styles.fieldLabelDelicate}>
                 {tHe('admin.calendarReminder.fieldDetailsLabel', 'פרטים נוספים')}
                 <Text style={styles.fieldLabelOptional}>
@@ -950,22 +960,19 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     alignSelf: 'stretch',
   },
-  /** RTL row so short labels sit on the visual right, aligned with field placeholders */
-  fieldLabelRowRtl: {
+  /** Cross-axis alignment is applied in JS (`fieldLabelRowStyle`) for correct visual left under RTL */
+  fieldLabelRowInputStartBase: {
     alignSelf: 'stretch',
     width: '100%',
-    direction: 'rtl',
   },
   fieldLabelDelicate: {
-    alignSelf: 'stretch',
-    width: '100%',
+    alignSelf: 'flex-start',
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
     color: UI.textSecondary,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    marginBottom: 5,
+    textAlign: 'left',
+    marginBottom: 4,
     opacity: 0.95,
   },
   fieldLabelOptional: {

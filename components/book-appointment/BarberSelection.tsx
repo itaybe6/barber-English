@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -65,6 +65,28 @@ function primaryWithAlpha(hex: string, alpha: string): string {
   return hex;
 }
 
+const rtlLayout = I18nManager.isRTL;
+
+/**
+ * RTL layout strategy
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The FlatList is always direction:ltr so contentOffset.x is always positive
+ * and increases as you scroll right.
+ *
+ * In RTL mode we reverse the data array so that:
+ *   displayBarbers[0]        → barbers[n-1]  (leftmost physical slot)
+ *   displayBarbers[n-1]      → barbers[0]    (rightmost physical slot — start here)
+ *
+ * We then scroll to physical index (n-1) on mount so barbers[0] appears on the right.
+ * Swiping LEFT decreases contentOffset.x and reveals barbers[1], [2] … from the right.
+ *
+ * Mapping: logicalIndex  = rtl ? (n-1 - physicalIndex) : physicalIndex
+ *          physicalIndex = rtl ? (n-1 - logicalIndex)  : logicalIndex
+ *
+ * Dots row uses direction:'rtl' so dot 0 (barbers[0]) appears on the right.
+ * Each dot's inputRange center = physicalIndex of its logical barber.
+ */
+
 const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function BarberSelection(
   {
     visible,
@@ -90,6 +112,26 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
   const pageWidth = winW;
   const itemW = Math.round(pageWidth * ITEM_WIDTH_RATIO);
   const itemH = Math.round(itemW * ITEM_HEIGHT_RATIO);
+  const n = barbers.length;
+
+  /** Physical order fed to the FlatList (reversed in RTL). */
+  const displayBarbers = useMemo(
+    () => (rtlLayout ? [...barbers].reverse() : barbers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [barbers]
+  );
+
+  /** Convert logical barber index → physical FlatList index. */
+  const toPhysical = useCallback(
+    (logicalIdx: number) => (rtlLayout ? n - 1 - logicalIdx : logicalIdx),
+    [n]
+  );
+
+  /** Convert physical FlatList index → logical barber index. */
+  const toLogical = useCallback(
+    (physicalIdx: number) => (rtlLayout ? n - 1 - physicalIdx : physicalIdx),
+    [n]
+  );
 
   const reportFaceFrame = useCallback(() => {
     const node = selectedFaceRef.current;
@@ -109,40 +151,41 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
   useImperativeHandle(
     ref,
     () => ({
-    measureSelectedFaceInWindow(callback) {
-      requestAnimationFrame(() => {
-        const node = selectedFaceRef.current;
-        if (!node) {
-          callback(null);
-          return;
-        }
-        node.measureInWindow((x, y, w, h) => {
-          if (typeof w !== 'number' || typeof h !== 'number' || w < 12 || h < 12) {
-            callback(null);
-            return;
-          }
-          const r = { x, y, width: w, height: h };
-          onSelectedFaceWindowFrame?.(r);
-          callback(r);
+      measureSelectedFaceInWindow(callback) {
+        requestAnimationFrame(() => {
+          const node = selectedFaceRef.current;
+          if (!node) { callback(null); return; }
+          node.measureInWindow((x, y, w, h) => {
+            if (typeof w !== 'number' || typeof h !== 'number' || w < 12 || h < 12) {
+              callback(null);
+              return;
+            }
+            const r = { x, y, width: w, height: h };
+            onSelectedFaceWindowFrame?.(r);
+            callback(r);
+          });
         });
-      });
-    },
-    syncSelectedFaceFrame() {
-      requestAnimationFrame(reportFaceFrame);
-    },
+      },
+      syncSelectedFaceFrame() {
+        requestAnimationFrame(reportFaceFrame);
+      },
     }),
     [onSelectedFaceWindowFrame, reportFaceFrame]
   );
 
+  // Scroll to the correct physical position when selectedBarberId changes.
+  // When nothing is selected we default to logical 0 (= barbers[0]).
+  // In RTL that means physical n-1 (rightmost), so barbers[0] appears on the right from the start.
   useEffect(() => {
     if (!visible || barbers.length === 0) return;
-    const idx = barbers.findIndex((b) => String(b.id ?? '') === String(selectedBarberId ?? ''));
-    if (idx < 0) return;
+    const found = barbers.findIndex((b) => String(b.id ?? '') === String(selectedBarberId ?? ''));
+    const logicalIdx = found >= 0 ? found : 0;
+    const physIdx = toPhysical(logicalIdx);
     const id = requestAnimationFrame(() => {
-      flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+      flatListRef.current?.scrollToIndex({ index: physIdx, animated: false });
     });
     return () => cancelAnimationFrame(id);
-  }, [visible, barbers, selectedBarberId]);
+  }, [visible, barbers, selectedBarberId, toPhysical]);
 
   const getItemLayout = useCallback(
     (_: unknown, index: number) => ({
@@ -155,15 +198,16 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
 
   const syncSelectionFromOffset = useCallback(
     (x: number) => {
-      const index = Math.round(x / pageWidth);
-      const barber = barbers[index];
+      const physicalIndex = Math.round(x / pageWidth);
+      const logicalIndex = toLogical(physicalIndex);
+      const barber = barbers[logicalIndex];
       if (!barber) return;
       if (String(barber.id ?? '') !== String(selectedBarberId ?? '')) {
         onSelectBarber(barber);
       }
       requestAnimationFrame(reportFaceFrame);
     },
-    [barbers, onSelectBarber, pageWidth, reportFaceFrame, selectedBarberId]
+    [barbers, onSelectBarber, pageWidth, reportFaceFrame, selectedBarberId, toLogical]
   );
 
   const onMomentumScrollEnd = useCallback(
@@ -215,29 +259,34 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
           </View>
 
           <Reanimated.View entering={bookingStepRowEntering(0)} style={styles.carouselShell}>
-            <View style={styles.dotsRow} accessibilityLabel={t('booking.staffCarouselDots', 'Staff carousel pagination')}>
-              {barbers.map((_, index) => {
+            {/*
+              Dots row: direction:rtl places dot 0 (barbers[0]) on the right.
+              Each dot's active range is keyed on its PHYSICAL index so it stays
+              in sync with scrollX (which always tracks LTR contentOffset.x).
+            */}
+            <View
+              style={[styles.dotsRow, rtlLayout && { direction: 'rtl' }]}
+              accessibilityLabel={t('booking.staffCarouselDots', 'Staff carousel pagination')}
+            >
+              {barbers.map((_, logicalIndex) => {
+                const physCenter = toPhysical(logicalIndex);
                 const pageProgress = RNAnimated.divide(scrollX, pageWidth);
                 const opacity = pageProgress.interpolate({
-                  inputRange: [index - 0.6, index, index + 0.6],
+                  inputRange: [physCenter - 0.6, physCenter, physCenter + 0.6],
                   outputRange: [0.35, 1, 0.35],
                   extrapolate: 'clamp',
                 });
                 const scale = pageProgress.interpolate({
-                  inputRange: [index - 0.55, index, index + 0.55],
+                  inputRange: [physCenter - 0.55, physCenter, physCenter + 0.55],
                   outputRange: [1, DOT_ACTIVE_SCALE, 1],
                   extrapolate: 'clamp',
                 });
                 return (
                   <RNAnimated.View
-                    key={`dot-${index}`}
+                    key={`dot-${logicalIndex}`}
                     style={[
                       styles.dotWrap,
-                      {
-                        marginHorizontal: DOT_GAP / 2,
-                        opacity,
-                        transform: [{ scale }],
-                      },
+                      { marginHorizontal: DOT_GAP / 2, opacity, transform: [{ scale }] },
                     ]}
                   >
                     <View style={styles.dot} />
@@ -246,11 +295,11 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
               })}
             </View>
 
-            {/* LTR scroll so swipe direction and scrollX math match the Nike-style strip */}
+            {/* FlatList is always LTR — contentOffset.x is always well-behaved. */}
             <View style={styles.carouselLtr}>
               <RNAnimated.FlatList
                 ref={flatListRef}
-                data={barbers}
+                data={displayBarbers}
                 horizontal
                 pagingEnabled
                 nestedScrollEnabled
@@ -269,7 +318,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                     flatListRef.current?.scrollToIndex({ index, animated: false });
                   }, 80);
                 }}
-                renderItem={({ item: barber, index }) => {
+                renderItem={({ item: barber, index: physicalIndex }) => {
                   const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
                   const uri = (barber?.image_url as string | undefined) || '';
 
@@ -287,7 +336,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                     >
                       <Pressable
                         onPress={() => {
-                          flatListRef.current?.scrollToIndex({ index, animated: true });
+                          flatListRef.current?.scrollToIndex({ index: physicalIndex, animated: true });
                           requestAnimationFrame(reportFaceFrame);
                           onBarberTap?.(barber);
                         }}
@@ -305,9 +354,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                           collapsable={false}
                           onLayout={
                             isSelected
-                              ? () => {
-                                  requestAnimationFrame(reportFaceFrame);
-                                }
+                              ? () => { requestAnimationFrame(reportFaceFrame); }
                               : undefined
                           }
                           style={[
@@ -341,6 +388,10 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
               />
             </View>
 
+            {/*
+              Name strip: each name's active physical center = toPhysical(logicalIndex),
+              same logic as the dots.
+            */}
             <View
               style={[
                 styles.nameStrip,
@@ -353,15 +404,16 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                 },
               ]}
             >
-              {barbers.map((barber, index) => {
+              {barbers.map((barber, logicalIndex) => {
+                const physCenter = toPhysical(logicalIndex);
                 const opacity = RNAnimated.divide(scrollX, pageWidth).interpolate({
-                  inputRange: [index - 0.8, index, index + 1],
+                  inputRange: [physCenter - 0.8, physCenter, physCenter + 0.8],
                   outputRange: [0, 1, 0],
                   extrapolate: 'clamp',
                 });
                 return (
                   <RNAnimated.Text
-                    key={String(barber.id ?? `name-${index}`)}
+                    key={String(barber.id ?? `name-${logicalIndex}`)}
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     style={[
@@ -443,7 +495,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
     backgroundColor: 'transparent',
-    direction: 'ltr',
   },
   dotWrap: {
     width: DOT_SIZE + 4,

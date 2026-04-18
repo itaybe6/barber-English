@@ -22,6 +22,7 @@ import {
   InteractionManager,
 } from 'react-native';
 import Colors from '@/constants/colors';
+import { getPrimaryAsForegroundOnLightSurface } from '@/lib/colorContrast';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
 import { AvailableTimeSlot, supabase, getBusinessId, type CalendarReminder, type BusinessConstraint } from '@/lib/supabase';
@@ -200,7 +201,7 @@ const _baseDaySize = _screenWidth / (_daysInWeekToDisplay + 1);
 const _daySize = Math.max(_baseDaySize, 64);
 const _hourSize = Math.max(_daySize * 1.35, 78);
 const _extraPaddingBottom = _hourSize;
-/** תצוגת יומן שבועית (אדמין): חלון שעות קבוע, בנפרד משעות העסק של התצוגה היומית */
+/** תצוגת יומן שבועית (אדמין): ברירת מחדל לחלון השעות; מורחב אוטומטית כשיש אירועים מחוץ לטווח */
 const WEEK_GRID_VIEW_START = '07:00';
 const WEEK_GRID_VIEW_END = '22:00';
 /** ריווח תחתון בתצוגת שבוע — מעל ה-tab הצף (~100px + שורת שעה לסנכרון עמודת זמנים) */
@@ -259,6 +260,22 @@ function _isFullDayConstraint(c: BusinessConstraint, mf: (t?: string | null) => 
   const s = mf(c.start_time);
   const e = mf(c.end_time);
   return s <= 0 && e >= 23 * 60 + 45;
+}
+
+function _minutesFromMidnightStatic(time?: string | null): number {
+  if (!time) return 0;
+  const parts = String(time).split(':');
+  const hh = parseInt(parts[0] || '0', 10);
+  const mm = parseInt(parts[1] || '0', 10);
+  return hh * 60 + mm;
+}
+
+/** Minutes from midnight; supports 24:00 as end-of-day label (1440). */
+function _minutesToHHmm(m: number): string {
+  const clamped = Math.max(0, Math.min(m, 24 * 60));
+  const hh = Math.floor(clamped / 60);
+  const mm = clamped % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
 function layoutConstraintOnWeekColumn(
@@ -641,7 +658,13 @@ const WeekAppointmentCard = memo(
               <Text numberOfLines={1} style={weekStyles.weekAptClient}>
                 {clientName}
               </Text>
-              {hasPhone && <Ionicons name="call-outline" size={9} color={primaryColor} />}
+              {hasPhone && (
+                <Ionicons
+                  name="call-outline"
+                  size={9}
+                  color={getPrimaryAsForegroundOnLightSurface(primaryColor, '#5F6368')}
+                />
+              )}
             </View>
             {cardHeight >= 38 && (
               <Text numberOfLines={1} style={weekStyles.weekAptService}>
@@ -1433,14 +1456,6 @@ export default function AdminAppointmentsScreen() {
     };
   }, [monthDayModalDate, user?.id]);
 
-  // Scroll to morning by default for convenience
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [selectedDateStr, dayStart]);
-
   const onRefresh = useCallback(() => {
     void loadAppointmentsForDate(selectedDateStr, true, calendarView === 'month');
     if (calendarView === 'month') {
@@ -1473,37 +1488,71 @@ export default function AdminAppointmentsScreen() {
 
   const compareTimes = (a: string, b: string) => a.localeCompare(b);
 
-  const halfHourLabels = useMemo(() => {
-    const labels: string[] = [];
-    let t = dayStart;
-    while (compareTimes(t, dayEnd) < 0) {
-      labels.push(formatTime(t));
-      t = addMinutes(t, 30);
-    }
-    return labels;
-  }, [dayStart, dayEnd]);
-
-  /** Week grid: 07:00–22:00, one row per hour (not tied to business-hours day strip). */
-  const weekTimeline = useMemo(() => {
-    const [sh, smin] = WEEK_GRID_VIEW_START.split(':').map((x) => parseInt(x, 10));
-    const [eh, emin] = WEEK_GRID_VIEW_END.split(':').map((x) => parseInt(x, 10));
-    const startMin = (sh || 0) * 60 + (smin || 0);
-    const endMin = (eh || 0) * 60 + (emin || 0);
-    const spanMin = Math.max(60, endMin - startMin);
-    const hourCount = spanMin / 60;
-    const labelBlocks = Array.from({ length: hourCount }, (_, i) => {
-      const m = startMin + i * 60;
-      const hh = Math.floor(m / 60);
-      const mm = m % 60;
-      return dayjs().startOf('day').hour(hh).minute(mm).second(0).millisecond(0);
-    });
-    return { startMin, endMin, hourCount, labelBlocks };
-  }, []);
-
   const displayDayConstraints = useMemo(
     () => mergeConstraintsForDisplay(dayConstraints),
     [dayConstraints]
   );
+
+  /** טווח הגריד ביום — שעות עבודה + הרחבה כדי להציג אילוצים/תורים/תזכורות מחוץ לשעות הפעילות */
+  const dayTimelineBounds = useMemo(() => {
+    const mf = _minutesFromMidnightStatic;
+    let gridStart = mf(dayStart);
+    let gridEndExclusive = mf(dayEnd);
+
+    for (const c of displayDayConstraints) {
+      if (_isFullDayConstraint(c, mf)) {
+        return { startStr: _minutesToHHmm(0), endStr: _minutesToHHmm(24 * 60) };
+      }
+    }
+
+    for (const c of displayDayConstraints) {
+      const sm = mf(c.start_time);
+      let em = mf(c.end_time);
+      if (em <= sm) em = sm + 30;
+      gridStart = Math.min(gridStart, sm);
+      gridEndExclusive = Math.max(gridEndExclusive, em);
+    }
+    for (const apt of appointments) {
+      const sm = mf(apt.slot_time);
+      const em = _calendarRangeEndMinutes(sm, apt.duration_minutes || 30);
+      gridStart = Math.min(gridStart, sm);
+      gridEndExclusive = Math.max(gridEndExclusive, em);
+    }
+    for (const r of calendarReminders) {
+      const sm = mf(r.start_time);
+      const em = _calendarRangeEndMinutes(sm, r.duration_minutes || 30);
+      gridStart = Math.min(gridStart, sm);
+      gridEndExclusive = Math.max(gridEndExclusive, em);
+    }
+
+    const snappedStart = Math.floor(gridStart / 30) * 30;
+    const snappedEndExclusive = Math.max(Math.ceil(gridEndExclusive / 30) * 30, snappedStart + 30);
+    const startClamped = Math.max(0, snappedStart);
+    const endExclusiveClamped = Math.min(24 * 60, Math.max(snappedEndExclusive, startClamped + 30));
+
+    return {
+      startStr: _minutesToHHmm(startClamped),
+      endStr: _minutesToHHmm(endExclusiveClamped),
+    };
+  }, [dayStart, dayEnd, displayDayConstraints, appointments, calendarReminders]);
+
+  const halfHourLabels = useMemo(() => {
+    const labels: string[] = [];
+    let t = dayTimelineBounds.startStr;
+    while (compareTimes(t, dayTimelineBounds.endStr) < 0) {
+      labels.push(formatTime(t));
+      t = addMinutes(t, 30);
+    }
+    return labels;
+  }, [dayTimelineBounds.startStr, dayTimelineBounds.endStr]);
+
+  // Scroll to top when the day or visible time range changes (incl. grid expand for off-hours items)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [selectedDateStr, dayTimelineBounds.startStr, dayTimelineBounds.endStr]);
 
   const dayViewLaneMetrics = useMemo(() => {
     const mid = 2;
@@ -1574,6 +1623,63 @@ export default function AdminAppointmentsScreen() {
     return weekGridReverseDays ? [...days].reverse() : days;
   }, [selectedDateStr, calendarView, weekGridReverseDays]);
 
+  /** שורות השעות בשבוע — ברירת מחדל + הרחבה כשיש אילוצים/תורים/תזכורות מחוץ לחלון */
+  const weekTimeline = useMemo(() => {
+    const mf = _minutesFromMidnightStatic;
+    let startMin = mf(WEEK_GRID_VIEW_START);
+    let endMinExclusive = mf(WEEK_GRID_VIEW_END);
+
+    const weekHasFullDayConstraint = gridDays.some((d) => {
+      const cons = mergeConstraintsForDisplay(rangeConstraints.get(d.formatted) ?? []);
+      return cons.some((c) => _isFullDayConstraint(c, mf));
+    });
+
+    if (weekHasFullDayConstraint) {
+      startMin = 0;
+      endMinExclusive = 24 * 60;
+    } else {
+      for (const d of gridDays) {
+        const cons = mergeConstraintsForDisplay(rangeConstraints.get(d.formatted) ?? []);
+        for (const c of cons) {
+          const sm = mf(c.start_time);
+          let em = mf(c.end_time);
+          if (em <= sm) em = sm + 30;
+          startMin = Math.min(startMin, sm);
+          endMinExclusive = Math.max(endMinExclusive, em);
+        }
+      }
+      for (const d of gridDays) {
+        for (const apt of rangeAppointments.get(d.formatted) ?? []) {
+          const sm = mf(apt.slot_time);
+          const em = _calendarRangeEndMinutes(sm, apt.duration_minutes || 30);
+          startMin = Math.min(startMin, sm);
+          endMinExclusive = Math.max(endMinExclusive, em);
+        }
+        for (const r of rangeReminders.get(d.formatted) ?? []) {
+          const sm = mf(r.start_time);
+          const em = _calendarRangeEndMinutes(sm, r.duration_minutes || 30);
+          startMin = Math.min(startMin, sm);
+          endMinExclusive = Math.max(endMinExclusive, em);
+        }
+      }
+    }
+
+    startMin = Math.floor(startMin / 60) * 60;
+    endMinExclusive = Math.max(Math.ceil(endMinExclusive / 60) * 60, startMin + 60);
+    startMin = Math.max(0, startMin);
+    endMinExclusive = Math.min(24 * 60, Math.max(endMinExclusive, startMin + 60));
+
+    const spanMin = Math.max(60, endMinExclusive - startMin);
+    const hourCount = spanMin / 60;
+    const labelBlocks = Array.from({ length: hourCount }, (_, i) => {
+      const m = startMin + i * 60;
+      const hh = Math.floor(m / 60);
+      const mm = m % 60;
+      return dayjs().startOf('day').hour(hh).minute(mm).second(0).millisecond(0);
+    });
+    return { startMin, endMin: endMinExclusive, hourCount, labelBlocks };
+  }, [gridDays, rangeConstraints, rangeAppointments, rangeReminders]);
+
   /** Week that contains selectedDate — used to refresh week-range data even when calendar is on month/day */
   const selectedWeekChronoRange = useMemo(() => {
     const wkStart = _getStartOfWeek(selectedDate);
@@ -1632,13 +1738,13 @@ export default function AdminAppointmentsScreen() {
     if (selectedDateStr !== _formatLocalYyyyMmDd(new Date())) return null;
     const now = new Date();
     const mins = now.getHours() * 60 + now.getMinutes();
-    const d0 = minutesFromMidnight(dayStart);
+    const d0 = minutesFromMidnight(dayTimelineBounds.startStr);
     const offset = mins - d0;
     if (offset < 0 || halfHourLabels.length === 0) return null;
     const maxM = halfHourLabels.length * 30;
     if (offset > maxM) return null;
     return (offset / 30) * HALF_HOUR_BLOCK_HEIGHT + HALF_HOUR_BLOCK_HEIGHT / 2;
-  }, [calendarView, selectedDateStr, dayStart, halfHourLabels.length]);
+  }, [calendarView, selectedDateStr, dayTimelineBounds.startStr, halfHourLabels.length]);
 
   const goPrevWeek = useCallback(() => {
     const d = new Date(selectedDate);
@@ -2357,6 +2463,11 @@ export default function AdminAppointmentsScreen() {
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarSecondary = businessColors.secondary || calendarPrimary;
   const calendarRipple = `${calendarPrimary}2A`;
+  /** שם שירות / אייקונים על כרטיס לבן — primary בהיר כמעט בלתי נראה */
+  const calendarPrimaryOnLight = useMemo(
+    () => getPrimaryAsForegroundOnLightSurface(calendarPrimary, '#5F6368'),
+    [calendarPrimary],
+  );
 
   const adminMonthAnchorKey = adminVisibleMonthKey;
 
@@ -2700,7 +2811,7 @@ export default function AdminAppointmentsScreen() {
                   {displayDayConstraints.map((c) => {
                     const layout = layoutConstraintOnDayGrid(
                       c,
-                      dayStart,
+                      dayTimelineBounds.startStr,
                       halfHourLabels.length,
                       HALF_HOUR_BLOCK_HEIGHT,
                       minutesFromMidnight
@@ -2746,7 +2857,7 @@ export default function AdminAppointmentsScreen() {
                   })}
                   {calendarReminders.map((r) => {
                     const aptMinutes = minutesFromMidnight(r.start_time);
-                    const dayStartMinutes = minutesFromMidnight(dayStart);
+                    const dayStartMinutes = minutesFromMidnight(dayTimelineBounds.startStr);
                     const offsetMinutes = aptMinutes - dayStartMinutes;
                     const top = (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT + HALF_HOUR_BLOCK_HEIGHT / 2;
                     const durationMinutes = r.duration_minutes || 30;
@@ -2798,7 +2909,7 @@ export default function AdminAppointmentsScreen() {
                   {appointments.map((apt) => {
                     // Calculate exact position using minutes from midnight
                     const aptMinutes = minutesFromMidnight(apt.slot_time);
-                    const dayStartMinutes = minutesFromMidnight(dayStart);
+                    const dayStartMinutes = minutesFromMidnight(dayTimelineBounds.startStr);
 
                     // Calculate the exact offset in minutes from day start
                     const offsetMinutes = aptMinutes - dayStartMinutes;
@@ -2855,7 +2966,7 @@ export default function AdminAppointmentsScreen() {
                             <Text numberOfLines={1} style={styles.aptClientName}>
                               {apt.client_name || 'לקוח'}
                             </Text>
-                            <Text numberOfLines={1} style={[styles.aptServiceName, { color: calendarPrimary }]}>
+                            <Text numberOfLines={1} style={[styles.aptServiceName, { color: calendarPrimaryOnLight }]}>
                               {apt.service_name || ''}
                             </Text>
                             <Text numberOfLines={1} style={styles.aptTimeRange}>
@@ -2983,7 +3094,7 @@ export default function AdminAppointmentsScreen() {
                         {/* Avatar with ring */}
                         <View style={[styles.actionsAvatarRing, { borderColor: `${calendarPrimary}35` }]}>
                           <View style={[styles.actionsClientAvatar, { backgroundColor: `${calendarPrimary}22` }]}>
-                            <Text style={[styles.actionsClientAvatarText, { color: calendarPrimary }]}>
+                            <Text style={[styles.actionsClientAvatarText, { color: calendarPrimaryOnLight }]}>
                               {initials}
                             </Text>
                           </View>
@@ -3009,8 +3120,8 @@ export default function AdminAppointmentsScreen() {
                           { icon: 'hourglass-outline' as const, label: `${dur} ${tHe('admin.appointments.detailMinutesShort', 'דק׳')}` },
                         ].map((chip) => (
                           <View key={chip.icon} style={[styles.actionsChip, { backgroundColor: `${calendarPrimary}12` }]}>
-                            <Ionicons name={chip.icon} size={12} color={calendarPrimary} />
-                            <Text style={[styles.actionsChipText, { color: calendarPrimary }]}>{chip.label}</Text>
+                            <Ionicons name={chip.icon} size={12} color={calendarPrimaryOnLight} />
+                            <Text style={[styles.actionsChipText, { color: calendarPrimaryOnLight }]}>{chip.label}</Text>
                           </View>
                         ))}
                       </View>
@@ -3102,7 +3213,9 @@ export default function AdminAppointmentsScreen() {
                 onPress={closeDeleteAppointmentModal}
                 disabled={isDeleting}
               >
-                <Text style={[styles.iosAlertButtonDefaultText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
+                <Text style={[styles.iosAlertButtonDefaultText, { color: calendarPrimaryOnLight }]}>
+                  {tHe('cancel', 'ביטול')}
+                </Text>
               </TouchableOpacity>
               <View style={styles.iosAlertButtonDivider} />
               <TouchableOpacity

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from 'react-i18next';
 import { supabase, getBusinessId } from '@/lib/supabase';
+import { appointmentBarberSlotOrFilter } from '@/lib/api/clientWeekAvailability';
 import { servicesApi } from '@/lib/api/services';
 import { usersApi } from '@/lib/api/users';
 import type { Service } from '@/lib/supabase';
@@ -69,9 +70,31 @@ function triggerMediumHaptic() {
   }
 }
 
+function addMinutesToHHMM(timeHHMM: string, addMinutes: number): string {
+  const parts = String(timeHHMM || '00:00').trim().split(':');
+  const h = parseInt(parts[0] || '0', 10);
+  const m = parseInt(parts[1] || '0', 10);
+  let total = h * 60 + m + addMinutes;
+  total = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = Math.floor(total / 60);
+  const mm = total % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+export function totalServicesDurationMinutes(svcs: Service[]): number {
+  if (!svcs.length) return 60;
+  return svcs.reduce(
+    (acc, s) => acc + (s.duration_minutes && s.duration_minutes > 0 ? s.duration_minutes : 60),
+    0,
+  );
+}
+
 export interface AdminBookingSaveSuccessPayload {
   client: { name: string; phone: string; id?: string };
+  /** First service (calendar / legacy consumers). */
   service: Service;
+  /** Full list when several services are booked in one visit. */
+  services?: Service[];
   date: Date;
   /** `HH:MM` */
   time: string;
@@ -84,16 +107,23 @@ export interface UseAdminAddAppointmentFormOptions {
   onSaveSuccess?: (payload: AdminBookingSaveSuccessPayload) => void;
   /** Called after the user acknowledges success (Alert OK, or overlay dismiss). */
   onSuccess?: () => void;
+  /** Fixed break between appointments (minutes) — same as client `book-appointment` slot walk. */
+  globalBreakMinutes?: number;
 }
 
-export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSuccess }: UseAdminAddAppointmentFormOptions) {
+export function useAdminAddAppointmentForm({
+  initialDateKey,
+  onSaveSuccess,
+  onSuccess,
+  globalBreakMinutes = 0,
+}: UseAdminAddAppointmentFormOptions) {
   const user = useAuthStore((state) => state.user);
   const { t } = useTranslation();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState<AdminClientPick | null>(null);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const [showClientDropdown, setShowClientDropdown] = useState(false);
@@ -125,6 +155,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
   const [isFinalizingClientStep, setIsFinalizingClientStep] = useState(false);
 
   const appliedInitialDateRef = useRef<string | null>(null);
+  const loadTimesSeqRef = useRef(0);
 
   const loadClients = useCallback(async () => {
     try {
@@ -194,14 +225,28 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
   }, [clientSearch, clients]);
 
   const loadAvailableTimesForDate = useCallback(
-    async (date: Date, service: Service | null) => {
-      if (!service) {
+    async (date: Date, svcs: Service[]) => {
+      if (svcs.length === 0) {
         setAvailableTimes([]);
+        setIsLoadingTimes(false);
         return;
       }
 
+      const mySeq = ++loadTimesSeqRef.current;
       setIsLoadingTimes(true);
       setAvailableTimes([]);
+
+      const toMinutes = (time: string) => {
+        const parts = String(time).split(':');
+        const h = parseInt(parts[0] || '0', 10);
+        const m = parseInt(parts[1] || '0', 10);
+        return h * 60 + m;
+      };
+      const toHHMM = (mins: number) => {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      };
 
       try {
         const dateString = formatDateToLocalString(date);
@@ -235,17 +280,30 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
         }
 
         if (!businessHours) {
-          setAvailableTimes([]);
+          if (mySeq === loadTimesSeqRef.current) {
+            setAvailableTimes([]);
+          }
+          return;
+        }
+
+        if (!user?.id) {
+          if (mySeq === loadTimesSeqRef.current) {
+            setAvailableTimes([]);
+          }
           return;
         }
 
         const normalize = (s: unknown) => String(s).slice(0, 5);
         const startTime = normalize(businessHours.start_time);
         const endTime = normalize(businessHours.end_time);
-        const slotDuration =
-          service?.duration_minutes && service.duration_minutes > 0
-            ? service.duration_minutes
-            : (businessHours.slot_duration_minutes as number) || 60;
+        const totalDur = totalServicesDurationMinutes(svcs);
+        const serviceDuration = Math.max(
+          1,
+          Number.isFinite(totalDur) && totalDur > 0
+            ? totalDur
+            : Math.max(1, Number(businessHours.slot_duration_minutes) || 60),
+        );
+        const breakM = Math.max(0, Math.min(180, Number(globalBreakMinutes) || 0));
 
         type Window = { start: string; end: string };
         const baseWindows: Window[] = [{ start: startTime, end: endTime }];
@@ -281,38 +339,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
           return result.filter((w) => w.start < w.end);
         };
 
-        const windows = subtractBreaks(baseWindows, allBreaks);
-
-        const addMinutes = (hhmm: string, minutes: number): string => {
-          const [h, m] = hhmm.split(':').map((x: string) => parseInt(x, 10));
-          const total = h * 60 + m + minutes;
-          const hh = Math.floor(total / 60) % 24;
-          const mm = total % 60;
-          return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
-        };
-        const compareTimes = (a: string, b: string) => a.localeCompare(b);
-
-        const slots: string[] = [];
-        for (const w of windows) {
-          let tt = w.start as string;
-          while (compareTimes(addMinutes(tt, slotDuration), w.end) <= 0) {
-            slots.push(tt.slice(0, 5));
-            tt = addMinutes(tt, slotDuration);
-          }
-        }
-
-        const { data: existingAppointments } = await supabase
-          .from('appointments')
-          .select('slot_time, is_available')
-          .eq('business_id', businessId)
-          .eq('slot_date', dateString)
-          .eq('user_id', user?.id);
-
-        const bookedTimes = new Set(
-          (existingAppointments || [])
-            .filter((apt: { is_available?: boolean }) => apt.is_available === false)
-            .map((apt: { slot_time: string }) => String(apt.slot_time).slice(0, 5))
-        );
+        let windows = subtractBreaks(baseWindows, allBreaks);
 
         let constraintsQuery = supabase
           .from('business_constraints')
@@ -326,36 +353,156 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
           constraintsQuery = constraintsQuery.is('user_id', null);
         }
         const { data: constraintsRows } = await constraintsQuery;
-        const withinConstraint = (slot: string) => {
-          return (constraintsRows || []).some((c: { start_time: string; end_time: string }) => {
-            const s = String(c.start_time).slice(0, 5);
-            const e = String(c.end_time).slice(0, 5);
-            return s <= slot && slot < e;
-          });
+        for (const c of constraintsRows || []) {
+          const s = normalize((c as { start_time: string }).start_time);
+          const e = normalize((c as { end_time: string }).end_time);
+          const next: Window[] = [];
+          for (const w of windows) {
+            if (e <= w.start || s >= w.end) {
+              next.push(w);
+              continue;
+            }
+            if (w.start < s) next.push({ start: w.start, end: s });
+            if (e < w.end) next.push({ start: e, end: w.end });
+          }
+          windows = next.filter((w) => w.start < w.end);
+        }
+
+        const { data: existingAppointments } = await supabase
+          .from('appointments')
+          .select('slot_time, is_available, duration_minutes')
+          .eq('business_id', businessId)
+          .eq('slot_date', dateString)
+          .or(appointmentBarberSlotOrFilter(user.id));
+
+        type Busy = { startMin: number; endMin: number };
+        const busyIntervals: Busy[] = (existingAppointments || [])
+          .filter((apt: { is_available?: boolean }) => apt.is_available === false)
+          .map((apt: { slot_time: string; duration_minutes?: number }) => {
+            const startMin = toMinutes(String(apt.slot_time));
+            const dur =
+              typeof apt.duration_minutes === 'number' && apt.duration_minutes > 0
+                ? apt.duration_minutes
+                : 60;
+            return { startMin, endMin: startMin + dur };
+          })
+          .sort((a, b) => a.startMin - b.startMin);
+
+        const normalizedWindows = windows
+          .map((w) => ({ startMin: toMinutes(w.start), endMin: toMinutes(w.end) }))
+          .filter((w) => w.startMin < w.endMin)
+          .sort((a, b) => a.startMin - b.startMin);
+
+        const overlapsBusy = (startMin: number, endMin: number) =>
+          busyIntervals.some((b) => Math.max(b.startMin, startMin) < Math.min(b.endMin, endMin));
+
+        const findPrevBusyEnd = (startMin: number) => {
+          let prevEnd = -1;
+          for (const b of busyIntervals) {
+            if (b.endMin <= startMin && b.endMin > prevEnd) prevEnd = b.endMin;
+          }
+          return prevEnd;
         };
 
-        const availableSlots = slots.filter((slot) => !bookedTimes.has(slot)).filter((slot) => !withinConstraint(slot));
-        setAvailableTimes(availableSlots);
+        const findNextBusyStart = (startMin: number) => {
+          let nextStart = Number.POSITIVE_INFINITY;
+          for (const b of busyIntervals) {
+            if (b.startMin >= startMin && b.startMin < nextStart) nextStart = b.startMin;
+          }
+          return Number.isFinite(nextStart) ? nextStart : -1;
+        };
+
+        const times: string[] = [];
+        let guard = 0;
+        walk: for (const w of normalizedWindows) {
+          let tMin = w.startMin;
+          while (tMin + serviceDuration <= w.endMin) {
+            guard += 1;
+            if (guard > 20000) {
+              console.warn('[admin] bookable slot walk exceeded guard — stopping');
+              break walk;
+            }
+            const prevEnd = findPrevBusyEnd(tMin);
+            if (prevEnd >= 0) {
+              const requiredStart = prevEnd + breakM;
+              if (tMin < requiredStart) {
+                tMin = requiredStart;
+                continue;
+              }
+            }
+
+            const endMin = tMin + serviceDuration;
+            if (overlapsBusy(tMin, endMin)) {
+              const overlapped = busyIntervals.find(
+                (b) => Math.max(b.startMin, tMin) < Math.min(b.endMin, endMin),
+              );
+              if (overlapped) {
+                tMin = overlapped.endMin;
+                continue;
+              }
+            }
+
+            const nextStart = findNextBusyStart(tMin);
+            if (nextStart >= 0 && endMin + breakM > nextStart) {
+              tMin = nextStart + breakM;
+              continue;
+            }
+
+            times.push(toHHMM(tMin));
+            tMin += serviceDuration;
+          }
+        }
+
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        const filtered = isToday
+          ? times.filter((slot) => {
+              const [hh, mm] = slot.split(':').map((x) => parseInt(x, 10));
+              const dt = new Date(date);
+              dt.setHours(hh, mm, 0, 0);
+              return dt.getTime() >= now.getTime();
+            })
+          : times;
+
+        if (mySeq === loadTimesSeqRef.current) {
+          setAvailableTimes(filtered);
+        }
       } catch (error) {
         console.error('Error loading available times:', error);
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('settings.recurring.timesLoadFailed', 'Failed to load available times. Please try again.')
-        );
+        if (mySeq === loadTimesSeqRef.current) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.recurring.timesLoadFailed', 'Failed to load available times. Please try again.'),
+          );
+        }
       } finally {
-        setIsLoadingTimes(false);
+        if (mySeq === loadTimesSeqRef.current) {
+          setIsLoadingTimes(false);
+        }
       }
     },
-    [user?.id, t]
+    [user?.id, t, globalBreakMinutes],
   );
 
-  useEffect(() => {
-    if (selectedDate && selectedService) {
-      void loadAvailableTimesForDate(selectedDate, selectedService);
+  const selectedServicesKey = selectedServices.map((s) => String((s as { id?: unknown }).id ?? '')).join(',');
+
+  /**
+   * Explicit trigger – called by the screen when the user advances to step 4.
+   * We intentionally do NOT auto-load on date/service change because doing so
+   * causes state updates (re-renders) on step 3 that block the JS thread and
+   * make the Continue button feel unresponsive when many slots are available.
+   */
+  const loadAvailableTimesNow = useCallback((dateOverride?: Date) => {
+    const dateToUse = dateOverride ?? selectedDate;
+    if (dateToUse && selectedServices.length > 0) {
+      void loadAvailableTimesForDate(dateToUse, selectedServices);
     } else {
       setAvailableTimes([]);
+      setIsLoadingTimes(false);
     }
-  }, [selectedDate, selectedService, loadAvailableTimesForDate]);
+  // selectedServices is stable by the time we call this (step 3→4 transition)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedServicesKey, loadAvailableTimesForDate]);
 
   const onPickClient = useCallback((client: AdminClientPick) => {
     setSelectedClient(client);
@@ -417,11 +564,6 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     }
   }, [clientEntryMode, selectedClient, newClientFullName, newClientPhone, t, loadClients]);
 
-  const onPickService = useCallback((service: Service) => {
-    setSelectedService(service);
-    setShowServiceDropdown(false);
-  }, []);
-
   const onPickDate = useCallback((date: Date) => {
     setSelectedDate(date);
     setSelectedTime(null);
@@ -434,7 +576,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
   const reset = useCallback(() => {
     appliedInitialDateRef.current = null;
     setSelectedClient(null);
-    setSelectedService(null);
+    setSelectedServices([]);
     setSelectedTime(null);
     setSelectedDate(null);
     setClientSearch('');
@@ -446,10 +588,11 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     setNewClientFullName('');
     setNewClientPhone('');
     setIsFinalizingClientStep(false);
+    setIsLoadingTimes(false);
   }, [clients]);
 
   const submit = useCallback(async () => {
-    if (!selectedDate || !selectedClient || !selectedService || !selectedTime) {
+    if (!selectedDate || !selectedClient || selectedServices.length === 0 || !selectedTime) {
       Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.fillAllRequired', 'Please fill in all required fields'));
       return;
     }
@@ -461,46 +604,61 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
 
     const dateString = formatDateToLocalString(selectedDate);
     const businessId = getBusinessId();
+    const timeStart = String(selectedTime).slice(0, 5);
 
-    const { data: conflictingAppointments } = await supabase
-      .from('appointments')
-      .select('id')
-      .eq('business_id', businessId)
-      .eq('slot_date', dateString)
-      .eq('slot_time', `${selectedTime}:00`)
-      .eq('user_id', user.id);
+    let cursorTime = timeStart;
+    for (const svc of selectedServices) {
+      const { data: conflictingAppointments } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('business_id', businessId)
+        .eq('slot_date', dateString)
+        .eq('slot_time', `${cursorTime}:00`)
+        .eq('user_id', user.id);
 
-    if (conflictingAppointments && conflictingAppointments.length > 0) {
-      Alert.alert(
-        t('settings.recurring.slotTakenTitle', 'Slot taken'),
-        t('settings.recurring.slotTaken', 'The selected time is already booked this week. Please choose another time.')
-      );
-      return;
+      if (conflictingAppointments && conflictingAppointments.length > 0) {
+        Alert.alert(
+          t('settings.recurring.slotTakenTitle', 'Slot taken'),
+          t('settings.recurring.slotTaken', 'The selected time is already booked this week. Please choose another time.')
+        );
+        return;
+      }
+      const dur = svc.duration_minutes && svc.duration_minutes > 0 ? svc.duration_minutes : 60;
+      cursorTime = addMinutesToHHMM(cursorTime, dur);
     }
 
     setIsSubmitting(true);
     triggerMediumHaptic();
 
     try {
-      const insertRow: Record<string, unknown> = {
-        business_id: businessId,
-        slot_date: dateString,
-        slot_time: `${selectedTime}:00`,
-        is_available: false,
-        status: 'confirmed',
-        client_name: selectedClient.name,
-        client_phone: selectedClient.phone,
-        service_name: selectedService.name,
-        user_id: user.id,
-        barber_id: user.id,
-      };
-      if (selectedClient.id) {
-        insertRow.client_user_id = selectedClient.id;
+      let insertTime = timeStart;
+      for (const svc of selectedServices) {
+        const insertRow: Record<string, unknown> = {
+          business_id: businessId,
+          slot_date: dateString,
+          slot_time: `${insertTime}:00`,
+          is_available: false,
+          status: 'confirmed',
+          client_name: selectedClient.name,
+          client_phone: selectedClient.phone,
+          service_name: svc.name,
+          user_id: user.id,
+          barber_id: user.id,
+        };
+        if (selectedClient.id) {
+          insertRow.client_user_id = selectedClient.id;
+        }
+        const sid = (svc as { id?: string }).id;
+        if (sid) insertRow.service_id = sid;
+
+        const { error } = await supabase.from('appointments').insert(insertRow);
+        if (error) throw error;
+
+        const dur = svc.duration_minutes && svc.duration_minutes > 0 ? svc.duration_minutes : 60;
+        insertTime = addMinutesToHHMM(insertTime, dur);
       }
 
-      const { error } = await supabase.from('appointments').insert(insertRow);
-
-      if (error) throw error;
+      const primary = selectedServices[0]!;
 
       if (onSaveSuccess) {
         onSaveSuccess({
@@ -509,7 +667,8 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
             phone: selectedClient.phone,
             ...(selectedClient.id ? { id: selectedClient.id } : {}),
           },
-          service: selectedService,
+          service: primary,
+          services: selectedServices.length > 1 ? selectedServices : undefined,
           date: selectedDate,
           time: selectedTime,
         });
@@ -529,15 +688,15 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedDate, selectedClient, selectedService, selectedTime, user?.id, t, onSaveSuccess, onSuccess]);
+  }, [selectedDate, selectedClient, selectedServices, selectedTime, user?.id, t, onSaveSuccess, onSuccess]);
 
   return {
     selectedDate,
     setSelectedDate,
     selectedClient,
     setSelectedClient,
-    selectedService,
-    setSelectedService,
+    selectedServices,
+    setSelectedServices,
     selectedTime,
     setSelectedTime,
     showClientDropdown,
@@ -553,7 +712,6 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     isLoadingTimes,
     isSubmitting,
     onPickClient,
-    onPickService,
     onPickDate,
     onPickTime,
     submit,
@@ -566,5 +724,6 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
     setNewClientPhone,
     finalizeClientStepIfNeeded,
     isFinalizingClientStep,
+    loadAvailableTimesNow,
   };
 }

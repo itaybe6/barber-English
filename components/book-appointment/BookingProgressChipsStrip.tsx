@@ -202,6 +202,8 @@ export interface BookingProgressChipModel {
   kind: 'barber' | 'service' | 'day' | 'time';
   label: string;
   imageUri?: string;
+  /** Overrides the default category label displayed in the expanded summary card row (e.g. replace "איש צוות" with "לקוח"). */
+  customRowLabel?: string;
   /** Service chip: name + price in strip. */
   serviceName?: string;
   servicePriceText?: string;

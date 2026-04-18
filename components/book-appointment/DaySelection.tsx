@@ -25,6 +25,8 @@ type Props = {
   onClearTime: () => void;
   /** Nudge block up so legend clears the docked summary strip (px). */
   contentLiftPx?: number;
+  /** Extra padding below the legend pill so a docked bottom sheet does not overlap it. */
+  legendBottomPad?: number;
 };
 
 export interface DaySelectionHandle {
@@ -47,6 +49,7 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
     onSelectDayIndex,
     onClearTime,
     contentLiftPx = 0,
+    legendBottomPad = 0,
   },
   ref
 ) {
@@ -77,7 +80,7 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
         width: '100%',
         justifyContent: 'flex-start',
         paddingTop: contentLiftPx > 0 ? 6 : 8,
-        paddingBottom: 12,
+        paddingBottom: 12 + legendBottomPad,
         ...(contentLiftPx > 0 ? { transform: [{ translateY: -contentLiftPx }] } : null),
       }}
     >

@@ -414,7 +414,7 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
                   </View>
                   <View style={[styles.summaryTextCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                     <Text style={styles.summaryRowLabel}>
-                      {t('booking.summary.staffLabel', 'איש צוות')}
+                      {barber.customRowLabel ?? t('booking.summary.staffLabel', 'איש צוות')}
                     </Text>
                     <Text style={styles.summaryRowValue} numberOfLines={1}>
                       {barber.label}

@@ -46,7 +46,7 @@ import { services } from '@/constants/services';
 import { clients } from '@/constants/clients';
 // import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
 import { supabase, type BusinessProfile } from '@/lib/supabase';
-import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
+import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden, isClientApprovalRequired } from '@/lib/api/businessProfile';
 import {
   homeHeaderTitleFontStyle,
   normalizeHomeHeaderTitleFontKey,
@@ -347,10 +347,21 @@ export default function HomeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (params.openPendingClients === '1') {
+      if (params.openPendingClients !== '1') return;
+      void (async () => {
+        try {
+          const p = await businessProfileApi.getProfile();
+          if (!isClientApprovalRequired(p)) {
+            router.setParams({ openPendingClients: undefined });
+            return;
+          }
+        } catch {
+          router.setParams({ openPendingClients: undefined });
+          return;
+        }
         setPendingApprovalsOpenNonce((n) => n + 1);
         router.setParams({ openPendingClients: undefined });
-      }
+      })();
     }, [params.openPendingClients, router])
   );
 
@@ -421,13 +432,17 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
-  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth'>('all');
+  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth' | 'pendingApproval'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
   const clientsModalOpenTsRef = useRef(0);
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
-  const [pendingClientsCount, setPendingClientsCount] = useState(0);
+  /** Same source as home tile badge — full rows shown in clients sheet so admins see *who* is pending. */
+  const [pendingClientsList, setPendingClientsList] = useState<any[]>([]);
+  const pendingClientsCount = pendingClientsList.length;
+  /** Mirrors Settings → General → "Approve new clients" (`business_profile.require_client_approval`). */
+  const [clientApprovalRequired, setClientApprovalRequired] = useState(true);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
   const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<WaitlistPreviewClientRow[]>([]);
@@ -858,13 +873,79 @@ export default function HomeScreen() {
   const fetchPendingClients = useCallback(async () => {
     if (!isAdmin) return;
     try {
+      const p = await businessProfileApi.getProfile();
+      const required = isClientApprovalRequired(p);
+      setClientApprovalRequired(required);
+      if (!required) {
+        setPendingClientsList([]);
+        return;
+      }
       const list = await usersApi.getPendingClients();
-      setPendingClientsCount(list.length);
+      setPendingClientsList(list);
     } catch (e) {
       console.error('Error in fetchPendingClients:', e);
-      setPendingClientsCount(0);
+      setPendingClientsList([]);
     }
   }, [isAdmin]);
+
+  const onPendingApprovalsMutated = useCallback(() => {
+    void fetchPendingClients();
+  }, [fetchPendingClients]);
+
+  const [pendingRowActionId, setPendingRowActionId] = useState<string | null>(null);
+
+  const approvePendingClientFromList = useCallback(
+    async (id: string) => {
+      if (!clientApprovalRequired) return;
+      setPendingRowActionId(id);
+      try {
+        const updated = await usersApi.approveClient(id);
+        if (!updated) {
+          Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.approveError', 'Could not approve'));
+          return;
+        }
+        void fetchPendingClients();
+      } finally {
+        setPendingRowActionId(null);
+      }
+    },
+    [t, fetchPendingClients, clientApprovalRequired]
+  );
+
+  const promptDeclinePendingClient = useCallback(
+    (item: { id: string; name?: string | null }) => {
+      if (!clientApprovalRequired) return;
+      Alert.alert(
+        t('admin.pendingClients.rejectTitle', 'Decline registration'),
+        t('admin.pendingClients.rejectMessage', 'Remove {{name}}? They will need to register again.', {
+          name: item.name || t('common.client', 'Client'),
+        }),
+        [
+          { text: t('cancel', 'Cancel'), style: 'cancel' },
+          {
+            text: t('admin.pendingClients.rejectConfirm', 'Remove'),
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setPendingRowActionId(item.id);
+                try {
+                  const done = await usersApi.deleteUser(item.id);
+                  if (!done) {
+                    Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.rejectError', 'Could not remove'));
+                    return;
+                  }
+                  void fetchPendingClients();
+                } finally {
+                  setPendingRowActionId(null);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [t, fetchPendingClients, clientApprovalRequired]
+  );
 
   const CLIENTS_SHEET_OPEN_MS = 420;
   const CLIENTS_SHEET_CLOSE_MS = 380;
@@ -887,7 +968,8 @@ export default function HomeScreen() {
     setDisplayClientsModal(false);
     setClientsListMode('all');
     setClientsListActionDialog(null);
-  }, []);
+    if (isAdmin) void fetchPendingClients();
+  }, [isAdmin, fetchPendingClients]);
 
   const requestCloseClientsModal = useCallback(() => {
     if (Date.now() - clientsModalOpenTsRef.current < 400) return;
@@ -985,6 +1067,33 @@ export default function HomeScreen() {
     }
     setFilteredClients(filtered);
   }, [searchQuery, clients, blockedFilter]);
+
+  /** Approved list uses `filteredClients`; pending-approval tab uses `pendingClientsList` + same search rules. */
+  const displayedClientsForSheet = useMemo(() => {
+    if (clientsListMode === 'pendingApproval' && !clientApprovalRequired) return [];
+    if (clientsListMode !== 'pendingApproval') return filteredClients;
+    let list = pendingClientsList;
+    const raw = searchQuery.trim();
+    if (raw !== '') {
+      const q = raw.toLowerCase();
+      const qDigits = raw.replace(/\D/g, '');
+      list = list.filter((client) => {
+        const name = String(client?.name || '').toLowerCase();
+        const phone = String(client?.phone || '');
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (name.includes(q)) return true;
+        if (qDigits && phoneDigits.includes(qDigits)) return true;
+        return false;
+      });
+    }
+    return list;
+  }, [clientsListMode, pendingClientsList, filteredClients, searchQuery, clientApprovalRequired]);
+
+  useEffect(() => {
+    if (!clientApprovalRequired && clientsListMode === 'pendingApproval') {
+      setClientsListMode('all');
+    }
+  }, [clientApprovalRequired, clientsListMode]);
 
   // Handle phone call
   const handlePhoneCall = (phone: string) => {
@@ -1346,15 +1455,6 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* hidden card — renders only the bottom-sheet modal; trigger via ref */}
-        <PendingClientApprovalsCard
-          ref={pendingCardRef}
-          colors={colors}
-          openSheetNonce={pendingApprovalsOpenNonce}
-          hideBanner
-          onCountChange={setPendingClientsCount}
-        />
-
         {/* ── Quick tiles + רשימת המתנה מתחת ── */}
         {isAdmin && (
           <View style={styles.quickTilesGrid}>
@@ -1369,13 +1469,20 @@ export default function HomeScreen() {
                   clientsModalOpenTsRef.current = Date.now();
                   setShowClientsModal(true);
                   void fetchClients();
+                  void fetchPendingClients();
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={t('admin.home.clients')}
+                accessibilityLabel={
+                  clientApprovalRequired && pendingClientsCount > 0
+                    ? `${t('admin.home.clients')}. ${t('admin.home.clientsTileBadgeA11y', {
+                        count: pendingClientsCount,
+                      })}`
+                    : t('admin.home.clients')
+                }
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
                   <Ionicons name="people-outline" size={24} color={primaryOnSurface} />
-                  {pendingClientsCount > 0 ? (
+                  {clientApprovalRequired && pendingClientsCount > 0 ? (
                     <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
                       <Text style={styles.quickTileBadgeText}>
                         {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
@@ -1547,6 +1654,7 @@ export default function HomeScreen() {
               clientsModalOpenTsRef.current = Date.now();
               setShowClientsModal(true);
               void fetchNewClientsThisMonth();
+              void fetchPendingClients();
             }}
           />
         )}
@@ -1916,11 +2024,13 @@ export default function HomeScreen() {
                  <Text style={styles.modalTitle}>
                    {clientsListMode === 'newThisMonth'
                      ? t('admin.insights.newClientsListTitle', 'New clients this month')
-                     : t('clients.listTitle', 'Clients List')}
+                     : clientsListMode === 'pendingApproval'
+                       ? t('clients.filter.pendingApproval', 'Pending approval')
+                       : t('clients.listTitle', 'Clients List')}
                  </Text>
                </View>
 
-             {clientsListMode === 'all' || clientsListMode === 'newThisMonth' ? (
+             {clientsListMode === 'all' || clientsListMode === 'newThisMonth' || clientsListMode === 'pendingApproval' ? (
                <View style={[styles.searchContainer, { flexDirection: clientsSearchFlexDir }]}>
                  <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
                  <TextInput
@@ -2022,6 +2132,51 @@ export default function HomeScreen() {
                    </Text>
                  </TouchableOpacity>
 
+                 {clientApprovalRequired ? (
+                   <TouchableOpacity
+                     onPress={() => {
+                       setClientsListMode('pendingApproval');
+                       setSearchQuery('');
+                       setBlockedFilter('all');
+                       void fetchPendingClients();
+                     }}
+                     style={[
+                       styles.filterButton,
+                       clientsListMode === 'pendingApproval' && styles.filterButtonActive,
+                       pendingClientsCount > 0 && styles.filterButtonPendingWithBadge,
+                     ]}
+                     activeOpacity={0.85}
+                     accessibilityRole="button"
+                     accessibilityLabel={t('clients.filter.pendingApprovalA11y', {
+                       count: pendingClientsCount,
+                     })}
+                   >
+                     <View
+                       style={[
+                         styles.filterButtonPendingInner,
+                         { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                       ]}
+                     >
+                       <Text
+                         style={[
+                           styles.filterButtonText,
+                           clientsListMode === 'pendingApproval' && styles.filterButtonTextActive,
+                         ]}
+                         numberOfLines={1}
+                       >
+                         {t('clients.filter.pendingApproval', 'Pending approval')}
+                       </Text>
+                       {pendingClientsCount > 0 ? (
+                         <View style={styles.clientsFilterPendingBadge}>
+                           <Text style={styles.clientsFilterPendingBadgeText}>
+                             {pendingClientsCount > 99 ? '99+' : String(pendingClientsCount)}
+                           </Text>
+                         </View>
+                       ) : null}
+                     </View>
+                   </TouchableOpacity>
+                 ) : null}
+
                  <TouchableOpacity
                    onPress={() => {
                      setClientsListMode('newThisMonth');
@@ -2044,10 +2199,10 @@ export default function HomeScreen() {
                      ]}
                    >
                      {insightsData.newClientsThisMonth > 0
-                       ? `${t('admin.pendingClients.bannerTitle')} (${
+                       ? `${t('clients.filter.newThisMonth', 'Added this month')} (${
                            insightsData.newClientsThisMonth > 99 ? '99+' : insightsData.newClientsThisMonth
                          })`
-                       : t('admin.pendingClients.bannerTitle')}
+                       : t('clients.filter.newThisMonth', 'Added this month')}
                    </Text>
                  </TouchableOpacity>
                </ScrollView>
@@ -2055,7 +2210,7 @@ export default function HomeScreen() {
 
              {/* Clients List */}
              <View style={styles.clientsListSheet}>
-             {loadingClients ? (
+             {loadingClients && clientsListMode !== 'pendingApproval' ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={primaryOnSurface} />
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
@@ -2063,7 +2218,7 @@ export default function HomeScreen() {
               ) : (
                  <GHFlatList
                   style={styles.clientsFlatList}
-                  data={filteredClients}
+                  data={displayedClientsForSheet}
                   keyExtractor={(item) => item.id}
                   keyboardShouldPersistTaps="always"
                   removeClippedSubviews={false}
@@ -2076,18 +2231,156 @@ export default function HomeScreen() {
                       textSecondaryColor={colors.textSecondary}
                       surfaceColor={colors.surface}
                       title={
-                        clientsListMode === 'newThisMonth'
-                          ? t('admin.insights.newClientsListEmpty', 'No new clients registered this month')
-                          : t('clients.listEmptyTitle', 'Nothing to show yet')
+                        clientsListMode === 'pendingApproval'
+                          ? t('admin.pendingClients.filterListEmptyTitle', 'No registrations awaiting approval')
+                          : clientsListMode === 'newThisMonth'
+                            ? t('admin.insights.newClientsListEmpty', 'No new clients registered this month')
+                            : t('clients.listEmptyTitle', 'Nothing to show yet')
                       }
                       subtitle={
-                        clientsListMode === 'newThisMonth'
-                          ? t('admin.insights.newClientsListEmptyHint')
-                          : t('clients.listEmptySubtitle', 'Try another search or filter.')
+                        clientsListMode === 'pendingApproval'
+                          ? t('admin.pendingClients.filterListEmptyHint')
+                          : clientsListMode === 'newThisMonth'
+                            ? t('admin.insights.newClientsListEmptyHint')
+                            : t('clients.listEmptySubtitle', 'Try another search or filter.')
                       }
                     />
                   }
                   renderItem={({ item }) => {
+                    if (clientsListMode === 'pendingApproval' && clientApprovalRequired) {
+                      const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
+                      const phoneLine = String(item.phone || '').trim();
+                      const uri = String(item.image_url || '').trim();
+                      const rowBusy = pendingRowActionId === item.id;
+                      const anyPendingAction = pendingRowActionId !== null;
+                      return (
+                        <View
+                          accessibilityRole="summary"
+                          style={[styles.clientsPendingRegRow, { borderColor: 'rgba(15,23,42,0.08)' }]}
+                        >
+                          <View
+                            style={[
+                              styles.clientsPendingRegTopRow,
+                              { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                            ]}
+                          >
+                            <View style={styles.clientsPendingRegAvatarWrap}>
+                              {uri ? (
+                                <Image source={{ uri }} style={styles.clientsPendingRegAvatarImg} />
+                              ) : (
+                                <View style={[styles.clientsPendingRegAvatarPh, { backgroundColor: `${colors.primary}18` }]}>
+                                  <Text style={[styles.clientsPendingRegAvatarLetter, { color: primaryOnSurface }]}>
+                                    {initial}
+                                  </Text>
+                                </View>
+                              )}
+                              <View
+                                style={[
+                                  styles.clientsPendingRegRowBadge,
+                                  { backgroundColor: '#EF4444' },
+                                  isRTL ? { left: -4 } : { right: -4 },
+                                ]}
+                              >
+                                <Text style={styles.clientsPendingRegRowBadgeText}>1</Text>
+                              </View>
+                            </View>
+                            <View
+                              style={[
+                                styles.clientsPendingRegTextCol,
+                                { alignItems: isRTL ? 'flex-end' : 'flex-start' },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.clientsPendingRegName,
+                                  { color: colors.text, textAlign: isRTL ? 'right' : 'left' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {item.name || t('common.client', 'Client')}
+                              </Text>
+                              {phoneLine ? (
+                                <Text
+                                  style={[
+                                    styles.clientsPendingRegPhone,
+                                    { color: colors.textSecondary, textAlign: isRTL ? 'right' : 'left' },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {phoneLine}
+                                </Text>
+                              ) : null}
+                              <View
+                                style={[
+                                  styles.clientsPendingRegPill,
+                                  { backgroundColor: `${colors.primary}14`, alignSelf: isRTL ? 'flex-end' : 'flex-start' },
+                                ]}
+                              >
+                                <Text style={[styles.clientsPendingRegPillText, { color: colors.primary }]}>
+                                  {t('admin.pendingClients.inlineStatusPill')}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                          <View style={styles.clientsPendingRegActionsWrap}>
+                            <View
+                              style={[
+                                styles.clientsPendingRegActionsRow,
+                                { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                              ]}
+                            >
+                              <GHTouchableOpacity
+                                activeOpacity={0.88}
+                                disabled={anyPendingAction}
+                                onPress={() => promptDeclinePendingClient(item)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('admin.pendingClients.decline', 'Decline')}
+                                style={styles.clientsPendingRegBtnOutline}
+                              >
+                                <View
+                                  style={[
+                                    styles.clientsPendingRegBtnContent,
+                                    { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                                  ]}
+                                >
+                                  <Ionicons name="close-circle-outline" size={15} color="#DC2626" />
+                                  <Text style={styles.clientsPendingRegBtnOutlineText}>
+                                    {t('admin.pendingClients.decline', 'Decline')}
+                                  </Text>
+                                </View>
+                              </GHTouchableOpacity>
+                              <GHTouchableOpacity
+                                activeOpacity={0.88}
+                                disabled={anyPendingAction}
+                                onPress={() => void approvePendingClientFromList(item.id)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('admin.pendingClients.approve', 'Approve')}
+                                style={[
+                                  styles.clientsPendingRegBtnPrimary,
+                                  { backgroundColor: colors.primary },
+                                ]}
+                              >
+                                {rowBusy ? (
+                                  <ActivityIndicator size="small" color={onPrimary} />
+                                ) : (
+                                  <View
+                                    style={[
+                                      styles.clientsPendingRegBtnContent,
+                                      { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                                    ]}
+                                  >
+                                    <Ionicons name="checkmark-circle" size={15} color={onPrimary} />
+                                    <Text style={[styles.clientsPendingRegBtnPrimaryText, { color: onPrimary }]}>
+                                      {t('admin.pendingClients.approve', 'Approve')}
+                                    </Text>
+                                  </View>
+                                )}
+                              </GHTouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    }
                     const stats = clientStatsMap[item.id];
                     const totalAppts = stats?.totalAppointments ?? 0;
                     const avgMo = stats?.avgMonthlySpend;
@@ -2212,7 +2505,7 @@ export default function HomeScreen() {
                    contentContainerStyle={[
                      styles.clientsListContent,
                      { paddingBottom: insets.bottom + 24 },
-                     filteredClients.length === 0 && styles.clientsListContentEmpty,
+                     displayedClientsForSheet.length === 0 && styles.clientsListContentEmpty,
                    ]}
                 />
              )}
@@ -2242,6 +2535,17 @@ export default function HomeScreen() {
          </View>
          </GestureHandlerRootView>
        </Modal>
+
+      {/* Mount after clients Modal so the approvals sheet appears above the clients bottom sheet */}
+      {isAdmin && clientApprovalRequired ? (
+        <PendingClientApprovalsCard
+          ref={pendingCardRef}
+          colors={colors}
+          openSheetNonce={pendingApprovalsOpenNonce}
+          hideBanner
+          onCountChange={onPendingApprovalsMutated}
+        />
+      ) : null}
 
       {isAdmin && (
         <AdminBroadcastComposer
@@ -3651,6 +3955,139 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     paddingHorizontal: 16,
     borderBottomWidth: 0,
   },
+  clientsPendingRegRow: {
+    marginBottom: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStartWidth: 3,
+    borderStartColor: '#EF4444',
+    alignItems: 'stretch',
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  clientsPendingRegTopRow: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: 10,
+  },
+  clientsPendingRegAvatarWrap: {
+    width: 44,
+    height: 44,
+    position: 'relative',
+  },
+  clientsPendingRegAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  clientsPendingRegAvatarPh: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientsPendingRegAvatarLetter: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  clientsPendingRegRowBadge: {
+    position: 'absolute',
+    top: -4,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  clientsPendingRegRowBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  clientsPendingRegTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  clientsPendingRegName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  clientsPendingRegPhone: {
+    fontSize: 14,
+  },
+  clientsPendingRegPill: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  clientsPendingRegPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  clientsPendingRegActionsWrap: {
+    alignSelf: 'stretch',
+    width: '100%',
+    paddingTop: 12,
+    marginTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(15, 23, 42, 0.07)',
+  },
+  clientsPendingRegActionsRow: {
+    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  clientsPendingRegBtnPrimary: {
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientsPendingRegBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  clientsPendingRegBtnPrimaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0,
+  },
+  clientsPendingRegBtnOutline: {
+    paddingVertical: 7,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  clientsPendingRegBtnOutlineText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0,
+    color: '#DC2626',
+  },
   modalHeader: {
     flexDirection: 'row', // LTR
     justifyContent: 'space-between',
@@ -3762,6 +4199,31 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
+  },
+  filterButtonPendingWithBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  filterButtonPendingInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clientsFilterPendingBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EF4444',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  clientsFilterPendingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   filterButtonActive: {
     backgroundColor: `${colors.primary}20`,

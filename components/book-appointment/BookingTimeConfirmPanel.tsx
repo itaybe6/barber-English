@@ -4,13 +4,13 @@ import {
   View,
   Text,
   Pressable,
+  ScrollView,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
   I18nManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
@@ -20,9 +20,7 @@ function isHebrewLocale(lang: string | undefined): boolean {
   return l.startsWith('he') || l.startsWith('iw');
 }
 
-const WIN_W = Dimensions.get('window').width;
-const WIN_H = Dimensions.get('window').height;
-const DURATION = 420;
+const DURATION = 380;
 
 export interface BookingTimeConfirmPanelProps {
   visible: boolean;
@@ -30,6 +28,8 @@ export interface BookingTimeConfirmPanelProps {
   onConfirm: () => void;
   confirmLoading?: boolean;
   staffName?: string;
+  /** When provided, shows the client name row with label "לקוח" instead of "איש צוות". Takes priority over staffName. */
+  clientName?: string;
   serviceSummary: string;
   dateLine: string;
   timeLine: string;
@@ -126,6 +126,7 @@ export default function BookingTimeConfirmPanel({
   onConfirm,
   confirmLoading,
   staffName,
+  clientName,
   serviceSummary,
   dateLine,
   timeLine,
@@ -140,7 +141,6 @@ export default function BookingTimeConfirmPanel({
   const insets = useSafeAreaInsets();
   const { i18n } = useTranslation();
   const activeLang = String(i18n.resolvedLanguage || i18n.language || '');
-  /** Under forceRTL, flex directions mirror again; LTR shell + explicit row-reverse matches Hebrew (see app/(tabs)/finance.tsx rtlRoot). */
   const layoutRtl = I18nManager.isRTL || isHebrewLocale(activeLang);
   const durationLine =
     totalPrice > 0
@@ -148,227 +148,244 @@ export default function BookingTimeConfirmPanel({
       : `${durationMinutes} ${t('booking.min', 'דק׳')}`;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onChangeTime}>
-      <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} pointerEvents="box-none">
-        <Pressable style={StyleSheet.absoluteFill} onPress={onChangeTime} accessibilityRole="button">
-          <Animated.View entering={FadeIn.duration(200)} style={[styles.backdrop, StyleSheet.absoluteFill]} />
-        </Pressable>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onChangeTime} statusBarTranslucent>
+      {/* Backdrop */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={onChangeTime} accessibilityRole="button">
+        <Animated.View entering={FadeIn.duration(220)} style={[styles.backdrop, StyleSheet.absoluteFill]} />
+      </Pressable>
 
-        <View style={styles.centerWrap} pointerEvents="box-none">
-          <Animated.View
-            entering={FadeInDown.duration(DURATION)}
-            layout={LinearTransition.duration(DURATION)}
+      {/* Sheet anchored to the bottom */}
+      <View style={styles.anchor} pointerEvents="box-none">
+        <Animated.View
+          entering={SlideInDown.duration(DURATION).springify().damping(22).stiffness(200)}
+          layout={LinearTransition.duration(DURATION)}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: cardBackground,
+              paddingBottom: Math.max(insets.bottom, 20) + 4,
+              direction: 'ltr',
+            },
+          ]}
+        >
+          {/* Drag handle */}
+          <View style={styles.handleWrap}>
+            <View style={[styles.handle, { backgroundColor: `${textColor}20` }]} />
+          </View>
+
+          {/* Header */}
+          <View
             style={[
-              styles.panel,
-              {
-                width: Math.min(WIN_W - 40, 400),
-                maxHeight: WIN_H * 0.78,
-                backgroundColor: cardBackground,
-                borderColor: `${textColor}12`,
-                direction: 'ltr',
-              },
+              styles.headerBlock,
+              { flexDirection: layoutRtl ? 'row' : 'row-reverse' },
             ]}
           >
-            <View style={[styles.accentBar, { backgroundColor: primaryColor }]} />
+            <Pressable
+              onPress={onChangeTime}
+              hitSlop={14}
+              style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.65 : 1, backgroundColor: `${textColor}08` }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('booking.timePanel.close', 'סגור')}
+            >
+              <Ionicons name="close" size={20} color={textSecondary} />
+            </Pressable>
+            <Text
+              style={[
+                styles.title,
+                {
+                  color: textColor,
+                  textAlign: layoutRtl ? 'right' : 'left',
+                  writingDirection: layoutRtl ? 'rtl' : 'ltr',
+                },
+              ]}
+            >
+              {t('booking.timePanel.title', 'סיכום תור')}
+            </Text>
+          </View>
 
-            <View style={styles.headerBlock}>
-              <Pressable
-                onPress={onChangeTime}
-                hitSlop={14}
-                style={({ pressed }) => [styles.closeBtn, { opacity: pressed ? 0.65 : 1 }]}
-                accessibilityRole="button"
-                accessibilityLabel={t('booking.timePanel.close', 'סגור')}
-              >
-                <Ionicons name="close" size={22} color={textSecondary} />
-              </Pressable>
-              <View style={[styles.headerTextCol, { alignItems: layoutRtl ? 'flex-end' : 'flex-start' }]}>
-                <Text
-                  style={[
-                    styles.title,
-                    {
-                      color: textColor,
-                      textAlign: layoutRtl ? 'right' : 'left',
-                      writingDirection: layoutRtl ? 'rtl' : 'ltr',
-                    },
-                  ]}
-                >
-                  {t('booking.timePanel.title', 'סיכום תור')}
+          <View style={[styles.divider, { backgroundColor: `${textColor}10` }]} />
+
+          {/* Detail rows — scrollable so they never push buttons off-screen */}
+          <ScrollView
+            style={styles.rowsScroll}
+            contentContainerStyle={styles.rows}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {clientName ? (
+              <DetailCard
+                icon="person-circle-outline"
+                label={t('booking.timePanel.client', 'לקוח')}
+                value={clientName}
+                textColor={textColor}
+                subColor={textSecondary}
+                tint={primaryColor}
+                rtlLayout={layoutRtl}
+              />
+            ) : staffName ? (
+              <DetailCard
+                icon="person-outline"
+                label={t('booking.timePanel.staff', 'איש צוות')}
+                value={staffName}
+                textColor={textColor}
+                subColor={textSecondary}
+                tint={primaryColor}
+                rtlLayout={layoutRtl}
+              />
+            ) : null}
+            <DetailCard
+              icon="cut-outline"
+              label={t('booking.field.service', 'שירות')}
+              value={serviceSummary}
+              textColor={textColor}
+              subColor={textSecondary}
+              tint={primaryColor}
+              rtlLayout={layoutRtl}
+            />
+            <DetailCard
+              icon="calendar-outline"
+              label={t('booking.field.date', 'תאריך')}
+              value={dateLine}
+              textColor={textColor}
+              subColor={textSecondary}
+              tint={primaryColor}
+              rtlLayout={layoutRtl}
+            />
+            <DetailCard
+              icon="time-outline"
+              label={t('booking.field.time', 'שעה')}
+              value={timeLine}
+              textColor={textColor}
+              subColor={textSecondary}
+              tint={primaryColor}
+              rtlLayout={layoutRtl}
+              emphasize
+            />
+            <DetailCard
+              icon="hourglass-outline"
+              label={t('booking.timePanel.duration', 'משך משוער')}
+              value={durationLine}
+              textColor={textColor}
+              subColor={textSecondary}
+              tint={primaryColor}
+              rtlLayout={layoutRtl}
+            />
+          </ScrollView>
+
+          {/* Action buttons */}
+          <View
+            style={[
+              styles.btnRow,
+              { flexDirection: layoutRtl ? 'row' : 'row-reverse' },
+            ]}
+          >
+            <Pressable
+              onPress={onConfirm}
+              disabled={confirmLoading}
+              style={({ pressed }) => [
+                styles.btnPrimary,
+                {
+                  flex: 1.65,
+                  backgroundColor: primaryColor,
+                  opacity: confirmLoading ? 0.88 : pressed ? 0.92 : 1,
+                  shadowColor: primaryColor,
+                },
+              ]}
+            >
+              {confirmLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.btnPrimaryText}>
+                  {t('booking.timePanel.confirmBook', 'אישור — קבע תור')}
                 </Text>
-              </View>
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: `${textColor}12` }]} />
-
-            <View style={styles.rows}>
-              {staffName ? (
-                <DetailCard
-                  icon="person-outline"
-                  label={t('booking.timePanel.staff', 'איש צוות')}
-                  value={staffName}
-                  textColor={textColor}
-                  subColor={textSecondary}
-                  tint={primaryColor}
-                  rtlLayout={layoutRtl}
-                />
-              ) : null}
-              <DetailCard
-                icon="cut-outline"
-                label={t('booking.field.service', 'שירות')}
-                value={serviceSummary}
-                textColor={textColor}
-                subColor={textSecondary}
-                tint={primaryColor}
-                rtlLayout={layoutRtl}
-              />
-              <DetailCard
-                icon="calendar-outline"
-                label={t('booking.field.date', 'תאריך')}
-                value={dateLine}
-                textColor={textColor}
-                subColor={textSecondary}
-                tint={primaryColor}
-                rtlLayout={layoutRtl}
-              />
-              <DetailCard
-                icon="time-outline"
-                label={t('booking.field.time', 'שעה')}
-                value={timeLine}
-                textColor={textColor}
-                subColor={textSecondary}
-                tint={primaryColor}
-                rtlLayout={layoutRtl}
-                emphasize
-              />
-              <DetailCard
-                icon="hourglass-outline"
-                label={t('booking.timePanel.duration', 'משך משוער')}
-                value={durationLine}
-                textColor={textColor}
-                subColor={textSecondary}
-                tint={primaryColor}
-                rtlLayout={layoutRtl}
-              />
-            </View>
-
-            <View style={[styles.btnRow, { flexDirection: I18nManager.isRTL ? 'row' : 'row-reverse' }]}>
-              <Pressable
-                onPress={onConfirm}
-                disabled={confirmLoading}
-                style={({ pressed }) => [
-                  styles.btnPrimary,
-                  {
-                    flex: 1.65,
-                    backgroundColor: primaryColor,
-                    opacity: confirmLoading ? 0.88 : pressed ? 0.92 : 1,
-                    shadowColor: primaryColor,
-                  },
-                ]}
-              >
-                {confirmLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.btnPrimaryText}>
-                    {t('booking.timePanel.confirmBook', 'אישור — קבע תור')}
-                  </Text>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={onChangeTime}
-                disabled={confirmLoading}
-                style={({ pressed }) => [
-                  styles.btnCancel,
-                  {
-                    flex: 1,
-                    borderColor: `${textColor}18`,
-                    opacity: confirmLoading ? 0.45 : pressed ? 0.82 : 1,
-                  },
-                ]}
-              >
-                <Text style={[styles.btnCancelText, { color: textSecondary }]}>
-                  {t('booking.timePanel.cancel', 'ביטול')}
-                </Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </View>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={onChangeTime}
+              disabled={confirmLoading}
+              style={({ pressed }) => [
+                styles.btnCancel,
+                {
+                  flex: 1,
+                  borderColor: `${textColor}18`,
+                  opacity: confirmLoading ? 0.45 : pressed ? 0.82 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.btnCancelText, { color: textSecondary }]}>
+                {t('booking.timePanel.cancel', 'ביטול')}
+              </Text>
+            </Pressable>
+          </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
   backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.48)',
   },
-  centerWrap: {
+  /** Fills the screen, aligns content to the bottom */
+  anchor: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  panel: {
-    borderRadius: 24,
-    padding: 20,
-    paddingTop: 22,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 10,
+    paddingHorizontal: 20,
     gap: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 20,
   },
-  accentBar: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 4,
-    height: 52,
-    borderBottomLeftRadius: 4,
+  handleWrap: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
   },
   headerBlock: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    gap: 12,
-    paddingLeft: 4,
+    alignItems: 'center',
+    gap: 10,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -4,
-  },
-  headerTextCol: {
-    flex: 1,
-    gap: 4,
   },
   title: {
+    flex: 1,
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.5,
-    alignSelf: 'stretch',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
     alignSelf: 'stretch',
   },
-  rows: {
-    gap: 10,
+  rowsScroll: {
+    maxHeight: 340,
     alignSelf: 'stretch',
   },
-  btnRow: {
-    flexDirection: 'row',
+  rows: {
     gap: 10,
-    marginTop: 6,
+    paddingBottom: 4,
+  },
+  btnRow: {
+    gap: 10,
+    marginTop: 4,
     alignSelf: 'stretch',
   },
   btnPrimary: {

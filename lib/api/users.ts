@@ -1,7 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 import { supabase, User, getBusinessId } from '../supabase';
 import { useAuthStore } from '../../stores/authStore';
-import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/businessProfile';
 
 /** Same matching idea as Edge `phoneDigits` / `userExistsForRegister`. */
 function userPhoneMatchesRow(storedPhone: string, rawPhone: string): boolean {
@@ -280,7 +279,8 @@ export const usersApi = {
   },
 
   /**
-   * Admin flow: create a client row so they can sign in with OTP using this phone (same `password_hash` pattern as Edge auth).
+   * Admin/staff flow: create a client row so they can sign in with OTP using this phone (same `password_hash` pattern as Edge auth).
+   * Always approved — pending approval applies only to self-registration when `require_client_approval` is on.
    */
   async createClientForAdminBooking(params: {
     name: string;
@@ -317,8 +317,6 @@ export const usersApi = {
       }
     }
 
-    const profile = await businessProfileApi.getProfile();
-    const clientApproved = !isClientApprovalRequired(profile);
     const password_hash = `otp_only_${randomUUID()}`;
 
     const { data, error } = await supabase
@@ -329,7 +327,7 @@ export const usersApi = {
         user_type: 'client',
         business_id: businessId,
         password_hash,
-        client_approved: clientApproved,
+        client_approved: true,
         language: 'he',
       })
       .select('*')
@@ -470,6 +468,27 @@ export const usersApi = {
 
   async approveClient(id: string): Promise<User | null> {
     return this.updateUser(id, { client_approved: true });
+  },
+
+  /** When the business turns off "require client approval", approve every client row still marked unapproved. */
+  async approveAllUnapprovedClients(): Promise<boolean> {
+    try {
+      const businessId = getBusinessId();
+      const { error } = await supabase
+        .from('users')
+        .update({ client_approved: true })
+        .eq('business_id', businessId)
+        .eq('user_type', 'client')
+        .eq('client_approved', false);
+      if (error) {
+        console.error('approveAllUnapprovedClients:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('approveAllUnapprovedClients:', e);
+      return false;
+    }
   },
 
   /**

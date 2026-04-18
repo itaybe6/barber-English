@@ -177,7 +177,11 @@ export const PendingClientApprovalsCard = React.forwardRef<
         Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.approveError', 'Could not approve'));
         return;
       }
-      setPending((prev) => prev.filter((u) => u.id !== id));
+      setPending((prev) => {
+        const next = prev.filter((u) => u.id !== id);
+        onCountChange?.(next.length);
+        return next;
+      });
     } finally {
       setActionId(null);
     }
@@ -200,7 +204,11 @@ export const PendingClientApprovalsCard = React.forwardRef<
                 Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.rejectError', 'Could not remove'));
                 return;
               }
-              setPending((prev) => prev.filter((u) => u.id !== item.id));
+              setPending((prev) => {
+                const next = prev.filter((u) => u.id !== item.id);
+                onCountChange?.(next.length);
+                return next;
+              });
             } finally {
               setActionId(null);
             }

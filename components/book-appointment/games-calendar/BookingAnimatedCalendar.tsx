@@ -22,6 +22,8 @@ export type BookingAnimatedCalendarProps = {
   selectedDate: Date | null;
   language: string;
   primaryColor: string;
+  /** When set, overrides the default mapping from `variant` (e.g. plain month picker without availability UI). */
+  displayModeOverride?: 'availability' | 'count' | 'plain';
   variant?: 'booking' | 'admin';
   bookingOpenDays?: number;
   days?: DayRow[];
@@ -74,7 +76,7 @@ function CalendarShell({
   adminAnchorMonthKey?: string;
   onAdminVisibleMonthChange?: (monthFirstDay: Date) => void;
   initialLogicalIndex: number;
-  displayMode: 'availability' | 'count';
+  displayMode: 'availability' | 'count' | 'plain';
   selectedDayCellRef?: RefObject<RNView | null>;
   pendingTapRectRef?: MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
 }) {
@@ -266,6 +268,7 @@ export default function BookingAnimatedCalendar({
   days = [],
   language,
   primaryColor,
+  displayModeOverride,
   onSelectDayIndex,
   onClearTime,
   onAdminDayPress,
@@ -322,7 +325,8 @@ export default function BookingAnimatedCalendar({
     return idx >= 0 ? idx : Math.max(0, Math.floor(calendarData.length / 2));
   }, [variant, calendarData, adminAnchorMonthKey, selectedDate]);
 
-  const displayMode: 'availability' | 'count' = variant === 'admin' ? 'count' : 'availability';
+  const displayMode: 'availability' | 'count' | 'plain' =
+    displayModeOverride ?? (variant === 'admin' ? 'count' : 'availability');
 
   if (calendarData.length === 0) {
     return null;

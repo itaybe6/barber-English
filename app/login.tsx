@@ -140,17 +140,21 @@ export default function LoginScreen() {
   const gradientEnd = loginGradient[1];
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
-  const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
-  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
-  const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
+  /** Top of gradient is often the dominant “sheet” behind the form; light brands looked wrong with black type. */
+  const lightHeroSurface = readableOnHex(loginGradient[0]) === '#1C1C1E';
+  const preferLightHeroFg = useLightFg || lightHeroSurface;
+  const heroText = preferLightHeroFg ? '#FFFFFF' : '#141414';
+  const heroMuted = preferLightHeroFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
+  const heroFaint = preferLightHeroFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
+  const phoneBorderUnfocus = preferLightHeroFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
+  const phoneBorderFocus = preferLightHeroFg ? '#FFFFFF' : primary;
   const ctaGlassBg = useLightFg ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.1)';
   const ctaGlassBorder = useLightFg ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.18)';
   const ctaTextCol = useLightFg ? '#FFFFFF' : '#111111';
   /** Solid light CTA on dark gradients — avoids “muddy” translucent orange. */
   const ctaElevatedBg = useLightFg ? '#FFFFFF' : ctaGlassBg;
-  const ctaElevatedLabel = useLightFg ? '#141414' : ctaTextCol;
+  /** Light hero (lavender etc.): white label on tinted pill; dark hero + light pill: dark label on white. */
+  const ctaElevatedLabel = useLightFg ? '#141414' : preferLightHeroFg ? '#FFFFFF' : ctaTextCol;
   const ctaElevatedBorder = useLightFg ? 'rgba(0,0,0,0.1)' : ctaGlassBorder;
 
   const phoneKey = normalizePhoneKey(phone);
@@ -423,7 +427,7 @@ export default function LoginScreen() {
           blurIntensity={48}
         />
       ) : null}
-      <StatusBar style={useLightFg ? 'light' : 'dark'} />
+      <StatusBar style={preferLightHeroFg ? 'light' : 'dark'} />
 
       {loginSmsToast ? (
         <Animated.View
@@ -684,7 +688,7 @@ export default function LoginScreen() {
                     style={[
                       styles.divider,
                       {
-                        backgroundColor: useLightFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
+                        backgroundColor: preferLightHeroFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
                       },
                     ]}
                   />
@@ -696,7 +700,7 @@ export default function LoginScreen() {
                     <Text
                       onPress={() => router.push('/register')}
                       accessibilityRole="link"
-                      style={[styles.registerAction, { color: useLightFg ? '#FFFFFF' : primary }]}
+                      style={[styles.registerAction, { color: preferLightHeroFg ? '#FFFFFF' : primary }]}
                       suppressHighlighting={false}
                     >
                       {t('login.signUpNow', 'להרשמה')}

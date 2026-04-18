@@ -1951,6 +1951,20 @@ export default function BookAppointment() {
     }
   }, [safeAreaInsets.top]);
 
+  // Single staff member: skip barber step and open service selection (same resets/animation as a barber tap).
+  useEffect(() => {
+    if (isLoadingBarbers) return;
+    if (availableBarbers.length !== 1) return;
+    if (currentStep !== 1) return;
+    if (selectedBarber) return;
+    const single = availableBarbers[0];
+    if (!single) return;
+    const frame = requestAnimationFrame(() => {
+      advanceFromBarberTap(single);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isLoadingBarbers, availableBarbers, currentStep, selectedBarber, advanceFromBarberTap]);
+
   const dayAvailabilityForBooking = useMemo(
     () => mergeBookingWaitlistTestDayAvailability(dayAvailability, days),
     [dayAvailability, days]

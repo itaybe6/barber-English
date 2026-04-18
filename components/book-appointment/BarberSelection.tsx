@@ -443,6 +443,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
     backgroundColor: 'transparent',
+    direction: 'ltr',
   },
   dotWrap: {
     width: DOT_SIZE + 4,

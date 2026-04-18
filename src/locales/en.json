@@ -1091,6 +1091,11 @@
       "saveButton": "Save fixed appointment",
       "summaryTitle": "Summary",
       "selectServiceAndDayFirst": "Select a service and day to see available times",
+      "weekdayPickerTitle": "Fixed weekday",
+      "weekdayPickerSubtitle": "Only days with active opening hours — pick when this repeats",
+      "weekdayPickerLoading": "Loading your schedule…",
+      "noActiveWeekdaysTitle": "No active days in your schedule",
+      "noActiveWeekdaysHint": "Turn on at least one weekday under Business hours in settings, then come back here.",
       "listRepeat": "Repeats {{label}}"
     },
     "support": {

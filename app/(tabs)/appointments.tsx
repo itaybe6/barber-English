@@ -32,6 +32,7 @@ import {
   constraintTimeToMinutes as constraintTimeToMinutesFromApi,
 } from '@/lib/api/businessConstraints';
 import {
+  deleteCalendarReminder,
   listCalendarRemindersForDate,
   listCalendarRemindersForRange,
   listCalendarReminderDatesInMonth,
@@ -1036,8 +1037,18 @@ export default function AdminAppointmentsScreen() {
     appointment: AvailableTimeSlot | null;
   }>({ open: false, appointment: null });
 
+  const [calendarItemSummary, setCalendarItemSummary] = useState<{
+    open: boolean;
+    kind: 'reminder' | 'constraint' | null;
+    reminder: CalendarReminder | null;
+    constraint: BusinessConstraint | null;
+  }>({ open: false, kind: null, reminder: null, constraint: null });
+  const [isDeletingCalendarItem, setIsDeletingCalendarItem] = useState(false);
+
   /** Open confirm dialog only after anchor sheet Modal unmounts — avoids invisible layer / wrong z-order (esp. Android). */
   const pendingDeleteAppointmentRef = useRef<AvailableTimeSlot | null>(null);
+  const pendingOpenReminderFromSummaryRef = useRef<CalendarReminder | null>(null);
+  const pendingOpenConstraintFromSummaryRef = useRef<BusinessConstraint | null>(null);
 
   const dayAptRefMap = useRef<Map<string, View>>(new Map());
 
@@ -2345,13 +2356,58 @@ export default function AdminAppointmentsScreen() {
     setConstraintToEdit(c);
   }, []);
 
+  const openEditReminderModal = useCallback((r: CalendarReminder) => {
+    setReminderEditorEditing(r);
+    if (showCalendarFabSheet) {
+      pendingOpenReminderEditorAfterAddSheetRef.current = true;
+      setShowCalendarFabSheet(false);
+      calendarAddSheetRef.current?.close();
+    } else {
+      setShowReminderEditor(true);
+    }
+  }, [showCalendarFabSheet]);
+
+  const resetCalendarItemSummary = useCallback(() => {
+    setCalendarItemSummary({ open: false, kind: null, reminder: null, constraint: null });
+  }, []);
+
+  const requestCloseCalendarItemSummary = useCallback(() => {
+    setCalendarItemSummary((p) => (p.open ? { ...p, open: false } : p));
+  }, []);
+
+  const onCalendarItemSummaryDismissed = useCallback(() => {
+    const pr = pendingOpenReminderFromSummaryRef.current;
+    const pc = pendingOpenConstraintFromSummaryRef.current;
+    pendingOpenReminderFromSummaryRef.current = null;
+    pendingOpenConstraintFromSummaryRef.current = null;
+    resetCalendarItemSummary();
+    if (pr) queueMicrotask(() => openEditReminderModal(pr));
+    else if (pc) queueMicrotask(() => openConstraintEditor(pc));
+  }, [resetCalendarItemSummary, openEditReminderModal, openConstraintEditor]);
+
+  const openReminderSummarySheet = useCallback((r: CalendarReminder) => {
+    setCalendarItemSummary({ open: true, kind: 'reminder', reminder: r, constraint: null });
+  }, []);
+
+  const openConstraintSummarySheet = useCallback((c: BusinessConstraint) => {
+    setCalendarItemSummary({ open: true, kind: 'constraint', constraint: c, reminder: null });
+  }, []);
+
   useEffect(() => {
     if (
-      (!showCalendarFabSheet && !constraintsSheetOpen && !showConstraintsManager && !showReminderEditor) ||
+      (!showCalendarFabSheet &&
+        !constraintsSheetOpen &&
+        !showConstraintsManager &&
+        !showReminderEditor &&
+        !calendarItemSummary.open) ||
       Platform.OS !== 'android'
     )
       return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (calendarItemSummary.open) {
+        requestCloseCalendarItemSummary();
+        return true;
+      }
       if (constraintsSheetOpen) {
         closeConstraintsSheet();
         return true;
@@ -2375,11 +2431,17 @@ export default function AdminAppointmentsScreen() {
     closeConstraintsSheet,
     showConstraintsManager,
     showReminderEditor,
+    calendarItemSummary.open,
+    requestCloseCalendarItemSummary,
     closeReminderModal,
     closeReminderEditor,
   ]);
 
   const reminderFabTabPress = useCallback(() => {
+    if (calendarItemSummary.open) {
+      requestCloseCalendarItemSummary();
+      return;
+    }
     if (constraintsSheetOpen) {
       closeConstraintsSheet();
       return;
@@ -2405,6 +2467,8 @@ export default function AdminAppointmentsScreen() {
     }
   }, [
     showCalendarFabSheet,
+    calendarItemSummary.open,
+    requestCloseCalendarItemSummary,
     constraintsSheetOpen,
     closeConstraintsSheet,
     showConstraintsManager,
@@ -2419,7 +2483,8 @@ export default function AdminAppointmentsScreen() {
         showCalendarFabSheet ||
         constraintsSheetOpen ||
         showConstraintsManager ||
-        showReminderEditor,
+        showReminderEditor ||
+        calendarItemSummary.open,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
@@ -2428,6 +2493,7 @@ export default function AdminAppointmentsScreen() {
     constraintsSheetOpen,
     showConstraintsManager,
     showReminderEditor,
+    calendarItemSummary.open,
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
@@ -2438,17 +2504,6 @@ export default function AdminAppointmentsScreen() {
     });
     return () => sub.remove();
   }, [handleAddAppointmentModalSuccess]);
-
-  const openEditReminderModal = useCallback((r: CalendarReminder) => {
-    setReminderEditorEditing(r);
-    if (showCalendarFabSheet) {
-      pendingOpenReminderEditorAfterAddSheetRef.current = true;
-      setShowCalendarFabSheet(false);
-      calendarAddSheetRef.current?.close();
-    } else {
-      setShowReminderEditor(true);
-    }
-  }, [showCalendarFabSheet]);
 
   const refreshCalendarRemindersOnly = useCallback(async () => {
     if (!user?.id) return;
@@ -2466,6 +2521,76 @@ export default function AdminAppointmentsScreen() {
     reloadMonthMarks,
     loadAppointmentsForRange,
   ]);
+
+  const beginDeleteReminderFromSummary = useCallback(
+    (r: CalendarReminder) => {
+      Alert.alert(
+        tHe('admin.calendarReminder.deleteTitle', 'מחיקת תזכורת'),
+        tHe('admin.calendarReminder.deleteMessage', 'האם למחוק את התזכורת מהיומן?'),
+        [
+          { text: tHe('cancel', 'ביטול'), style: 'cancel' },
+          {
+            text: tHe('delete', 'מחק'),
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setIsDeletingCalendarItem(true);
+                try {
+                  const ok = await deleteCalendarReminder(r.id);
+                  if (!ok) throw new Error('delete failed');
+                  requestCloseCalendarItemSummary();
+                  await refreshCalendarRemindersOnly();
+                } catch {
+                  Alert.alert(
+                    tHe('error.generic', 'שגיאה'),
+                    tHe('admin.calendarReminder.deleteFailed', 'המחיקה נכשלה')
+                  );
+                } finally {
+                  setIsDeletingCalendarItem(false);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [tHe, requestCloseCalendarItemSummary, refreshCalendarRemindersOnly]
+  );
+
+  const beginDeleteConstraintFromSummary = useCallback(
+    (c: BusinessConstraint) => {
+      Alert.alert(
+        t('admin.hoursAdmin.deleteConstraintTitle', 'למחוק את האילוץ?'),
+        t('admin.hoursAdmin.deleteConstraintMessage', 'החסימה תוסר מהיומן. לא ניתן לשחזר.'),
+        [
+          { text: tHe('cancel', 'ביטול'), style: 'cancel' },
+          {
+            text: t('admin.hoursAdmin.deleteConstraintConfirm', 'מחק'),
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setIsDeletingCalendarItem(true);
+                try {
+                  const ok = await businessConstraintsApi.deleteConstraint(c.id);
+                  if (!ok) throw new Error('delete failed');
+                  requestCloseCalendarItemSummary();
+                  onCalendarConstraintsChanged({ dateMin: c.date, dateMax: c.date });
+                } catch {
+                  Alert.alert(
+                    tHe('error.generic', 'שגיאה'),
+                    t('admin.hoursAdmin.deleteConstraintFailed', 'לא ניתן למחוק. נסו שוב.')
+                  );
+                } finally {
+                  setIsDeletingCalendarItem(false);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [t, tHe, requestCloseCalendarItemSummary, onCalendarConstraintsChanged]
+  );
 
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarSecondary = businessColors.secondary || calendarPrimary;
@@ -2594,8 +2719,8 @@ export default function AdminAppointmentsScreen() {
                           constraints={[]}
                           reminders={[]}
                           onOpenAppointment={openActionsMenu}
-                          onPressReminder={openEditReminderModal}
-                          onPressConstraint={openConstraintEditor}
+                          onPressReminder={openReminderSummarySheet}
+                          onPressConstraint={openConstraintSummarySheet}
                           minutesFromMidnight={minutesFromMidnight}
                         />
                       ))}
@@ -2666,8 +2791,8 @@ export default function AdminAppointmentsScreen() {
                             constraints={mergeConstraintsForDisplay(rangeConstraints.get(item.formatted) ?? [])}
                             reminders={rangeReminders.get(item.formatted) ?? []}
                             onOpenAppointment={openActionsMenu}
-                            onPressReminder={openEditReminderModal}
-                            onPressConstraint={openConstraintEditor}
+                            onPressReminder={openReminderSummarySheet}
+                            onPressConstraint={openConstraintSummarySheet}
                             minutesFromMidnight={minutesFromMidnight}
                           />
                         ))}
@@ -2717,8 +2842,8 @@ export default function AdminAppointmentsScreen() {
                           constraints={[]}
                           reminders={[]}
                           onOpenAppointment={openActionsMenu}
-                          onPressReminder={openEditReminderModal}
-                          onPressConstraint={openConstraintEditor}
+                          onPressReminder={openReminderSummarySheet}
+                          onPressConstraint={openConstraintSummarySheet}
                           minutesFromMidnight={minutesFromMidnight}
                         />
                       ))}
@@ -2830,7 +2955,7 @@ export default function AdminAppointmentsScreen() {
                     return (
                       <PressableScale
                         key={`dc-${c.id}`}
-                        onPress={() => openConstraintEditor(c)}
+                        onPress={() => openConstraintSummarySheet(c)}
                         accessibilityLabel={String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'))}
                         style={[
                           styles.constraintCard,
@@ -2876,8 +3001,8 @@ export default function AdminAppointmentsScreen() {
                     return (
                       <PressableScale
                         key={`rm-${r.id}`}
-                        onPress={() => openEditReminderModal(r)}
-                        accessibilityLabel={tHe('admin.calendarReminder.openEdit', 'עריכת תזכורת')}
+                        onPress={() => openReminderSummarySheet(r)}
+                        accessibilityLabel={tHe('admin.calendarReminder.openSummary', 'פרטי תזכורת')}
                         style={[
                           styles.reminderCard,
                           {
@@ -3188,6 +3313,188 @@ export default function AdminAppointmentsScreen() {
                   </View>
                 );
               })()
+          ) : null}
+        </View>
+      </AppointmentActionsBottomSheet>
+
+      <AppointmentActionsBottomSheet
+        open={calendarItemSummary.open}
+        onRequestClose={requestCloseCalendarItemSummary}
+        onDismissed={onCalendarItemSummaryDismissed}
+      >
+        <View style={styles.actionsSheetScroll}>
+          {calendarItemSummary.kind === 'reminder' && calendarItemSummary.reminder ? (
+            (() => {
+              const r = calendarItemSummary.reminder;
+              const dur = typeof r.duration_minutes === 'number' && r.duration_minutes > 0 ? r.duration_minutes : 30;
+              const start = r.start_time || '00:00';
+              const timeRange = `${formatTime(start)} – ${formatTime(addMinutes(start, dur))}`;
+              const dateLine = _formatSlotDateLine(r.event_date);
+              const pal = reminderPalette(r.color_key);
+              const notesLine = (r.notes || '').trim();
+              return (
+                <View style={styles.actionsSheetInner}>
+                  <View style={[styles.actionsHeroCard, { backgroundColor: `${calendarPrimary}0D` }]}>
+                    <View style={[styles.actionsClientRow, { flexDirection: isRtl ? 'row' : 'row-reverse' }]}>
+                      <View style={[styles.actionsAvatarRing, { borderColor: `${calendarPrimary}35` }]}>
+                        <View style={[styles.actionsClientAvatar, { backgroundColor: pal.bg }]}>
+                          <StickyNote size={22} color={pal.bar} />
+                        </View>
+                      </View>
+                      <View style={styles.actionsClientInfo}>
+                        <Text
+                          style={[styles.actionsClientName, { textAlign: isRtl ? 'right' : 'left' }]}
+                          numberOfLines={2}
+                        >
+                          {r.title}
+                        </Text>
+                        <Text
+                          style={[styles.actionsClientService, { textAlign: isRtl ? 'right' : 'left' }]}
+                          numberOfLines={3}
+                        >
+                          {tHe('admin.calendarReminder.hint', 'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום')}
+                        </Text>
+                      </View>
+                    </View>
+                    {notesLine ? (
+                      <>
+                        <View style={[styles.actionsCardSeparator, { backgroundColor: `${calendarPrimary}20` }]} />
+                        <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              fontWeight: '600',
+                              color: '#374151',
+                              textAlign: isRtl ? 'right' : 'left',
+                            }}
+                          >
+                            {notesLine}
+                          </Text>
+                        </View>
+                      </>
+                    ) : null}
+                    <View style={[styles.actionsCardSeparator, { backgroundColor: `${calendarPrimary}20` }]} />
+                    <View style={styles.actionsChipsRow}>
+                      {[
+                        { icon: 'calendar-outline' as const, label: dateLine },
+                        { icon: 'time-outline' as const, label: timeRange },
+                        {
+                          icon: 'hourglass-outline' as const,
+                          label: `${dur} ${tHe('admin.appointments.detailMinutesShort', 'דק׳')}`,
+                        },
+                      ].map((chip) => (
+                        <View key={chip.icon} style={[styles.actionsChip, { backgroundColor: `${calendarPrimary}12` }]}>
+                          <Ionicons name={chip.icon} size={12} color={calendarPrimaryOnLight} />
+                          <Text style={[styles.actionsChipText, { color: calendarPrimaryOnLight }]}>{chip.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.actionsDivider} />
+                  <View style={[styles.actionsButtonsWrap, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                    <PressableScale
+                      style={styles.actionBtnDeleteIcon}
+                      disabled={isDeletingCalendarItem}
+                      accessibilityLabel={tHe('admin.calendarReminder.deleteTitle', 'מחיקת תזכורת')}
+                      onPress={() => beginDeleteReminderFromSummary(r)}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                    </PressableScale>
+                    <PressableScale
+                      style={[styles.actionBtn, { backgroundColor: calendarPrimary }]}
+                      disabled={isDeletingCalendarItem}
+                      accessibilityLabel={tHe('admin.calendarReminder.openEdit', 'עריכת תזכורת')}
+                      onPress={() => {
+                        pendingOpenReminderFromSummaryRef.current = r;
+                        requestCloseCalendarItemSummary();
+                      }}
+                    >
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                      <Text style={styles.actionBtnTextWhite}>
+                        {tHe('admin.calendarReminder.editCta', 'עריכה')}
+                      </Text>
+                    </PressableScale>
+                  </View>
+                </View>
+              );
+            })()
+          ) : calendarItemSummary.kind === 'constraint' && calendarItemSummary.constraint ? (
+            (() => {
+              const c = calendarItemSummary.constraint;
+              const fullDay = _isFullDayConstraint(c, minutesFromMidnight);
+              const startT = formatTime(String(c.start_time || '').slice(0, 5));
+              const endT = formatTime(String(c.end_time || '').slice(0, 5));
+              const timeLabel = fullDay
+                ? tHe('admin.calendar.constraintFullDaySummary', 'חסימה כל היום')
+                : `${startT} – ${endT}`;
+              const titleLine =
+                (c.reason || '').trim() || String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'));
+              const dateLine = _formatSlotDateLine(c.date);
+              return (
+                <View style={styles.actionsSheetInner}>
+                  <View style={[styles.actionsHeroCard, { backgroundColor: `${calendarPrimary}0D` }]}>
+                    <View style={[styles.actionsClientRow, { flexDirection: isRtl ? 'row' : 'row-reverse' }]}>
+                      <View style={[styles.actionsAvatarRing, { borderColor: `${calendarPrimary}35` }]}>
+                        <View style={[styles.actionsClientAvatar, { backgroundColor: `${calendarPrimary}18` }]}>
+                          <Ban size={22} color={CONSTRAINT_BAR} />
+                        </View>
+                      </View>
+                      <View style={styles.actionsClientInfo}>
+                        <Text
+                          style={[styles.actionsClientName, { textAlign: isRtl ? 'right' : 'left' }]}
+                          numberOfLines={2}
+                        >
+                          {titleLine}
+                        </Text>
+                        <Text
+                          style={[styles.actionsClientService, { textAlign: isRtl ? 'right' : 'left' }]}
+                          numberOfLines={2}
+                        >
+                          {tHe(
+                            'admin.calendar.constraintBlocksHint',
+                            'חוסם משבצות — לקוחות לא יוכלו להזמין בזמן הזה'
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.actionsCardSeparator, { backgroundColor: `${calendarPrimary}20` }]} />
+                    <View style={styles.actionsChipsRow}>
+                      <View style={[styles.actionsChip, { backgroundColor: `${calendarPrimary}12` }]}>
+                        <Ionicons name="calendar-outline" size={12} color={calendarPrimaryOnLight} />
+                        <Text style={[styles.actionsChipText, { color: calendarPrimaryOnLight }]}>{dateLine}</Text>
+                      </View>
+                      <View style={[styles.actionsChip, { backgroundColor: `${calendarPrimary}12` }]}>
+                        <Ionicons name="time-outline" size={12} color={calendarPrimaryOnLight} />
+                        <Text style={[styles.actionsChipText, { color: calendarPrimaryOnLight }]}>{timeLabel}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.actionsDivider} />
+                  <View style={[styles.actionsButtonsWrap, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                    <PressableScale
+                      style={styles.actionBtnDeleteIcon}
+                      disabled={isDeletingCalendarItem}
+                      accessibilityLabel={t('admin.hoursAdmin.deleteConstraintA11y', 'מחיקת אילוץ')}
+                      onPress={() => beginDeleteConstraintFromSummary(c)}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                    </PressableScale>
+                    <PressableScale
+                      style={[styles.actionBtn, { backgroundColor: calendarPrimary }]}
+                      disabled={isDeletingCalendarItem}
+                      accessibilityLabel={tHe('admin.calendar.editConstraint', 'עריכת אילוץ')}
+                      onPress={() => {
+                        pendingOpenConstraintFromSummaryRef.current = c;
+                        requestCloseCalendarItemSummary();
+                      }}
+                    >
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                      <Text style={styles.actionBtnTextWhite}>{tHe('admin.calendarReminder.editCta', 'עריכה')}</Text>
+                    </PressableScale>
+                  </View>
+                </View>
+              );
+            })()
           ) : null}
         </View>
       </AppointmentActionsBottomSheet>

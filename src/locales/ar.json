@@ -1196,6 +1196,11 @@
       "saveButton": "حفظ الموعد الثابت",
       "summaryTitle": "ملخص",
       "selectServiceAndDayFirst": "اختر الخدمة واليوم لعرض الأوقات المتاحة",
+      "weekdayPickerTitle": "يوم ثابت في الأسبوع",
+      "weekdayPickerSubtitle": "الأيام التي بها ساعات عمل فعّالة فقط — اختر يوم التكرار",
+      "weekdayPickerLoading": "جارٍ تحميل جدولك…",
+      "noActiveWeekdaysTitle": "لا توجد أيام فعّالة في الجدول",
+      "noActiveWeekdaysHint": "فعّل يومًا واحدًا على الأقل ضمن «ساعات العمل» في الإعدادات ثم عد إلى هنا.",
       "listRepeat": "يتكرر {{label}}"
     },
     "support": {

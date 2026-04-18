@@ -1118,6 +1118,11 @@
       "saveButton": "שמירת תור קבוע",
       "summaryTitle": "סיכום",
       "selectServiceAndDayFirst": "בחרו שירות ויום כדי לראות שעות פנויות",
+      "weekdayPickerTitle": "יום קבוע בשבוע",
+      "weekdayPickerSubtitle": "רק ימים שבהם מוגדרות שעות פעילות — בחרו את היום שבו התור יחזור",
+      "weekdayPickerLoading": "טוען את לוח השעות…",
+      "noActiveWeekdaysTitle": "אין ימים פעילים בלוח",
+      "noActiveWeekdaysHint": "הפעילו לפחות יום אחד תחת «שעות פעילות» בהגדרות, ואז חזרו לכאן.",
       "listRepeat": "תדירות: {{label}}"
     },
     "support": {

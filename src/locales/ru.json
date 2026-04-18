@@ -1189,6 +1189,11 @@
       "saveButton": "Сохранить фиксированную встречу",
       "summaryTitle": "Сводка",
       "selectServiceAndDayFirst": "Выберите услугу и день, чтобы увидеть доступное время",
+      "weekdayPickerTitle": "Фиксированный день недели",
+      "weekdayPickerSubtitle": "Только дни с активными часами работы — выберите день повторения",
+      "weekdayPickerLoading": "Загружаем ваше расписание…",
+      "noActiveWeekdaysTitle": "Нет активных дней в расписании",
+      "noActiveWeekdaysHint": "Включите хотя бы один день в разделе «Часы работы» в настройках и вернитесь сюда.",
       "listRepeat": "Повтор: {{label}}"
     },
     "support": {

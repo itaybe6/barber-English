@@ -101,6 +101,17 @@ const SETTINGS_SCROLL_BOTTOM_EXTRA = 84;
 /** Ruler + manual row in policy bottom sheets (booking days, client hours, admin minutes) */
 const SHEET_RULER_SETTINGS_CARD_BG = '#FAFAFC';
 
+/**
+ * iOS-style UISwitch: neutral track when off, Apple system green when on, white thumb.
+ * Distinct false/true track colors avoid Android Switch paint glitches when value hydrates from the server.
+ */
+const IOS_STYLE_SWITCH_PALETTE = {
+  trackOff: '#E5E5EA',
+  trackOn: '#34C759',
+  thumbOn: '#FFFFFF',
+  thumbOffAndroid: '#FFFFFF' as const,
+} as const;
+
 const BOOKING_WINDOW_MIN = 0;
 const BOOKING_WINDOW_MAX = 60;
 /** Ruler shows ticks 0…60; only 1…60 are saved (0 snaps to 1). */
@@ -123,16 +134,6 @@ export default function SettingsScreen() {
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
   const { colors: businessColors } = useBusinessColors();
   const { onPrimary, onPrimaryMuted, isLightPrimary, primaryOnSurface } = usePrimaryContrast();
-  /** Distinct on/off track colors — same color for both breaks Android Switch paint when value hydrates from the server. */
-  const settingsSwitchPalette = useMemo(
-    () => ({
-      trackOff: '#E5E5EA',
-      trackOn: businessColors.primary,
-      thumbOn: onPrimary,
-      thumbOffAndroid: '#f4f3f4' as const,
-    }),
-    [businessColors.primary, onPrimary],
-  );
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
@@ -2624,15 +2625,15 @@ export default function SettingsScreen() {
                     value={requireClientApproval}
                     onValueChange={onRequireClientApprovalValueChange}
                     disabled={isSavingProfile}
-                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                     thumbColor={
                       requireClientApproval
-                        ? settingsSwitchPalette.thumbOn
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                         : Platform.OS === 'android'
-                          ? settingsSwitchPalette.thumbOffAndroid
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor={settingsSwitchPalette.trackOff}
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -2663,15 +2664,15 @@ export default function SettingsScreen() {
                       void handleHomeFixedMessageToggle(v);
                     }}
                     disabled={isSavingProfile}
-                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                     thumbColor={
                       homeFixedMessageEnabled
-                        ? settingsSwitchPalette.thumbOn
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                         : Platform.OS === 'android'
-                          ? settingsSwitchPalette.thumbOffAndroid
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor={settingsSwitchPalette.trackOff}
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
                 {homeFixedMessageEnabled ? (
@@ -2873,15 +2874,15 @@ export default function SettingsScreen() {
                       void handleCancellationSwitchToggle(v);
                     }}
                     disabled={isSavingProfile}
-                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                     thumbColor={
                       cancellationLimitActive
-                        ? settingsSwitchPalette.thumbOn
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                         : Platform.OS === 'android'
-                          ? settingsSwitchPalette.thumbOffAndroid
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor={settingsSwitchPalette.trackOff}
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -2926,15 +2927,15 @@ export default function SettingsScreen() {
                   void handleAdminReminderSwitch(v);
                 }}
                 disabled={!user?.id || isSavingProfile}
-                trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                 thumbColor={
                   adminSelfReminderOn
-                    ? settingsSwitchPalette.thumbOn
+                    ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                     : Platform.OS === 'android'
-                      ? settingsSwitchPalette.thumbOffAndroid
+                      ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                       : undefined
                 }
-                ios_backgroundColor={settingsSwitchPalette.trackOff}
+                ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
               />
             </View>
             {canSeeAddEmployee ? (
@@ -2962,15 +2963,15 @@ export default function SettingsScreen() {
                     value={clientSwapEnabled}
                     onValueChange={handleClientSwapToggle}
                     disabled={isSavingProfile}
-                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                     thumbColor={
                       clientSwapEnabled
-                        ? settingsSwitchPalette.thumbOn
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                         : Platform.OS === 'android'
-                          ? settingsSwitchPalette.thumbOffAndroid
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor={settingsSwitchPalette.trackOff}
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
                 <View style={styles.settingDivider} />
@@ -3002,15 +3003,15 @@ export default function SettingsScreen() {
                     value={allowMultiServiceBooking}
                     onValueChange={handleAllowMultiServiceBookingToggle}
                     disabled={isSavingProfile}
-                    trackColor={{ false: settingsSwitchPalette.trackOff, true: settingsSwitchPalette.trackOn }}
+                    trackColor={{ false: IOS_STYLE_SWITCH_PALETTE.trackOff, true: IOS_STYLE_SWITCH_PALETTE.trackOn }}
                     thumbColor={
                       allowMultiServiceBooking
-                        ? settingsSwitchPalette.thumbOn
+                        ? IOS_STYLE_SWITCH_PALETTE.thumbOn
                         : Platform.OS === 'android'
-                          ? settingsSwitchPalette.thumbOffAndroid
+                          ? IOS_STYLE_SWITCH_PALETTE.thumbOffAndroid
                           : undefined
                     }
-                    ios_backgroundColor={settingsSwitchPalette.trackOff}
+                    ios_backgroundColor={IOS_STYLE_SWITCH_PALETTE.trackOff}
                   />
                 </View>
               </>
